@@ -30,6 +30,10 @@ if (fps !== 10 && fps !== 25) {
   console.error("--fps must be 10 or 25")
   process.exit(2)
 }
+if (arg("home", "ironmoor") === arg("away", "kestrel-bay")) {
+  console.error("--home and --away must be different clubs")
+  process.exit(2)
+}
 const cfg = {
   matchId: arg("match-id", `m-${seed}`),
   seed,

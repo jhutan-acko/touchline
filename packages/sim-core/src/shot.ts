@@ -1,7 +1,7 @@
 import { dist, dirOf, goalOf, PITCH, type Side, type Vec2, type Vec3 } from "./geometry.js"
 import type { Params } from "./params.js"
 import type { Rng } from "./rng.js"
-import type { PlayerState } from "./types.js"
+import type { BallState, PlayerState } from "./types.js"
 
 export type ShotExecution = "clean" | "scuffed" | "sliced" | "skied"
 export type ShotOutcome = "goal" | "saved" | "blocked" | "wide"
@@ -36,6 +36,21 @@ const erf = (x: number): number => {
 /** P(lo < N(mean, sd) < hi). */
 export const normalBetween = (lo: number, hi: number, mean: number, sd: number): number =>
   0.5 * (erf((hi - mean) / (sd * Math.SQRT2)) - erf((lo - mean) / (sd * Math.SQRT2)))
+
+/**
+ * Ball after a keeper parry. A safe parry is pushed wide of the post (it can only go out for a corner
+ * or stay in play), never between the posts; a dangerous parry or fumble drops back into the box.
+ */
+export const parryBall = (side: Side, saveAt: Vec3, handling: Handling, rng: Rng): BallState => {
+  const d = dirOf(side)
+  const sy = saveAt.y === 0 ? (rng.chance(0.5) ? 1 : -1) : Math.sign(saveAt.y)
+  if (handling === "parried_safe")
+    return {
+      pos: { x: saveAt.x, y: sy * (PITCH.goalHalfWidth + 0.6), z: Math.max(0.5, saveAt.z) },
+      vel: { x: d * rng.range(2, 5), y: sy * rng.range(6, 12), z: rng.range(1, 3) }
+    }
+  return { pos: saveAt, vel: { x: -d * rng.range(3, 7), y: rng.range(-5, 5), z: 0.5 } }
+}
 
 /** Resolve a shot at release: blocks, execution error, on-target check, keeper. */
 export const planShot = (

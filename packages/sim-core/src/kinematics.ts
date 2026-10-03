@@ -7,6 +7,18 @@ export const vmaxFor = (a: PlayerAttrs, energy: number, p: Params): number =>
 
 export const accelFor = (a: PlayerAttrs, p: Params): number => p.kinematics.accelMax * (0.8 + 0.2 * a.acceleration)
 
+/**
+ * Distance a player can cover in `t` seconds starting at speed `v0` (towards the target),
+ * accelerating at `amax` up to `vmax`. Matches what arrive() can achieve on a straight run.
+ */
+export const reachIn = (t: number, v0: number, vmax: number, amax: number): number => {
+  if (t <= 0) return 0
+  const v = Math.max(0, Math.min(v0, vmax))
+  const ta = (vmax - v) / amax
+  if (t <= ta) return v * t + 0.5 * amax * t * t
+  return v * ta + 0.5 * amax * ta * ta + vmax * (t - ta)
+}
+
 /** Reynolds "arrive": head for target, slow inside slowRadius, respect speed and acceleration caps. */
 export const arrive = (
   pos: Vec2,
@@ -21,6 +33,30 @@ export const arrive = (
   const d = len(to)
   const desiredSpeed = d < 0.05 ? 0 : Math.min(vmax, (vmax * d) / slowRadius)
   const desired = scale(norm(to), desiredSpeed)
+  let dv = sub(desired, vel)
+  const maxDv = amax * dt
+  if (len(dv) > maxDv) dv = scale(norm(dv), maxDv)
+  let nv = add(vel, dv)
+  if (len(nv) > vmax) nv = scale(norm(nv), vmax)
+  return { pos: add(pos, scale(nv, dt)), vel: nv }
+}
+
+/**
+ * Steering for meeting a ball at a known time: aim for the velocity that arrives exactly when
+ * `timeLeft` runs out, with the same acceleration and speed caps as arrive(). Pairs with the
+ * reachable-disc check in resolve.ts, so a player judged able to reach the ball actually does.
+ */
+export const arriveBy = (
+  pos: Vec2,
+  vel: Vec2,
+  target: Vec2,
+  vmax: number,
+  amax: number,
+  dt: number,
+  timeLeft: number
+): { pos: Vec2; vel: Vec2 } => {
+  let desired = scale(sub(target, pos), 1 / Math.max(dt, timeLeft))
+  if (len(desired) > vmax) desired = scale(norm(desired), vmax)
   let dv = sub(desired, vel)
   const maxDv = amax * dt
   if (len(dv) > maxDv) dv = scale(norm(dv), maxDv)

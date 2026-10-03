@@ -42,6 +42,15 @@ describe("CDF export", () => {
     expect(cdfTypeOf(events.find((e) => e.type === "pass")!)!.type).toBe("pass")
     expect(cdfTypeOf(events.find((e) => e.type === "shot")!)!.type).toBe("shot")
   })
+  it("exports goals that did not come from a shot (loose balls, passes into the net) as CDF shots", () => {
+    const base = events.find((e) => e.type === "pass")!
+    const own = { ...base, type: "goal" as const, outcome: null, attrs: { scorer_id: base.player_id, own_goal: true, from: "loose_ball" } }
+    const rebound = { ...own, attrs: { ...own.attrs, own_goal: false } }
+    expect(cdfTypeOf(own)).toEqual({ type: "shot", sub_type: null, outcome_type: "own_goal", is_successful: true })
+    expect(cdfTypeOf(rebound)!.outcome_type).toBe("successful")
+    const fromShot = { ...own, attrs: { scorer_id: base.player_id, own_goal: false } }
+    expect(cdfTypeOf(fromShot)).toBeNull()
+  })
   it("event tracking frame ids are period-relative", () => {
     const pass = events.find((e) => e.type === "pass" && e.period === "second_half")!
     const line = JSON.parse(cdfEventLine(cfg, pass, clock, start, pass.frame_id_end)!)

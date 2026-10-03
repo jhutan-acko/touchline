@@ -96,6 +96,10 @@ export const cdfTypeOf = (e: DomainEvent): CdfType => {
       const outcome = e.outcome === "goal" ? "successful" : String(e.outcome)
       return { type: "shot", sub_type: sub, outcome_type: outcome, is_successful: e.outcome === "goal" }
     }
+    case "goal":
+      // Goals from shots are carried by the shot event; loose-ball and own-net goals have no shot, so export them as one.
+      if (a.from !== "loose_ball" && a.from !== "pass") return null
+      return { type: "shot", sub_type: null, outcome_type: a.own_goal === true ? "own_goal" : "successful", is_successful: true }
     case "clearance":
       return { type: "defending", sub_type: "clearance", outcome_type: "clearance", is_successful: true }
     case "interception":

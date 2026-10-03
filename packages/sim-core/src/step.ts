@@ -19,12 +19,12 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { accelFor, arrive, interceptPoint, separation, vmaxFor } from "./kinematics.js"
+import { accelFor, arrive, arriveBy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
-import { resolveFlight } from "./resolve.js"
+import { goalLineCrossing, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
-import { planShot } from "./shot.js"
+import { parryBall, planShot } from "./shot.js"
 import {
   CONCERNS,
   type AttrValue,
@@ -81,6 +81,9 @@ const kickoffPlayers = (cfg: MatchConfig, existing?: ReadonlyArray<PlayerState>)
 
 /** Initial state: tick -1, so the first step emits frame 0 of the first half. */
 export const initMatch = (cfg: MatchConfig): MatchState => {
+  const ids = [...cfg.home.starters, ...cfg.away.starters].map((p) => p.id)
+  const dup = ids.find((id, i) => ids.indexOf(id) !== i)
+  if (dup !== undefined) throw new Error(`duplicate player id "${dup}": home and away must be different teams`)
   const rng = {} as Record<Concern, ReturnType<typeof substream>>
   for (const c of CONCERNS) rng[c] = substream(cfg.seed, c)
   const timing = new Rng(rng.restart)
@@ -415,7 +418,13 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   let looseAfter: BallState | null = null
   const tickAt = w.tick + res.ticks
   const at = (pe: PendingEvent): PendingEvent => ({ ...pe, frame_id: tickAt })
-  if (res.result === "out") {
+  if (res.result === "goal") {
+    // Into the net from a pass or clearance: a goal for whoever attacks that end (an own goal if it is not the passer's side).
+    const scoringSide: Side = res.ball.pos.x > 0 ? "home" : "away"
+    outcome = "goal"
+    extra.push(at({ ...w.pending("goal", owner, endAt, { scorer_id: owner.id, own_goal: scoringSide !== side, from: "pass" }), team_id: w.teamId(scoringSide) }))
+    restartAfter = { restart: "kickoff", side: other(scoringSide), at: { x: 0, y: 0 } }
+  } else if (res.result === "out") {
     outcome = "out_of_play"
     extra.push(at(w.pending("ball_out", null, endAt, { side: Math.abs(res.ball.pos.y) > PITCH.halfW ? "touchline" : "byline", last_touch_team: w.teamId(side) })))
     restartAfter = restartFromOut(side, res.ball.pos)
@@ -499,11 +508,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     extra.push(at(w.pending("keeper_save", keeper, end, { technique: plan.handling === "clean" ? "catch" : "parry", handling: plan.handling })))
     if (plan.handling === "clean") winnerId = keeper.id
     else {
-      const out = plan.handling === "parried_safe"
-      looseBall = {
-        pos: plan.to,
-        vel: out ? { x: dirOf(side) * 3, y: Math.sign(plan.to.y || 1) * 12, z: 2 } : { x: -dirOf(side) * w.rng.duel.range(3, 7), y: w.rng.duel.range(-5, 5), z: 0.5 }
-      }
+      looseBall = parryBall(side, plan.to, plan.handling!, w.rng.duel)
     }
   }
   w.ball = { pos: plan.from, vel: { x: 0, y: 0, z: 0 } }
@@ -602,7 +607,8 @@ const ownedTick = (w: Work): void => {
 const resolveFlightNow = (w: Work, f: Flight): void => {
   w.emit(f.pending, { frame_id_end: f.resolveTick, outcome: f.outcome })
   for (const e of f.extra) w.emit(e)
-  if (f.outcome === "goal") w.score[f.side] += 1
+  const goal = f.extra.find((e) => e.type === "goal")
+  if (goal) w.score[goal.team_id === w.teamId("home") ? "home" : "away"] += 1
   if (f.restartAfter) {
     startRestart(w, f.restartAfter)
     return
@@ -650,19 +656,23 @@ const ballTick = (w: Work): void => {
     return
   }
   // loose
+  const prevPos = w.ball.pos
   w.ball = stepBall(w.ball, w.dt, w.p.ball)
   const flat = { x: w.ball.pos.x, y: w.ball.pos.y }
+  const cross = goalLineCrossing(prevPos, w.ball.pos)
+  if (cross?.inGoal) {
+    // A loose ball over the line between the posts (judged where it crossed) is a goal for the side
+    // attacking that end; an own goal if the defending side touched it last.
+    const scoringSide: Side = cross.x > 0 ? "home" : "away"
+    const toucher = w.lastTouch ? w.player(w.lastTouch.playerId) : null
+    const own = toucher !== null && toucher.side !== scoringSide
+    const at = { x: cross.x, y: cross.y }
+    w.emit({ ...w.pending("goal", toucher, at, { scorer_id: toucher?.id ?? null, own_goal: own, from: "loose_ball" }), team_id: w.teamId(scoringSide) })
+    w.score[scoringSide] += 1
+    startRestart(w, { restart: "kickoff", side: other(scoringSide), at: { x: 0, y: 0 } })
+    return
+  }
   if (!inPitch(flat)) {
-    if (Math.abs(flat.x) > PITCH.halfL && Math.abs(flat.y) < PITCH.goalHalfWidth && w.ball.pos.z < PITCH.goalHeight) {
-      // A loose ball over the line between the posts is a goal (an own goal if the defending side touched it last).
-      const scoringSide: Side = flat.x > 0 ? "home" : "away"
-      const toucher = w.lastTouch ? w.player(w.lastTouch.playerId) : null
-      const own = toucher !== null && toucher.side !== scoringSide
-      w.emit(w.pending("goal", toucher, flat, { scorer_id: toucher?.id ?? null, own_goal: own }, null, scoringSide))
-      w.score[scoringSide] += 1
-      startRestart(w, { restart: "kickoff", side: other(scoringSide), at: { x: 0, y: 0 } })
-      return
-    }
     w.emit(w.pending("ball_out", null, flat, { side: Math.abs(flat.y) > PITCH.halfW ? "touchline" : "byline", last_touch_team: w.lastTouch ? w.teamId(w.lastTouch.side) : null }))
     startRestart(w, restartFromOut(w.lastTouch?.side ?? null, w.ball.pos))
     return
@@ -675,7 +685,7 @@ const ballTick = (w: Work): void => {
 
 // ---------------------------------------------------------------- movement
 
-const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | null): { target: Vec2; speedCap: number } => {
+const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | null): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl.attrs, pl.energy, w.p)
   const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, ballFlat, team.style, possSide === pl.side), speedCap: vmax * 0.7 })
@@ -695,7 +705,8 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
     if (pl.intent.kind === "carry" && w.tick < pl.intentUntil) return { target: clampToPitch(add(pl.pos, scale(pl.intent.dir, 5)), 1), speedCap: pl.intent.speed }
     return { target: pl.pos, speedCap: 1 }
   }
-  if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id && pl.intent.kind === "chase") return { target: pl.intent.target, speedCap: vmax }
+  if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id && pl.intent.kind === "chase")
+    return { target: pl.intent.target, speedCap: vmax, timeLeft: Math.max(1, pos.flight.resolveTick - w.tick) * w.dt }
   if (pos.kind === "loose") {
     const chasers = w.active(pl.side).sort((a, b) => dist(a.pos, ballFlat) - dist(b.pos, ballFlat)).slice(0, 2)
     if (chasers.some((c) => c.id === pl.id) && pl.role !== "GK")
@@ -736,12 +747,16 @@ const moveAll = (w: Work): void => {
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap } = moveTarget(w, pl, ballFlat, possSide)
+    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide)
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur.attrs, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)
     const sep = separation(cur.pos, mates)
-    const next = arrive(cur.pos, cur.vel, add(target, scale(sep, 2)), Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt)
+    // Chasing a ball that will arrive at a known tick uses on-time steering (matches resolveFlight's reach model).
+    const next =
+      timeLeft !== undefined
+        ? arriveBy(cur.pos, cur.vel, target, Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt, timeLeft)
+        : arrive(cur.pos, cur.vel, add(target, scale(sep, 2)), Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt)
     const speed = len(next.vel)
     const energy = Math.max(0, cur.energy - w.dt * (0.00004 + 0.000012 * speed * speed))
     w.setPlayer({ ...cur, pos: clampToPitch(next.pos, -2), vel: next.vel, energy })
@@ -758,7 +773,8 @@ const frameOf = (w: Work): Frame => {
       x: round2(pl.pos.x),
       y: round2(pl.pos.y),
       vel: round2(len(pl.vel)),
-      intent: pl.id === ownerId ? ("on_ball" as const) : pl.intent.kind
+      // Expired intents fall back to "shape": the label says what the player is doing now.
+      intent: pl.id === ownerId ? ("on_ball" as const) : w.tick < pl.intentUntil ? pl.intent.kind : ("shape" as const)
     }))
   const possSide =
     w.possession.kind === "owned" ? w.player(w.possession.playerId).side : w.possession.kind === "in_flight" ? w.possession.flight.side : null

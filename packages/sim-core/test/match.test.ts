@@ -94,6 +94,29 @@ describe("full match", () => {
     expect(runs.length).toBeGreaterThan(10)
     expect(runs.every((e) => e.x_end !== null && typeof e.attrs.ball_carrier_id === "string")).toBe(true)
   })
+  it("receivers are on the ball when they receive it, and the in-play ball never teleports", () => {
+    const byTick = new Map(a.frames.map((f) => [f.tick, f]))
+    const gaps: number[] = []
+    for (const e of a.events.filter((x) => x.type === "reception")) {
+      const f = byTick.get(e.frame_id)!
+      const p = [...f.home, ...f.away].find((x) => x.id === e.player_id)!
+      gaps.push(Math.hypot(p.x - f.ball.x, p.y - f.ball.y))
+    }
+    gaps.sort((x, y) => x - y)
+    expect(gaps[Math.floor(gaps.length * 0.9)]).toBeLessThanOrEqual(1.5)
+    let jumps = 0
+    for (let i = 1; i < a.frames.length; i++) {
+      const f = a.frames[i]!, q = a.frames[i - 1]!
+      if (f.period !== q.period || !f.ball_in_play || !q.ball_in_play) continue
+      if (Math.hypot(f.ball.x - q.ball.x, f.ball.y - q.ball.y) > 4) jumps++
+    }
+    expect(jumps).toBeLessThanOrEqual(20)
+  })
+  it("player intents reflect what players are doing now (mostly shape when off the ball)", () => {
+    let shape = 0, total = 0
+    for (const f of a.frames.filter((_, i) => i % 25 === 0)) for (const p of [...f.home, ...f.away]) { total++; if (p.intent === "shape") shape++ }
+    expect(shape / total).toBeGreaterThan(0.5)
+  })
   it("score in state equals goal events", () => {
     const g = a.events.filter((e) => e.type === "goal")
     expect(a.s.score.home + a.s.score.away).toBe(g.length)

@@ -30,8 +30,38 @@ describe("edge cases", () => {
     expect(passes(a) / passes(ten)).toBeGreaterThan(0.7)
     expect(passes(a) / passes(ten)).toBeLessThan(1.3)
   })
+  it("plays statistically the same football at 25 Hz as at 10 Hz (completion and interceptions)", () => {
+    const sum = (dt: number) => {
+      let passes = 0, ok = 0, inter = 0
+      for (const seed of [31, 32, 33, 34]) {
+        const m = play(makeConfig(seed, { dt }))
+        const ps = m.events.filter((e) => e.type === "pass")
+        passes += ps.length
+        ok += ps.filter((e) => e.outcome === "successful").length
+        inter += m.events.filter((e) => e.type === "interception").length
+      }
+      return { completion: ok / passes, inter }
+    }
+    const ten = sum(0.1), tf = sum(0.04)
+    expect(Math.abs(ten.completion - tf.completion)).toBeLessThan(0.03)
+    expect(tf.inter / ten.inter).toBeGreaterThan(0.85)
+    expect(tf.inter / ten.inter).toBeLessThan(1.15)
+  })
   it("handles extreme seeds", () => {
     for (const seed of [0, 4294967295]) expect(play(makeConfig(seed)).events.at(-1)!.type).toBe("match_end")
+  })
+  it("credits every goal (own goals included) to the team that scores it", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const cfg = makeConfig(seed)
+      const m = play(cfg)
+      const goals = m.events.filter((e) => e.type === "goal")
+      expect(goals.filter((g) => g.team_id === cfg.home.id).length).toBe(m.s.score.home)
+      expect(goals.filter((g) => g.team_id === cfg.away.id).length).toBe(m.s.score.away)
+    }
+  })
+  it("refuses a match where two players share an id (e.g. a club playing itself)", () => {
+    const cfg = makeConfig(1)
+    expect(() => initMatch({ ...cfg, away: { ...cfg.home } })).toThrow(/duplicate player id/)
   })
   it("every goal event is matched by the final score", () => {
     for (const seed of [11, 12, 13]) {
