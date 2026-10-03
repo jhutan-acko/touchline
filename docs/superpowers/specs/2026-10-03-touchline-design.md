@@ -5,7 +5,7 @@
 - **Author:** Jhutan Debnath, with Claude Code
 - **Visual companions:** system design https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS · simulator design https://claude.ai/artifact/FC9YH2kcGFr8tPchooBmpF (private design pages; this spec is authoritative where they differ)
 - **Research:** `../reports/Football match data simulators.md` (outside this repo, 2026-10-03)
-- **Revision:** 2026-10-03 r5 — action and event taxonomy (§5.1.10): pass kinds, heights and techniques, take-ons, duels, keeper actions, derived tags
+- **Revision:** 2026-10-03 r6 — execution and errors (§5.1.12): intended vs actual, misplaced/overhit/mis-hit passes, wrong options, critical errors
 
 ## 1. Context
 
@@ -236,8 +236,8 @@ Each step runs, in order:
 **Probabilities are expressed per action or per second, never per tick.** Changing the tick must not change the football; tbleckert's engine fails this.
 
 - **Action choice:** a softmax over the decision actions in §5.1.10 — `short_pass`, `long_pass`, `through_ball`, `lofted_through`, `switch`, `cross`, `cutback`, `back_pass`, `carry`, `take_on`, `shot`, `clear`, `hold`. Inputs are zone, pressure, team-style bias, game-state bias and script multipliers. Base logits come from a fitted transition table indexed by zone × possession phase.
-- **Pass target:** candidates are scored by fitted pass length and angle, and by time-to-intercept. That uses a reaction time of 0.7 s plus distance over max speed, compared against the ball's flight time. Success comes from an xPass logistic model with inputs distance, angle, defenders in the lane and pressure on the passer.
-- **Shots:** a logistic xG model with inputs distance, angle, body part and defenders in the cone. The outcome is drawn from xG.
+- **Pass target:** candidates are scored by fitted pass length and angle, and by time-to-intercept. That uses a reaction time of 0.7 s plus distance over max speed, compared against the ball's flight time. The passer chooses an **intended** target and speed. The **actual** ball comes from the execution model (§5.1.12), and the outcome is decided by physics: who reaches the ball first, or whether it goes out. xPass (distance, angle, defenders in the lane, pressure) is still computed at release, as the expected success of the *intended* pass. It is used for the decision and as ground truth.
+- **Shots:** a logistic xG model with inputs distance, angle, body part and defenders in the cone. The aim point and power go through the execution model, so the outcome (goal, saved, wide, skied, scuffed) comes from where the ball actually travels. Execution noise is fitted so that goals per shot still match xG on average.
 - **Defending:** the press trigger rate is set from the style's target PPDA. Tackle and interception attempts come from proximity and per-second rates; fouls and cards from per-duel rates.
 - **Timing:** intents carry a duration (0.3–1.0 s) and an urgency, so players commit to a choice rather than jittering. The time between events is checked against fitted distributions by event type.
 - **Game state:**
@@ -264,7 +264,7 @@ Each step runs, in order:
 
 #### 5.1.7 Scenario scripts
 
-A script is a list of `{ window: [fromMin, toMin], team, effect }`. The effect is one of `goal`, `red_card`, `press_surge`, `keeper_heroics` or `momentum_swing`. Scripts are resolved in three steps:
+A script is a list of `{ window: [fromMin, toMin], team, effect }`. The effect is one of `goal`, `red_card`, `press_surge`, `keeper_heroics`, `momentum_swing`, `keeper_howler` or `defensive_error`. The last two raise one player's or one unit's mis-hit and miscontrol rates in the window. Scripts are resolved in three steps:
 1. **Nudge:** raise the relevant per-second intensities inside the window.
 2. **Retry:** if the window closes without the target, re-simulate it from a checkpoint with a new sub-seed, up to N attempts.
 3. **Force (last resort):** force the outcome on the next qualifying action and mark the event `scripted: true`. This flag is kept out of CDF and recorded in the run manifest.
@@ -274,6 +274,7 @@ Built-in scenarios:
 - `late_comeback`: down 0–2 at 70', ends 3–2;
 - `red_card_collapse`;
 - `keeper_heroics`;
+- `costly_error`: a defender's mis-hit back pass is pounced on and leads to a goal, testing whether the agents explain *why* the goal happened.
 - `high_press_vs_low_block`: measured PPDA below 9 against above 13.
 
 #### 5.1.8 Calibration and validation
@@ -310,6 +311,8 @@ Built-in scenarios:
 | Ball in play | 55–60 % of match time |
 | Long-ball share of passes | about 10 % (Premier League 2024/25: 93.4 of 893.5); band set from the fit |
 | Kind mix (through balls, switches, crosses, cutbacks), take-ons, aerial duels | Per-match bands set from the Wyscout and IDSSE fits |
+| Passes straight out of play; turnovers by third | Bands set from the fit |
+| Errors leading to a shot or goal | Rare: well under one per team per match; band from the fit and published benchmarks |
 
 **Kinematic checks** against IDSSE:
 - Wasserstein-1 distance on the speed and acceleration distributions;
@@ -400,13 +403,13 @@ The decision layer chooses an **action**. Executing it produces one or more **do
 
 | Event | Key attributes |
 |---|---|
-| `pass` | `kind` (short, long, through, lofted_through, switch, cross, cutback, back, set_piece); `height` (ground, low, high); `technique` (foot, head, chest, throw, keeper_hand); `body_part`; `outcome` (successful, intercepted, blocked, out_of_play, offside); `receiver_id`; `under_pressure`; `defenders_in_lane`; `defenders_bypassed`; `ball_speed_kmh`; `xpass` |
-| `reception` | `first_touch` (controlled, heavy, miscontrol); `under_pressure` |
+| `pass` | `kind` (short, long, through, lofted_through, switch, cross, cutback, back, set_piece); `height` (ground, low, high); `technique` (foot, head, chest, throw, keeper_hand); `body_part`; `outcome` (successful, intercepted, blocked, out_of_play, offside); `receiver_id`; `intended_receiver_id`; `intended_end` (x, y); `execution` (clean, inaccurate, overhit, underhit, mishit); `error_m`; `decision_quality`; `under_pressure`; `defenders_in_lane`; `defenders_bypassed`; `ball_speed_kmh`; `xpass` |
+| `reception` | `first_touch` (controlled, heavy, miscontrol, missed); `under_pressure`; `lost_possession` |
 | `carry` | `distance_m`; `progressive` |
 | `take_on` | `outcome` (won, lost); `defender_id` |
-| `shot` | `technique` (normal, first_time, volley, half_volley, header, chip, penalty, free_kick); `body_part`; `assisted_by`; `pass_kind_before`; `outcome` (goal, saved, blocked, wide, woodwork); `on_target`; `xg`; `shot_speed_kmh` |
+| `shot` | `technique` (normal, first_time, volley, half_volley, header, chip, penalty, free_kick); `body_part`; `assisted_by`; `pass_kind_before`; `outcome` (goal, saved, blocked, wide, woodwork); `execution` (clean, scuffed, sliced, skied, miskick); `on_target`; `xg`; `shot_speed_kmh` |
 | `goal` | `scorer_id`; `assist_id`; `own_goal` |
-| `keeper_save` | `technique` (catch, parry, dive, smother); `shot_id` |
+| `keeper_save` | `technique` (catch, parry, dive, smother); `handling` (clean, parried_safe, parried_dangerous, fumble, spill); `shot_id` |
 | `keeper_claim`, `keeper_punch` | `from` (cross, corner, free_kick) |
 | `keeper_distribution` | `method` (throw, roll, kick, goal_kick); then a `pass` |
 | `aerial_duel` | `winner_id`; `loser_id`; `outcome` |
@@ -439,6 +442,7 @@ The decision layer chooses an **action**. Executing it produces one or more **do
 - **`switch`.**
 - **`big_chance`:** xG ≥ 0.3.
 - **`counter_attack`:** a recovery in the team's own half reaches the final third within 10 s.
+- **Mistakes** (§5.1.12): `misplaced`, `overhit`, `underhit`, `mishit`, `wrong_option`, `giveaway` (lost in the team's own third), `heavy_touch`, `big_chance_missed`, `error_leading_to_shot` and `error_leading_to_goal` (an opponent shot or goal in the same possession within 15 s of the error), `critical_error` (either of the last two, or a giveaway in the team's own box).
 
 **Engine implications:**
 - **Ball flight:** height sets the launch angle and speed — ground passes roll, `high` uses 3D flight.
@@ -465,6 +469,49 @@ IDSSE's DFL events cross-check the duels and keeper actions. Our geometric class
 - **CLI:** `touchline-sim --seed --home --away --script --speed --out`.
 - **Tests:** use `TestClock` to check paced and unpaced hashes are equal.
 - **Version check:** Effect 4 APIs (`Stream.iterate`, `Schedule.spaced`, `TestClock`, `Schema`) are pinned to 4.0.x and verified against the current docs in week 1.
+
+#### 5.1.12 Execution, errors and mistakes
+
+Players don't always do what they meant to. Every on-ball action has an **intention** (the decision layer's choice) and an **execution** (what actually happened). Mistakes come from the gap between the two. They are not drawn as a separate "error" event, so their consequences play out physically in the tracking data.
+
+**Execution model:**
+- The intended target point and ball speed are perturbed by **direction**, **distance or power** and, for lofted balls, **height** errors.
+- The noise scale grows with:
+  - pass length and difficulty;
+  - pressure on the passer (nearest-defender distance and closing speed);
+  - first-time or awkward technique and weaker foot;
+  - fatigue (stamina) and the player's technical attribute (passing, crossing, finishing, first touch).
+- **Heavy tail.** Errors are mostly small (Gaussian core), with a small mixture weight for big mistakes. That weight is the **mis-hit probability**, and it rises sharply under pressure and with low composure. This is what produces the occasional shank, air-kick or howler.
+- **Outcome:** the actual ball then flies under normal physics, and the outcome is whoever reaches it first: the intended receiver, another teammate, an opponent, or the ball goes out of play.
+
+**Kinds of mistake:**
+
+| Mistake | How it arises | What is recorded |
+|---|---|---|
+| Inaccurate or misplaced pass | Moderate direction or distance error; the receiver must adjust or loses the ball | `execution: inaccurate`, `error_m`; tag `misplaced` if possession is lost |
+| Overhit or underhit | Power error: runs out of play or past the runner, or falls short into a defender | `execution: overhit` or `underhit` |
+| Mis-hit or shank | A heavy-tail draw: large error in direction and power | `execution: mishit`; tag `mishit` |
+| Wrong option | The decision itself was poor: the chosen pass's value (xPass × threat gained) is well below the best available option | `decision_quality` (chosen value ÷ best value); tag `wrong_option` below a threshold |
+| Heavy touch or miscontrol | First-touch error on reception, driven by ball speed, height, pressure and first-touch attribute | `reception.first_touch: heavy`, `miscontrol` or `missed`; tag `heavy_touch` |
+| Shot mis-execution | Shot noise: scuffed, sliced, skied, air-kick | `shot.execution`; tag `big_chance_missed` if xG ≥ 0.3 and not scored |
+| Keeper handling error | Handling noise on saves and claims | `keeper_save.handling: fumble`, `spill` or `parried_dangerous` |
+| Defensive slip | Failed tackle, sliced clearance, mistimed header | `tackle.outcome: lost`, `clearance.execution: sliced`, `aerial_duel` lost |
+| Critical error | Any of the above in a dangerous context, leading to an opponent shot or goal | Derived: `error_leading_to_shot`, `error_leading_to_goal`, `critical_error` |
+
+**Why this matters:**
+- **Physics stays consistent.** A misplaced pass actually goes somewhere wrong in the tracking data, rather than being labelled "incomplete" at the intended spot.
+- **Ground truth for the agents (§2.1, #1).** Only synthetic data knows what the player *intended*. The evaluation harness can check whether the Analyst correctly explains "a mis-hit back pass under pressure" versus "a good pass, well intercepted". Real event data never records intention.
+- **Better stories.** "Wayward under pressure", "the error that turned the game", a keeper howler, a big chance missed.
+
+**Calibration:**
+- Noise scales and mis-hit weights are fitted so that synthetic data matches real data on:
+  - pass completion by kind, zone and pressure;
+  - where turnovers happen;
+  - goals per shot against xG.
+- Real data doesn't label mis-hits, so the heavy-tail weight is tuned against two proxies: how far incomplete passes end from the nearest teammate (IDSSE) and the share of passes going straight out of play.
+- Rates of errors leading to a shot or goal are checked to be rare (well under one per team per match). The exact band comes from the fit and published benchmarks.
+
+**Ground truth in the manifest:** every mis-hit and critical error is listed with its frame, player and cause (pressure, fatigue, technique, script), so the evaluation harness can score explanations of it.
 
 ### 5.2 Stats engine (`packages/stats`)
 
@@ -520,7 +567,7 @@ This harness backs innovation #1 (§2.1). Scenario scripts (§5.1.7) record **ta
 |---|---|
 | Moment recall | Share of injected truths for which a moment is published within the window, plus 2 minutes |
 | Moment precision | Share of published moments that match an injected truth or a band-significant signal |
-| Explanation accuracy | Whether the Analyst names the correct cause, judged against the truth label by a rubric (LLM judge, spot-checked by hand) |
+| Explanation accuracy | Whether the Analyst names the correct cause (including mistakes such as a mis-hit under pressure versus a good interception), judged against the truth label by a rubric (LLM judge, spot-checked by hand) |
 | Evidence correctness | Whether cited metric IDs and frame ranges overlap the truth's expected metrics and window |
 | Grounding | Share of numeric claims verified by the Fact-Checker; target 100 % after gating |
 | Persona separation | Whether analyst and casual variants differ in depth (number count, length) and tone, per rubric |
