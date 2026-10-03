@@ -5,7 +5,7 @@
 - **Author:** Jhutan Debnath, with Claude Code
 - **Visual companions:** system design https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS · simulator design https://claude.ai/artifact/FC9YH2kcGFr8tPchooBmpF (private design pages; this spec is authoritative where they differ)
 - **Research:** `../reports/Football match data simulators.md` (outside this repo, 2026-10-03)
-- **Revision:** 2026-10-03 r4 — innovation statement (§2.1) and ground-truth agent evaluation harness (§5.3.1)
+- **Revision:** 2026-10-03 r5 — action and event taxonomy (§5.1.10): pass kinds, heights and techniques, take-ons, duels, keeper actions, derived tags
 
 ## 1. Context
 
@@ -235,7 +235,7 @@ Each step runs, in order:
 
 **Probabilities are expressed per action or per second, never per tick.** Changing the tick must not change the football; tbleckert's engine fails this.
 
-- **Action choice:** a softmax over `{short_pass, long_pass, through_ball, cross, carry, dribble, shot, clear, hold}`. Inputs are zone, pressure, team-style bias, game-state bias and script multipliers. Base logits come from a fitted transition table indexed by zone × possession phase.
+- **Action choice:** a softmax over the decision actions in §5.1.10 — `short_pass`, `long_pass`, `through_ball`, `lofted_through`, `switch`, `cross`, `cutback`, `back_pass`, `carry`, `take_on`, `shot`, `clear`, `hold`. Inputs are zone, pressure, team-style bias, game-state bias and script multipliers. Base logits come from a fitted transition table indexed by zone × possession phase.
 - **Pass target:** candidates are scored by fitted pass length and angle, and by time-to-intercept. That uses a reaction time of 0.7 s plus distance over max speed, compared against the ball's flight time. Success comes from an xPass logistic model with inputs distance, angle, defenders in the lane and pressure on the passer.
 - **Shots:** a logistic xG model with inputs distance, angle, body part and defenders in the cone. The outcome is drawn from xG.
 - **Defending:** the press trigger rate is set from the style's target PPDA. Tackle and interception attempts come from proximity and per-second rates; fouls and cards from per-duel rates.
@@ -259,7 +259,7 @@ Each step runs, in order:
   - `tempo`, `longBallBias`, `crossBias`, `riskTolerance`.
 - **Styles:** at least four distinct archetypes — high press, possession, direct, low block.
 - **Kits:** each club has contrasting home and away kits (primary and secondary colours chosen for high contrast and kept distinct across the league), so a detector can separate the teams.
-- **Squads:** 20 players per club, with unique shirt numbers, role, preferred foot and attributes (pace, acceleration, passing, finishing, tackling, composure, stamina). A seeded name generator checks every name against a real-player blocklist. A synthetic season history supplies the milestones the narrative layer uses.
+- **Squads:** 20 players per club, with unique shirt numbers, role, preferred foot and attributes (pace, acceleration, short passing, long passing, vision, crossing, dribbling, finishing, heading/aerial, tackling, composure, stamina; keepers add handling, reflexes and distribution). A seeded name generator checks every name against a real-player blocklist. A synthetic season history supplies the milestones the narrative layer uses.
 - **Stable:** the league is generated once from a fixed seed and committed as `data/league/*.json`, so IDs stay stable for the demo.
 
 #### 5.1.7 Scenario scripts
@@ -286,8 +286,9 @@ Built-in scenarios:
   - ball friction and bounce coefficients.
 - **From Wyscout (excluding England):**
   - event-type transition matrix by zone and phase;
-  - pass length and angle by zone;
-  - success rates by type, zone and pressure;
+  - **action-kind mix by zone and phase** (§5.1.10): pass kinds, carries vs take-ons, duels;
+  - pass length and angle by zone and kind;
+  - success rates by type, kind, zone and pressure (take-on and aerial-duel win rates included);
   - xG and xPass coefficients;
   - time between events by type;
   - minute profile of goals.
@@ -307,6 +308,8 @@ Built-in scenarios:
 | Offsides | 2–6 |
 | Save rate | 62–76 % |
 | Ball in play | 55–60 % of match time |
+| Long-ball share of passes | about 10 % (Premier League 2024/25: 93.4 of 893.5); band set from the fit |
+| Kind mix (through balls, switches, crosses, cutbacks), take-ons, aerial duels | Per-match bands set from the Wyscout and IDSSE fits |
 
 **Kinematic checks** against IDSSE:
 - Wasserstein-1 distance on the speed and acceleration distributions;
@@ -339,11 +342,14 @@ Built-in scenarios:
 
 1. **Domain stream** (`packages/schema`, Effect Schema), consumed live by the stats engine. Domain events are richer than CDF. Event types:
    - **Match flow:** `match_start`, `period_start`, `kickoff`, `period_end`, `match_end`.
-   - **On-ball actions:** `pass`, `cross`, `reception`, `carry`, `dribble`, `shot`, `save`, `clearance`, `goal`.
-   - **Defending:** `pressure`, `tackle`, `interception`, `block`.
+   The full taxonomy, with attributes, is in §5.1.10. In summary:
+   - **Match flow:** `match_start`, `period_start`, `kickoff`, `period_end`, `match_end`.
+   - **On ball:** `pass` (crosses are a pass `kind`), `reception`, `carry`, `take_on`, `shot`, `clearance`, `goal`.
+   - **Goalkeeper:** `keeper_save`, `keeper_claim`, `keeper_punch`, `keeper_distribution`.
+   - **Duels and defending:** `aerial_duel`, `ground_duel`, `pressure`, `tackle`, `interception`, `block`, `ball_recovery`.
    - **Possession:** `possession_change`.
    - **Stoppages and discipline:** `ball_out`, `foul`, `card`, `offside`, `substitution`.
-   - **Set pieces:** `set_piece` (the restart variants).
+   - **Set pieces:** `set_piece` (restart kind), followed by the delivering `pass` or `shot`.
 
    Every domain event carries `frame_id`, `source` (`sim | replay | vision`), `confidence` (1.0 for `sim`), its attributes (for example `ball_speed_kmh`, `defenders_in_lane`, `under_pressure`) and ground-truth model values (`xg`, `xpass`).
 2. **CDF v0.3.2 files** per match: `meta.json`, `event.jsonl`, `tracking.jsonl`.
@@ -359,12 +365,99 @@ Domain event example:
 
 ```json
 {"id":"m042-e1187","match_id":"m042","frame_id":41124,"period":"second_half","match_clock":"67:02.40",
- "type":"pass","team_id":"ironmoor","player_id":"p-ir-08","receiver_id":"p-ir-10",
+ "type":"pass","kind":"through","height":"ground","technique":"foot","body_part":"right_foot",
+ "team_id":"ironmoor","player_id":"p-ir-08","receiver_id":"p-ir-10",
  "x":8.7,"y":-11.6,"x_end":36.0,"y_end":-3.9,"outcome":"successful","frame_id_end":41133,
- "under_pressure":true,"defenders_in_lane":2,"ball_speed_kmh":71.4,"body_part":"right_foot","xpass":0.58}
+ "under_pressure":true,"defenders_in_lane":2,"defenders_bypassed":4,"ball_speed_kmh":71.4,
+ "xpass":0.58,"tags":["progressive","line_breaking","key_pass"],"source":"sim","confidence":1.0}
 ```
 
-#### 5.1.10 Effect boundary (`packages/sim`)
+#### 5.1.10 Action and event taxonomy
+
+The decision layer chooses an **action**. Executing it produces one or more **domain events**. The stats engine then adds **derived tags**.
+
+**One rule ties these together:** pass kinds are **classified from geometry at release**, using the same classifier on synthetic and real data. Calibration and realism comparisons are therefore like for like, and a "through ball" means the same thing everywhere. The thresholds below are starting values, tuned once against the Wyscout sub-event labels.
+
+**Decision actions** (the softmax in §5.1.4):
+
+| Action | What the player does | Geometry and execution |
+|---|---|---|
+| `short_pass` | Ground pass to a nearby teammate | Length < 32 m; height `ground` |
+| `long_pass` | Long ball, often lofted, to a teammate or an area | Length ≥ 32 m (35 yards, the Opta convention); height `high` or `low` |
+| `through_ball` | Ground pass into space behind or between the defensive line, for a runner | Target point beyond the last defender at release; needs a receiver with a `run_in_behind` intent |
+| `lofted_through` | Through ball over the line | As above, height `high` |
+| `switch` | Switch of play to the far side | Lateral displacement ≥ 25 m and crossing the pitch centreline (y = 0) |
+| `cross` | Delivery from a wide area into the box | Origin `\|y\|` > 20.16 m in the final third; target inside the penalty area |
+| `cutback` | Pass back from near the byline into the box | Origin x > 41 m (attacking), Δx < 0, target between the penalty spot and the 6-yard line |
+| `back_pass` | Recycle backwards or to the keeper | Δx < −5 m; a back pass to the keeper (feet) is flagged |
+| `carry` | Move with the ball with no opponent beaten | Displacement ≥ 3 m with the ball at the feet |
+| `take_on` | Try to beat a defender 1v1 | Resolved by dribbling vs tackling, pace, pressure and fitted success rates |
+| `shot` | Shoot | Technique is set by ball state at contact (see below) |
+| `clear` | Defensive clearance | Height `high`, long, with no specific target |
+| `hold` | Shield the ball or wait for support | Short dwell, then decide again |
+
+**Domain events and attributes:**
+
+| Event | Key attributes |
+|---|---|
+| `pass` | `kind` (short, long, through, lofted_through, switch, cross, cutback, back, set_piece); `height` (ground, low, high); `technique` (foot, head, chest, throw, keeper_hand); `body_part`; `outcome` (successful, intercepted, blocked, out_of_play, offside); `receiver_id`; `under_pressure`; `defenders_in_lane`; `defenders_bypassed`; `ball_speed_kmh`; `xpass` |
+| `reception` | `first_touch` (controlled, heavy, miscontrol); `under_pressure` |
+| `carry` | `distance_m`; `progressive` |
+| `take_on` | `outcome` (won, lost); `defender_id` |
+| `shot` | `technique` (normal, first_time, volley, half_volley, header, chip, penalty, free_kick); `body_part`; `assisted_by`; `pass_kind_before`; `outcome` (goal, saved, blocked, wide, woodwork); `on_target`; `xg`; `shot_speed_kmh` |
+| `goal` | `scorer_id`; `assist_id`; `own_goal` |
+| `keeper_save` | `technique` (catch, parry, dive, smother); `shot_id` |
+| `keeper_claim`, `keeper_punch` | `from` (cross, corner, free_kick) |
+| `keeper_distribution` | `method` (throw, roll, kick, goal_kick); then a `pass` |
+| `aerial_duel` | `winner_id`; `loser_id`; `outcome` |
+| `ground_duel` | `kind` (attacking, defending, loose_ball); `winner_id`; `loser_id` |
+| `pressure` | `presser_id`; `duration_s`; `forced_turnover` (within 5 s) |
+| `tackle` | `outcome` (won, lost, foul) |
+| `interception` | `pass_id` |
+| `block` | `blocked` (shot, pass, cross) |
+| `clearance` | `technique` (foot, head) |
+| `ball_recovery` | `kind` (loose_ball, second_ball) |
+| `possession_change` | `reason` |
+| `ball_out` | `side` (touchline, byline); `last_touch_team` |
+| `foul` | `kind` |
+| `card` | `colour` (yellow, second_yellow, red) |
+| `offside` | — |
+| `substitution` | — |
+| `set_piece` | `kind` (kickoff, throw_in, corner, goal_kick, free_kick_direct, free_kick_indirect, penalty) |
+
+**Shot technique** comes from the ball state at contact:
+- **header:** ball height above about 1.4 m;
+- **volley:** ball airborne;
+- **half-volley:** ball just after a bounce;
+- **first-time:** no reception event since the pass.
+
+**Derived tags** (stats engine, `tags[]`):
+- **`key_pass`:** a pass followed by a shot in the same possession.
+- **`assist`:** a key pass whose shot scored.
+- **`progressive`:** moves the ball at least 25 % closer to the goal centre, or at least 10 m closer in the final two-thirds.
+- **`line_breaking`:** `defenders_bypassed` ≥ 1 full line.
+- **`switch`.**
+- **`big_chance`:** xG ≥ 0.3.
+- **`counter_attack`:** a recovery in the team's own half reaches the final third within 10 s.
+
+**Engine implications:**
+- **Ball flight:** height sets the launch angle and speed — ground passes roll, `high` uses 3D flight.
+- **Through balls:** need off-ball `run_in_behind` intents and a target in space, not at a player.
+- **High balls:** contested high balls resolve as an `aerial_duel` from the heading attribute, jump timing and position.
+- **Take-ons:** resolve from dribbling, tackling, pace and pressure.
+
+**Calibration:** each kind's frequency by zone and its success rate come from Wyscout sub-events. These need confirming against the dataset; expected labels:
+- passes: Simple pass, High pass, Smart pass ≈ through ball, Launch ≈ long ball, Cross, Head pass;
+- duels: ground attacking, ground defending, air, loose ball;
+- Acceleration ≈ carry or take-on.
+
+IDSSE's DFL events cross-check the duels and keeper actions. Our geometric classifier runs on both, and the gap between Wyscout labels and our classifier is reported in the realism report.
+
+**Export mapping:**
+- **CDF:** event types are coarse, so the full detail stays in the domain stream. Pass kinds map to `pass` (restart kinds as `sub_type`), take-ons and aerial and ground duels to `misc/other_ball_action`, `ball_recovery` to `misc/other_ball_action`, keeper actions to `goalkeeping/save | save_attempt | claim`, and tackles to `misc/tackle`. Mappings are confirmed against the validator enums in week 1.
+- **SPADL:** maps more directly — `pass`, `cross`, `throw_in`, `freekick_crossed/short`, `corner_crossed/short`, `take_on`, `dribble` (our carry), `shot`, `shot_penalty`, `shot_freekick`, `keeper_save/claim/punch/pick_up`, `clearance`, `goalkick`, `bad_touch` (miscontrol), `foul`, `tackle`, `interception`.
+
+#### 5.1.11 Effect boundary (`packages/sim`)
 
 - **Live mode:** `Stream.iterate` over `step`, paced with `Schedule.spaced(100 ms / speed)`.
 - **Batch mode:** the same stream, unpaced.
