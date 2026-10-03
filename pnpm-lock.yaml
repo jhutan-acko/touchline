@@ -30,6 +30,16 @@ importers:
         specifier: workspace:*
         version: link:../sim-core
 
+  packages/schema:
+    dependencies:
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+    devDependencies:
+      '@touchline/sim-core':
+        specifier: workspace:*
+        version: link:../sim-core
+
   packages/sim-core: {}
 
 packages:
@@ -369,6 +379,9 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  effect@4.0.0:
+    resolution: {integrity: sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ==}
 
   es-module-lexer@2.3.2:
     resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
@@ -811,6 +824,8 @@ snapshots:
   chai@6.3.0: {}
 
   detect-libc@2.1.2: {}
+
+  effect@4.0.0: {}
 
   es-module-lexer@2.3.2: {}
 
