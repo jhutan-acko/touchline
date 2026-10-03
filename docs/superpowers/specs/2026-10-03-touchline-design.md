@@ -3,7 +3,9 @@
 - **Date:** 2026-10-03
 - **Status:** Draft for review
 - **Author:** Jhutan Debnath, with Claude Code
-- **Visual companion:** https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS (private design page; this spec is authoritative where they differ)
+- **Visual companions:** system design https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS · simulator design https://claude.ai/artifact/FC9YH2kcGFr8tPchooBmpF (private design pages; this spec is authoritative where they differ)
+- **Research:** `../reports/Football match data simulators.md` (outside this repo, 2026-10-03)
+- **Revision:** 2026-10-03 r2 — simulator section rewritten after research (CDF v0.3.2 output, calibration sources, tick/decision split)
 
 ## 1. Context
 
@@ -22,7 +24,11 @@ Entry for Microsoft's **Inside the Game: Developer Hackathon**, challenge **"The
 
 1. **Synthetic data only.** No real Premier League match data in the repo, app or video.
 2. **No third-party trademarks or copyrighted material in the video.** Fictional league, clubs, crests, kits and players throughout, and generated player names are checked against real players.
-3. **Licences.** No AGPL or GPL code in the repo. Open datasets (Wyscout CC-BY 4.0, IDSSE CC-BY 4.0) are used for offline calibration only; raw data is git-ignored and only fitted parameters are committed, with attribution in the README. StatsBomb data is not used.
+3. **Licences and calibration data.**
+   - No AGPL or GPL code in the repo; GPL projects (e.g., openfootmanager) are read for ideas only.
+   - Simulator parameters are fitted offline on **IDSSE / Sportec Open DFL (CC-BY 4.0)** and the **Wyscout public dataset (CC BY 4.0) with all England files excluded**. Raw files live in git-ignored `data/raw/`; only aggregate parameter tables are committed. Each table records its source dataset, licence and attribution.
+   - **No committed parameter is fitted on StatsBomb Open Data.** Its terms require the StatsBomb logo on anything "based on" the data. IMPECT, PFF and Metrica are also excluded on licence grounds.
+   - Code adapted from MIT/Apache-2.0 projects (tbleckert/football-simulator, ZOXEXIVO/open-football) is credited in `ATTRIBUTION.md`.
 4. **Everything in English** in submission materials.
 
 ## 2. Goals and success criteria
@@ -110,7 +116,9 @@ touchline/
 │  └─ api/            Effect platform server: RPC, cue bus, agent gateway
 ├─ packages/
 │  ├─ schema/         Effect Schema: Event, MatchState, Signal, Moment, Claim, Cue, Profile
-│  ├─ sim/            simulator + fictional league generator
+│  ├─ sim-core/       simulator: pure, synchronous step function (no Effect inside)
+│  ├─ sim/            Effect wrapper: streams, pacing, CDF/SPADL writers, CLI
+│  ├─ league/         fictional league, squads, styles, crests
 │  ├─ stats/          stats engine on Effect Stream
 │  ├─ rpc/            Effect RPC contracts (shared client/server)
 │  └─ mcp-stats/      MCP server exposing stats tools
@@ -119,7 +127,7 @@ touchline/
 ├─ python/
 │  └─ analytics/      Python (uv): calibration + model fitting, offline only
 ├─ data/
-│  ├─ params/         committed fitted parameters (JSON)
+│  ├─ params/         committed fitted parameters (JSON, with provenance header)
 │  ├─ matches/        committed synthetic replay files (JSONL)
 │  └─ raw/            git-ignored real open datasets
 ├─ infra/             Bicep + azure.yaml (azd)
@@ -130,30 +138,190 @@ Tooling:
 - **TypeScript:** pnpm workspaces + Turborepo.
 - **Python:** uv workspace.
 - **Tests:** `@effect/vitest` and pytest.
-- **CI:** GitHub Actions.
+- **CI:** GitHub Actions, including CDF validation (`common-data-format-validator`, `mode="extreme"`) of simulator output.
 - **Deploy:** `azd up`.
 - **Local dev:** a single `pnpm dev` runs the whole stack.
 
 ## 5. Components
 
-### 5.1 Simulator (`packages/sim`)
+### 5.1 Simulator (`packages/sim-core`, `packages/sim`, `packages/league`)
 
-- **Fictional league:** 8 invented clubs. Each has a style profile (press-heavy, possession, direct, low-block) that adjusts the simulator's parameters, and generated squads with role, attributes and form. A name generator checks every name against a real-player blocklist. The league ships with its own crests and colours, generated as SVG.
-- **Match model:** possession chains as a Markov process over states (zone × phase × pressure). Action choice, pass length and angle, success probability and shot locations are sampled from distributions in `data/params/`.
-- **Physics:** a simple ball model gives speed and flight time. Players are positioned with steering behaviours (max speed about 9–10 m/s, capped acceleration) and output at **10 Hz** for speed and distance metrics. 25 Hz tracking is a stretch goal.
-- **Scenarios:** seeded and scriptable — `late_comeback`, `red_card_collapse`, `keeper_heroics`, `even_contest` — so demos are reproducible and dramatic.
-- **Output:** a stream of `Event` (schema below) plus optional `TrackingFrame`, each with a monotonically increasing `frame_id`. The same stream can be written to JSONL as a replay file.
+No open engine or published model gives us a seeded, scriptable 11v11 match that emits CDF events plus 10 Hz tracking (research report, 2026-10-03). We build our own two-layer engine:
+- a **statistical decision layer** decides *what* happens;
+- a **kinematic layer** at 10 Hz decides *where* everyone is.
 
-Event example (CDF-style JSON Lines):
+Design references:
+- **tbleckert/football-simulator** (TypeScript, MIT): event taxonomy, restart phase machine, intents with durations, possession context, injectable RNG.
+- **ZOXEXIVO/open-football** (Rust, Apache-2.0): separating the engine tick from the recording rate, constant-bearing interception, 3D ball physics, per-match plausibility bands.
 
-```json
-{"event_id":"m042-e1187","match_id":"m042","frame_id":40213,"clock":"67:02","period":2,
- "type":"pass","team":"ironmoor","player":"p-ir-08","receiver":"p-ir-10",
- "start":[61.2,22.4],"end":[88.5,30.1],"outcome":"complete",
- "under_pressure":true,"defenders_in_lane":2,"ball_speed_kmh":71.4,"body_part":"right_foot"}
+#### 5.1.1 Requirements
+
+1. **Deterministic.** The same `(seed, home, away, script, params version)` produces byte-identical `event.jsonl` and `tracking.jsonl`, whether run paced or unpaced.
+2. **Fast.** A 90-minute match (about 54,000 frames) simulates unpaced in under 30 s on a laptop, and replays paced at 1×–20×.
+3. **Realistic.** Calibration bands (§5.1.8) pass across 50+ seeds.
+4. **Scriptable.** Scenario scripts achieve their target in ≥ 90 % of seeds without forcing an outcome.
+5. **Standard output.** CDF v0.3.2 files that pass `common-data-format-validator` in `extreme` mode, plus a live domain stream for the stats engine.
+
+#### 5.1.2 Coordinates and time
+
+- **Pitch:** 105 × 68 m, metres, origin at the centre spot.
+- **Direction:** CDF orientation is used internally too — **the home team attacks +x for the whole match**. The front end may mirror the second half for display.
+- **Frames:** a fixed tick of **0.1 s**, so one tick is one tracking frame (`fps = 10`). `frame_id` restarts at 0 each period, as CDF requires.
+- **Ball sub-steps:** the ball takes 2–5 sub-steps per tick.
+- **Timestamps:** synthetic UTC derived from the match's `kickoff_time`. `match_clock` follows the CDF convention (`MM:SS.mm`, resetting to 45:00.00 at the second half).
+- **Added time:** sampled per half from fitted distributions.
+
+#### 5.1.3 State and step
+
+`packages/sim-core` exposes one pure function, `step(state: MatchState, params: Params): StepResult`. `StepResult` holds `state`, `frame` and `events[]`. Nothing in the step touches Effect, I/O or wall-clock time.
+
+```
+MatchState {
+  clock { period, frameId, matchClockMs }, phase: MatchPhase,
+  ball { x, y, z, vx, vy, vz },
+  possession: Owned{playerId} | InFlight{action, from, target, eta} | Loose,
+  players[22] { id, team, role, pos, vel, intent, intentUntil, stamina, cards },
+  score, cards, subsRemaining, script: ScriptState, rng: RngState
+}
 ```
 
-Event types: `match_start`, `lineup`, `kickoff`, `pass`, `carry`, `shot`, `tackle`, `interception`, `pressure`, `possession_change`, `foul`, `card`, `substitution`, `set_piece`, `goal`, `period_end`, `match_end`.
+Each step runs, in order:
+1. **Clock and periods.**
+2. **Phase machine:** `kickoff | open_play | throw_in | corner | goal_kick | free_kick | penalty | goal_celebration | half_time | full_time`. Restart delays are sampled from fitted distributions (corner about 37 s, goal kick about 30 s, throw-in about 18 s).
+3. **Team shape:** each role has an anchor from the formation. Anchors shift with the ball's position, and the team's style sets line height, compactness and width.
+4. **Decision layer:** runs only for players whose intent has expired, or on possession events. Details in §5.1.4.
+5. **Kinematics:**
+   - Reynolds steering behaviours: arrive, pursue and separation.
+   - Speed is capped at about 9 m/s for elite sprints and acceleration at about 4–5 m/s², both per player attributes and stamina.
+   - Ball chasers use **constant-bearing interception**, not simple pursuit.
+6. **Ball physics:**
+   - Gravity, quadratic drag (k ≈ 0.013 m⁻¹), rolling friction and bounce.
+   - Friction and bounce coefficients are fitted from IDSSE ball trajectories.
+7. **Transition detector:** emits domain events at the exact tick a state change happens (pass released, ball received, shot, tackle, out of play, foul, goal, …), stamped with `frame_id`. Event and tracking sync is therefore perfect by construction.
+
+#### 5.1.4 Decision layer
+
+**Probabilities are expressed per action or per second, never per tick.** Changing the tick must not change the football; tbleckert's engine fails this.
+
+- **Action choice:** a softmax over `{short_pass, long_pass, through_ball, cross, carry, dribble, shot, clear, hold}`. Inputs are zone, pressure, team-style bias, game-state bias and script multipliers. Base logits come from a fitted transition table indexed by zone × possession phase.
+- **Pass target:** candidates are scored by fitted pass length and angle, and by time-to-intercept. That uses a reaction time of 0.7 s plus distance over max speed, compared against the ball's flight time. Success comes from an xPass logistic model with inputs distance, angle, defenders in the lane and pressure on the passer.
+- **Shots:** a logistic xG model with inputs distance, angle, body part and defenders in the cone. The outcome is drawn from xG.
+- **Defending:** the press trigger rate is set from the style's target PPDA. Tackle and interception attempts come from proximity and per-second rates; fouls and cards from per-duel rates.
+- **Timing:** intents carry a duration (0.3–1.0 s) and an urgency, so players commit to a choice rather than jittering. The time between events is checked against fitted distributions by event type.
+- **Game state:**
+  - **Score effect:** a leading team's line drops and its tempo falls late in the match.
+  - **Goal timing:** scoring intensity follows a fitted minute profile, so more goals come late.
+  - **Red cards:** scoring rate ×0.67 for the team down to ten and ×1.2 for the opponent.
+
+#### 5.1.5 Randomness
+
+- **Generator:** a splittable, pure PRNG carried in `MatchState` — xoroshiro128+ via `pure-rand`, or a hand-written equivalent. Pin the version and keep test vectors.
+- **Independent sub-streams per concern**, keyed by `hash(seed, concern, n)` — for example `possession`, `decision:<playerId>`, `kinematic_noise:<playerId>`, `referee`, `script`. A scripted change in one area then doesn't reshuffle every later draw.
+- **Not Effect's `Random`.** We don't use Effect's `Random` service inside the step, so replay can't break if Effect's generator changes. (Effect 4.0.0 went stable only on 2026-10-01.)
+
+#### 5.1.6 Teams, styles and the fictional league (`packages/league`)
+
+- **Clubs:** 8 invented clubs, each with a crest (generated SVG), colours, a formation and a `TeamStyle`:
+  - `pressIntensity`, with a target PPDA: aggressive below 8, average 11–12, passive above 14;
+  - `lineHeight`, `compactness`, `width`;
+  - `tempo`, `longBallBias`, `crossBias`, `riskTolerance`.
+- **Styles:** at least four distinct archetypes — high press, possession, direct, low block.
+- **Squads:** 20 players per club, with role, preferred foot and attributes (pace, acceleration, passing, finishing, tackling, composure, stamina). A seeded name generator checks every name against a real-player blocklist. A synthetic season history supplies the milestones the narrative layer uses.
+- **Stable:** the league is generated once from a fixed seed and committed as `data/league/*.json`, so IDs stay stable for the demo.
+
+#### 5.1.7 Scenario scripts
+
+A script is a list of `{ window: [fromMin, toMin], team, effect }`. The effect is one of `goal`, `red_card`, `press_surge`, `keeper_heroics` or `momentum_swing`. Scripts are resolved in three steps:
+1. **Nudge:** raise the relevant per-second intensities inside the window.
+2. **Retry:** if the window closes without the target, re-simulate it from a checkpoint with a new sub-seed, up to N attempts.
+3. **Force (last resort):** force the outcome on the next qualifying action and mark the event `scripted: true`. This flag is kept out of CDF and recorded in the run manifest.
+
+Built-in scenarios:
+- `even_contest`;
+- `late_comeback`: down 0–2 at 70', ends 3–2;
+- `red_card_collapse`;
+- `keeper_heroics`;
+- `high_press_vs_low_block`: measured PPDA below 9 against above 13.
+
+#### 5.1.8 Calibration and validation
+
+**Offline fit** (`python/analytics`, kloppy ≥ 3.17.1):
+- **From IDSSE:**
+  - player speed and acceleration distributions;
+  - ball speeds for passes and shots;
+  - ball-in-play fraction;
+  - ball friction and bounce coefficients.
+- **From Wyscout (excluding England):**
+  - event-type transition matrix by zone and phase;
+  - pass length and angle by zone;
+  - success rates by type, zone and pressure;
+  - xG and xPass coefficients;
+  - time between events by type;
+  - minute profile of goals.
+- **Export:** `data/params/*.json`, each with `{ dataset, licence, attribution, fitted_at, version }`.
+
+**Plausibility bands**, checked per seed across 50–100 seeds in CI. Sources: open-football calibration bands and published league averages.
+
+| Metric | Band |
+|---|---|
+| Goals | 2.3–3.4 |
+| Shots | 18–32 |
+| Passes (both teams) | about 800–1,000 |
+| Pass completion | 75–88 % |
+| Corners | 7–13 |
+| Fouls | 18–32 |
+| Yellow cards | 2.5–5.5 |
+| Offsides | 2–6 |
+| Save rate | 62–76 % |
+| Ball in play | 55–60 % of match time |
+
+**Kinematic checks** against IDSSE:
+- Wasserstein-1 distance on the speed and acceleration distributions;
+- no player above 10 m/s;
+- distance per outfield player within the IDSSE-fitted range;
+- ball within 1 m of the passer at each pass event, and within 1.5 m of the receiver at each reception.
+
+**Other checks:**
+- **Formations:** EFPI detects the intended formation (offline, Python).
+- **Stretch:** OpenSTARLab LEM_3 trained on Wyscout (excluding England) as a likelihood scorer, comparing synthetic against real.
+
+#### 5.1.9 Outputs
+
+1. **Domain stream** (`packages/schema`, Effect Schema), consumed live by the stats engine. Domain events are richer than CDF. Event types:
+   - **Match flow:** `match_start`, `period_start`, `kickoff`, `period_end`, `match_end`.
+   - **On-ball actions:** `pass`, `cross`, `reception`, `carry`, `dribble`, `shot`, `save`, `clearance`, `goal`.
+   - **Defending:** `pressure`, `tackle`, `interception`, `block`.
+   - **Possession:** `possession_change`.
+   - **Stoppages and discipline:** `ball_out`, `foul`, `card`, `offside`, `substitution`.
+   - **Set pieces:** `set_piece` (the restart variants).
+
+   Every domain event carries `frame_id`, its attributes (for example `ball_speed_kmh`, `defenders_in_lane`, `under_pressure`) and ground-truth model values (`xg`, `xpass`).
+2. **CDF v0.3.2 files** per match: `meta.json`, `event.jsonl`, `tracking.jsonl`.
+   - Domain events map to CDF `type`/`sub_type`/`outcome_type`; for example, carry and pressure map to the nearest CDF types.
+   - Events carry `tracking.frame_id` and `frame_id_end`, with `meta.is_synced: true`.
+   - `meta.tracking.fps = 10`, `meta.cdf.version = "0.3.2"`.
+   - No keys outside the schema, so the strict ("extreme") validator passes.
+3. **SPADL view** (Should): an in-house mapper (x + 52.5, y + 34, away team flipped).
+4. **Run manifest:** seed, teams, script, params version, git SHA, scripted-event list, output hashes.
+5. **Optional realism-noise flag:** event-time jitter N(−0.37 s, 1.82 s) and location noise, to imitate unsynced real data. Off by default.
+
+Domain event example:
+
+```json
+{"id":"m042-e1187","match_id":"m042","frame_id":41124,"period":"second_half","match_clock":"67:02.40",
+ "type":"pass","team_id":"ironmoor","player_id":"p-ir-08","receiver_id":"p-ir-10",
+ "x":8.7,"y":-11.6,"x_end":36.0,"y_end":-3.9,"outcome":"successful","frame_id_end":41133,
+ "under_pressure":true,"defenders_in_lane":2,"ball_speed_kmh":71.4,"body_part":"right_foot","xpass":0.58}
+```
+
+#### 5.1.10 Effect boundary (`packages/sim`)
+
+- **Live mode:** `Stream.iterate` over `step`, paced with `Schedule.spaced(100 ms / speed)`.
+- **Batch mode:** the same stream, unpaced.
+- **Writers:** the stream is teed to the domain-stream publisher and to the CDF/SPADL writers.
+- **CLI:** `touchline-sim --seed --home --away --script --speed --out`.
+- **Tests:** use `TestClock` to check paced and unpaced hashes are equal.
+- **Version check:** Effect 4 APIs (`Stream.iterate`, `Schedule.spaced`, `TestClock`, `Schema`) are pinned to 4.0.x and verified against the current docs in week 1.
 
 ### 5.2 Stats engine (`packages/stats`)
 
@@ -270,10 +438,12 @@ Flow per moment:
 
 ## 7. Testing
 
-- **Simulator:**
-  - Seeded determinism tests (same seed → identical stream).
-  - Distribution tests against fitted params (pass length, completion rate, shots per match within tolerance).
-  - Formation sanity checks.
+- **Simulator:** see §5.1.8. The CI gates are:
+  - **Determinism:** byte-identical hashes for a fixed seed; paced and unpaced runs match.
+  - **CDF:** `extreme`-mode validation of meta, event and tracking.
+  - **Plausibility:** bands green across seeds.
+  - **Kinematics:** checks against the IDSSE-fitted distributions.
+  - **Scripts:** each script hits its target in ≥ 90 % of seeds.
 - **Stats engine:** unit tests per metric on hand-built event sequences; golden-file tests on committed replays.
 - **Contracts:** round-trip tests between Effect Schema and the generated Pydantic models; cue contract fixtures.
 - **Agents:**
@@ -319,7 +489,7 @@ These costs are planning estimates to verify against current pricing. Infrastruc
 
 | Dates | Focus | Checkpoint |
 |---|---|---|
-| 10-04 – 10-11 | Monorepo, schema, league, simulator, replay files, stats engine, basic live-stats view | A full match replays with live stats on screen |
+| 10-04 – 10-11 | Monorepo, schema, league, simulator (§5.1 checklist: CDF writers → offline fit → shape/steering/ball → decisions → determinism → calibration → scripts), replay files, stats engine, basic live-stats view | A full match replays with live stats on screen; CDF valid; calibration bands green |
 | 10-12 – 10-18 | Agent workflow, Fact-Checker, A2A, MCP, cue bus, fan app overlays, profiles, EN/ES/HI, recaps | Analyst vs casual working locally |
 | 10-19 – 10-24 | Azure via azd, Foundry hosted agents, tracing, evaluations, Should items; Reactor session 10-21 | Public link works end to end |
 | 10-25 – 10-27 | Demo script, 2-minute video, README, pitch; submit by 10-26 | Submitted |
@@ -335,6 +505,10 @@ These costs are planning estimates to verify against current pricing. Infrastruc
 | Ungrounded numbers | Fact-Checker gate + grounding evaluation |
 | Trademark or licence issues | Fictional everything; no AGPL/GPL; raw data git-ignored |
 | Platform claims drift (MAF/Foundry/A2A versions) | Pin versions in week 1; verify Foundry hosted-agent and A2A support before building on them |
+| Effect 4.0 is days old (stable 2026-10-01) | Keep Effect out of the simulator step; pin 4.0.x; check APIs against current docs |
+| CDF schema is alpha (v0.3.2, 2026-09-09) | Pin the validator version; keep the domain stream as our internal contract and CDF as an export |
+| Simulator realism falls short | Calibration bands in CI from day 4; tune parameters, not code paths; script retries rather than forced outcomes |
+| Licence drift (someone fits on StatsBomb for convenience) | Provenance header required in every params file; CI rejects params without an allowed licence |
 
 ## 12. Open items
 
