@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-touchline-design.md` (§5.1 simulator, §5.1.10 taxonomy, §5.1.12 execution and errors). Roadmap: `docs/superpowers/plans/2026-10-03-touchline-roadmap.md`.
 
-**Verification status:** every file in this plan was built and run before the plan was written: 69 tests passed, `tsc` was clean, a full match ran in about 1.5 s, two runs with the same seed produced byte-identical output, and the CLI's output passed the CDF validator in `extreme` mode.
+**Verification status:** every file in this plan was built and run before the plan was written: 73 tests passed, `tsc` was clean, a full match ran in about 1.5 s, two runs with the same seed produced byte-identical output, and the CLI's output passed the CDF validator in `extreme` mode.
 
 ## Global Constraints
 
@@ -39,6 +39,8 @@ Inputs or conditions the spec implies that are most likely to hurt a user, each 
 ## Known baseline (what "uncalibrated" looks like)
 
 With `DEFAULT_PARAMS` the engine produced, over seeds 1–3: ~1,300–1,450 passes at 83–86 % completion, 24–41 shots, 3–9 goals (match xG 4.8–7.4, with goals tracking xG), 1–3 corners, 6–10 throw-ins, ball in play 74–80 %. Real targets (spec §5.1.8): ~800–1,000 passes, 18–32 shots, 2.3–3.4 goals, 7–13 corners, ball in play 55–60 %. Plan 2 closes the gap by fitting parameters; it should not need structural engine changes.
+
+**Decision record and off-ball data (spec §5.1.4, §5.1.9):** every open-play pass, shot, carry and take-on records what the player could have done (action probabilities, top-5 pass options, best option, chosen rank); every frame records each player's speed and intent; runs in behind emit `off_ball_run`. In the verified run about 37 % of passes chose the best option (rank 1). "Best" is by the engine's own value model; Plan 3's stats engine re-scores options independently from tracking.
 
 **Deferred to Plan 2 (spec items not in this plan):** scenario scripts (the `scriptBias` hook exists in `decide`), calibration and the realism report, substitutions, first-touch errors, keeper claims and punches on crosses, ground-duel events, SPADL view, realism-noise flag, real-player name blocklist. Derived tags (key pass, progressive, line-breaking…) belong to the stats engine in Plan 3. Crest SVG rendering belongs to the front end in Plan 5 (the league stores crest shape and symbol).
 
@@ -482,7 +484,7 @@ Pitch geometry in CDF coordinates (metres, origin at the centre spot, home attac
 - Produces (geometry): `PITCH`, `type Side`, `other`, `dirOf`, `Vec2`, `Vec3`, `v2/add/sub/scale/len/dist/dot/norm/clamp/clampToPitch/inPitch`, `attackX(side, x)`, `goalOf(side)`, `zoneIndex(p)`, `ACTION_ZONES`, `type ActionZone`, `actionZone(side, p)`, `goalAngle(side, p)`.
 - Produces (params): `ACTIONS` (13 actions), `type Action`, `ALLOWED_LICENCES`, `interface Provenance`, `interface ClassifierThresholds`, `interface Params`, `DEFAULT_PARAMS`, `class ParamsError`, `assertProvenance(p)`.
 - Produces (classify): `PASS_KINDS`, `type PassKind`, `type PassHeight`, `interface PassGeometry`, `classifyPass(g, thresholds): PassKind`.
-- Produces (types): `Role`, `FormationName`, `Period`, `PlayerAttrs`, `TeamStyle`, `PlayerSetup`, `TeamSetup`, `MatchConfig`, `Intent`, `PlayerState`, `BallState`, `ActionKind`, `Flight`, `FlightOutcome`, `Possession`, `RestartKind`, `Phase`, `EventType`, `AttrValue`, `DomainEvent`, `PendingEvent`, `FramePlayer`, `Frame`, `CONCERNS`, `Concern`, `MatchState`, `StepResult`.
+- Produces (types): `Role`, `FormationName`, `Period`, `PlayerAttrs`, `TeamStyle`, `PlayerSetup`, `TeamSetup`, `MatchConfig`, `Intent`, `PlayerState`, `BallState`, `ActionKind`, `Flight`, `FlightOutcome`, `Possession`, `RestartKind`, `Phase`, `EventType`, `OptionRecord`, `AttrValue` (now also option lists and number maps), `DomainEvent`, `PendingEvent`, `FramePlayer` (`{id, x, y, vel, intent}`), `Frame`, `CONCERNS`, `Concern`, `MatchState`, `StepResult`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1101,8 +1103,27 @@ export type EventType =
   | "card"
   | "offside"
   | "set_piece"
+  | "off_ball_run"
 
-export type AttrValue = string | number | boolean | null | ReadonlyArray<string>
+/** One alternative the player could have chosen, recorded at the moment of decision. */
+export interface OptionRecord {
+  readonly action: string
+  readonly receiver_id: string
+  readonly kind: string
+  readonly target_x: number
+  readonly target_y: number
+  readonly xpass: number
+  readonly value: number
+}
+
+export type AttrValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ReadonlyArray<string>
+  | ReadonlyArray<OptionRecord>
+  | Readonly<Record<string, number>>
 
 export interface DomainEvent {
   readonly id: string
@@ -1144,6 +1165,10 @@ export interface FramePlayer {
   readonly id: string
   readonly x: number
   readonly y: number
+  /** Speed in m/s (CDF "vel"). */
+  readonly vel: number
+  /** What the player is doing this frame: the intent kind, or "on_ball" for the ball carrier. */
+  readonly intent: Intent["kind"] | "on_ball"
 }
 
 export interface Frame {
@@ -1178,7 +1203,13 @@ export interface MatchState {
   readonly lastTouch: { readonly playerId: string; readonly side: Side } | null
   readonly pressedBy: ReadonlyArray<string>
   /** Carry in progress (start point and tick), to emit a carry event when it ends. */
-  readonly carry: { readonly playerId: string; readonly at: Vec2; readonly tick: number } | null
+  readonly carry: {
+    readonly playerId: string
+    readonly at: Vec2
+    readonly tick: number
+    /** Decision record copied onto the carry event when it ends. */
+    readonly decision: Readonly<Record<string, AttrValue>>
+  } | null
   readonly rng: Readonly<Record<Concern, RngState>>
   readonly eventSeq: number
 }
@@ -1711,7 +1742,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 6: Execution model and decision layer
 
-Spec §5.1.4 and §5.1.12. `executeKick` turns an *intended* kick into the actual one (Gaussian error growing with pressure, weak foot and low technique, plus a heavy-tail mis-hit). `decide` scores the 13 actions with a softmax over zone logits, style, pressure, game state and script bias, builds pass candidates classified by geometry, picks one by value, and reports decision quality.
+Spec §5.1.4 and §5.1.12. `executeKick` turns an *intended* kick into the actual one (Gaussian error growing with pressure, weak foot and low technique, plus a heavy-tail mis-hit). `decide` scores the 13 actions with a softmax over zone logits, style, pressure, game state and script bias, builds pass candidates classified by geometry, picks one by value, and reports decision quality. It also returns a **decision record**: the probability of every available action and the five best pass options (receiver, kind, target, xPass, value), plus the rank of the chosen pass, so the stream can answer: was there a better pass?
 
 **Files:**
 - Create: `packages/sim-core/src/execute.ts`, `packages/sim-core/src/decide.ts`
@@ -1720,7 +1751,7 @@ Spec §5.1.4 and §5.1.12. `executeKick` turns an *intended* kick into the actua
 **Interfaces:**
 - Consumes: `launchVelocity` (Task 4), `classifyPass` and geometry (Task 3), `Rng` (Task 2), test helpers (Task 5).
 - Produces (execute): `type Execution = clean|inaccurate|overhit|underhit|mishit`; `interface KickIntent`; `interface Executed {to, vel, execution, errorM}`; `pressureFrom(nearestOpponentM)`; `executeKick(kick, params, rng): Executed`.
-- Produces (decide): `KIND_TO_ACTION`; `interface Candidate {action, kind, receiverId, target, height, xpass, value, lane}`; `interface DecisionInput {owner, teammates, opponents, style, scoreDiff, minute, restart, scriptBias}`; `interface Decision {action, candidate, decisionQuality, xg, pressure}`; `threat(side, pos)`; `lastDefenderAttackX(side, opponents)`; `defendersInLane(from, to, opponents, width?)`; `xpassOf(params, distance, lane, pressure, height)`; `xgOf(params, side, pos, header, defendersInCone)`; `nearestOpponent(pos, opponents)`; `buildCandidates(input, params, pressure)`; `decide(input, params, rng): Decision`.
+- Produces (decide): `KIND_TO_ACTION`; `interface Candidate {action, kind, receiverId, target, height, xpass, value, lane}`; `interface DecisionInput {owner, teammates, opponents, style, scoreDiff, minute, restart, scriptBias}`; `interface Decision {action, candidate, decisionQuality, xg, pressure, actionProbs, options, chosenRank}`; `OPTIONS_RECORDED = 5`; `toOption(candidate): OptionRecord`; `threat(side, pos)`; `lastDefenderAttackX(side, opponents)`; `defendersInLane(from, to, opponents, width?)`; `xpassOf(params, distance, lane, pressure, height)`; `xgOf(params, side, pos, header, defendersInCone)`; `nearestOpponent(pos, opponents)`; `buildCandidates(input, params, pressure)`; `decide(input, params, rng): Decision`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1780,6 +1811,20 @@ describe("decide", () => {
     const r = new Rng(seedRng(1))
     const d = decide({ owner: owner({ x: 41.5, y: 0 }), teammates: home, opponents: away, style: STYLES.direct, scoreDiff: 0, minute: 10, restart: "penalty", scriptBias: {} }, P, r)
     expect(d.action).toBe("shot")
+  })
+  it("records the action probabilities and the best options, highest value first", () => {
+    const r = new Rng(seedRng(3))
+    for (let i = 0; i < 50; i++) {
+      const d = decide({ owner: owner({ x: 0, y: 0 }), teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 10, restart: null, scriptBias: {} }, P, r)
+      const total = Object.values(d.actionProbs).reduce((a, b) => a + b, 0)
+      expect(total).toBeGreaterThan(0.99)
+      expect(total).toBeLessThan(1.01)
+      expect(d.options.length).toBeGreaterThan(0)
+      expect(d.options.length).toBeLessThanOrEqual(5)
+      for (let k = 1; k < d.options.length; k++) expect(d.options[k - 1]!.value).toBeGreaterThanOrEqual(d.options[k]!.value)
+      // option values are rounded to 3 decimals
+      if (d.candidate) expect(d.candidate.value).toBeLessThanOrEqual(d.options[0]!.value + 0.0006)
+    }
   })
   it("reports decision quality between 0 and 1 for passes", () => {
     const r = new Rng(seedRng(2))
@@ -1879,7 +1924,7 @@ import { classifyPass, type PassHeight, type PassKind } from "./classify.js"
 import { actionZone, attackX, dirOf, dist, goalAngle, goalOf, PITCH, type Side, type Vec2 } from "./geometry.js"
 import { ACTIONS, type Action, type Params } from "./params.js"
 import type { Rng } from "./rng.js"
-import type { PlayerState, RestartKind, TeamStyle } from "./types.js"
+import type { OptionRecord, PlayerState, RestartKind, TeamStyle } from "./types.js"
 
 export const KIND_TO_ACTION: Readonly<Record<Exclude<PassKind, "set_piece">, Action>> = {
   short: "short_pass",
@@ -1923,7 +1968,27 @@ export interface Decision {
   readonly decisionQuality: number | null
   readonly xg: number | null
   readonly pressure: number
+  /** Probability of each available action at the moment of decision (unavailable actions omitted). */
+  readonly actionProbs: Readonly<Record<string, number>>
+  /** The best pass options available, highest value first (at most OPTIONS_RECORDED). */
+  readonly options: ReadonlyArray<OptionRecord>
+  /** 1 when the chosen pass was the best available option, 2 for the second best, ...; null when no pass was chosen. */
+  readonly chosenRank: number | null
 }
+
+export const OPTIONS_RECORDED = 5
+
+const r3 = (v: number): number => Math.round(v * 1000) / 1000
+
+export const toOption = (c: Candidate): OptionRecord => ({
+  action: c.action,
+  receiver_id: c.receiverId,
+  kind: c.kind,
+  target_x: Math.round(c.target.x * 100) / 100,
+  target_y: Math.round(c.target.y * 100) / 100,
+  xpass: r3(c.xpass),
+  value: r3(c.value)
+})
 
 const sigmoid = (z: number): number => 1 / (1 + Math.exp(-z))
 
@@ -2087,16 +2152,26 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     l += input.scriptBias[a] ?? 0
     return l
   })
+  const finite = logits.filter((l) => Number.isFinite(l))
+  const lmax = finite.length ? Math.max(...finite) : 0
+  const z = logits.reduce((s, l) => s + (Number.isFinite(l) ? Math.exp(l - lmax) : 0), 0)
+  const actionProbs: Record<string, number> = {}
+  ACTIONS.forEach((a, i) => {
+    if (Number.isFinite(logits[i]!)) actionProbs[a] = r3(Math.exp(logits[i]! - lmax) / z)
+  })
+  const options = [...candidates].sort((a, b) => b.value - a.value).slice(0, OPTIONS_RECORDED).map(toOption)
+  const record = { actionProbs, options, chosenRank: null as number | null }
+
   let idx = softmaxPick(logits, rng)
   if (idx < 0) idx = ACTIONS.indexOf(allowed ? [...allowed][0]! : "hold")
   const action = ACTIONS[idx]!
 
   const NON_PASS: ReadonlyArray<Action> = ["shot", "carry", "hold", "take_on", "clear"]
   let passOptions = candidates.filter((c) => c.action === action)
-  if (NON_PASS.includes(action)) return { action, candidate: null, decisionQuality: null, xg: action === "shot" ? xg : null, pressure }
+  if (NON_PASS.includes(action)) return { action, candidate: null, decisionQuality: null, xg: action === "shot" ? xg : null, pressure, ...record }
   if (passOptions.length === 0) {
     // Forced restart with no option of the allowed kinds: play the best available pass, or clear it.
-    if (candidates.length === 0) return { action: "clear", candidate: null, decisionQuality: null, xg: null, pressure }
+    if (candidates.length === 0) return { action: "clear", candidate: null, decisionQuality: null, xg: null, pressure, ...record }
     const bestAny = candidates.reduce((a, b) => (b.value > a.value ? b : a))
     passOptions = [bestAny]
   }
@@ -2105,14 +2180,15 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const chosen = passOptions[Math.max(0, pick)]!
   const best = Math.max(...candidates.map((c) => c.value))
   const quality = best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1
-  return { action: chosen.action, candidate: chosen, decisionQuality: quality, xg: null, pressure }
+  const chosenRank = 1 + candidates.filter((c) => c.value > chosen.value).length
+  return { action: chosen.action, candidate: chosen, decisionQuality: quality, xg: null, pressure, ...record, chosenRank }
 }
 ```
 
 - [ ] **Step 5: Run the tests**
 
 Run: `pnpm --filter @touchline/sim-core test execute-decide`
-Expected: 5 passed
+Expected: 6 passed
 
 - [ ] **Step 6: Commit**
 
@@ -2494,7 +2570,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 8: The step function: a full match
 
-Assemble the engine (spec §5.1.3): `initMatch` and a pure `step` per tick covering restarts, possession, duels and pressure, carries, take-ons, kicks and shots resolved at release (events emitted on resolution), loose balls (including loose-ball goals and own goals), movement for all 22 players, periods with added time, and 10 Hz frames. Also the public index and a match-runner script.
+Assemble the engine (spec §5.1.3): `initMatch` and a pure `step` per tick covering restarts, possession, duels and pressure, carries, take-ons, kicks and shots resolved at release (events emitted on resolution), loose balls (including loose-ball goals and own goals), movement for all 22 players, periods with added time, and 10 Hz frames. Pass, shot, carry and take-on events carry the decision record (`action_probs`, `options`, `best_receiver_id`, `best_value`, `chosen_value`, `chosen_rank`); every frame gives each player's speed (`vel`) and what they are doing (`intent`: shape, press, run_in_behind, chase, carry, hold or on_ball); starting a run in behind emits an `off_ball_run` event. Also the public index and a match-runner script.
 
 **Files:**
 - Create: `packages/sim-core/src/step.ts`, `packages/sim-core/scripts/run-match.ts`
@@ -2572,6 +2648,39 @@ describe("full match", () => {
     expect(n("pass")).toBeLessThan(2500)
     expect(n("shot")).toBeGreaterThan(5)
     expect(n("goal")).toBeLessThan(15)
+  })
+  it("records what the passer could have done: options, best option and action probabilities", () => {
+    const passes = a.events.filter((e) => e.type === "pass" && e.attrs.restart === null)
+    const withOptions = passes.filter((e) => Array.isArray(e.attrs.options) && e.attrs.options.length > 0)
+    expect(withOptions.length / passes.length).toBeGreaterThan(0.95)
+    for (const e of withOptions) {
+      expect(typeof e.attrs.best_receiver_id).toBe("string")
+      expect(Number(e.attrs.best_value)).toBeGreaterThanOrEqual(Number(e.attrs.chosen_value) - 0.0006)
+      const probs = Object.values(e.attrs.action_probs as Record<string, number>)
+      expect(probs.reduce((x, y) => x + y, 0)).toBeCloseTo(1, 1)
+    }
+    const ranks = withOptions.map((e) => Number(e.attrs.chosen_rank))
+    expect(ranks.every((r) => Number.isInteger(r) && r >= 1)).toBe(true)
+    expect(ranks.filter((r) => r === 1).length).toBeGreaterThan(0)
+    expect(ranks.filter((r) => r > 1).length).toBeGreaterThan(0)
+    for (const e of withOptions) if (Number(e.attrs.chosen_rank) === 1) expect(e.attrs.chosen_value).toBe(e.attrs.best_value)
+  })
+  it("gives every player a speed and an intent in every frame, and exactly one ball carrier when owned", () => {
+    const kinds = new Set(["shape", "press", "run_in_behind", "chase", "carry", "hold", "on_ball"])
+    for (const f of a.frames.filter((_, i) => i % 50 === 0)) {
+      const all = [...f.home, ...f.away]
+      for (const p of all) {
+        expect(p.vel).toBeGreaterThanOrEqual(0)
+        expect(p.vel).toBeLessThanOrEqual(10)
+        expect(kinds.has(p.intent)).toBe(true)
+      }
+      expect(all.filter((p) => p.intent === "on_ball").length).toBeLessThanOrEqual(1)
+    }
+  })
+  it("emits off-ball runs", () => {
+    const runs = a.events.filter((e) => e.type === "off_ball_run")
+    expect(runs.length).toBeGreaterThan(10)
+    expect(runs.every((e) => e.x_end !== null && typeof e.attrs.ball_carrier_id === "string")).toBe(true)
   })
   it("score in state equals goal events", () => {
     const g = a.events.filter((e) => e.type === "goal")
@@ -2985,8 +3094,18 @@ const finishCarry = (w: Work, owner: PlayerState): void => {
   const d = dist(start.at, owner.pos)
   if (d < w.p.classifier.carryMinM) return
   const progressive = attackX(owner.side, owner.pos.x) - attackX(owner.side, start.at.x) >= 10
-  w.emit({ ...w.pending("carry", owner, start.at, { distance_m: round2(d), progressive }, owner.pos), frame_id: start.tick }, { frame_id_end: w.tick })
+  w.emit({ ...w.pending("carry", owner, start.at, { ...start.decision, distance_m: round2(d), progressive }, owner.pos), frame_id: start.tick }, { frame_id_end: w.tick })
 }
+
+/** What the player could have done, recorded on the event (spec §5.1.4 "decision record"). */
+const decisionAttrs = (d: Decision): Record<string, AttrValue> => ({
+  action_probs: d.actionProbs,
+  options: d.options,
+  best_receiver_id: d.options[0]?.receiver_id ?? null,
+  best_value: d.options[0]?.value ?? null,
+  chosen_value: d.candidate ? Math.round(d.candidate.value * 1000) / 1000 : null,
+  chosen_rank: d.chosenRank
+})
 
 const technique = (a: Action, pl: PlayerState): number =>
   a === "cross" ? pl.attrs.crossing : a === "long_pass" || a === "switch" || a === "lofted_through" || a === "clear" ? pl.attrs.longPassing : pl.attrs.shortPassing
@@ -3031,6 +3150,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     execution: exe.execution,
     error_m: round2(exe.errorM),
     decision_quality: d.decisionQuality === null ? null : round2(d.decisionQuality),
+    ...decisionAttrs(d),
     under_pressure: d.pressure > 0.3,
     defenders_in_lane: d.candidate?.lane ?? 0,
     ball_speed_kmh: round2(len({ x: exe.vel.x, y: exe.vel.y }) * 3.6),
@@ -3100,6 +3220,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const at = (pe: PendingEvent): PendingEvent => ({ ...pe, frame_id: tickAt })
   const end = { x: plan.to.x, y: plan.to.y }
   const main = w.pending("shot", owner, owner.pos, {
+    ...decisionAttrs(d),
     technique: isPenalty ? "penalty" : restart === "free_kick" ? "free_kick" : "normal",
     body_part: "right_foot",
     execution: plan.execution,
@@ -3188,7 +3309,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     case "carry": {
       const goalDir = norm(sub({ x: dirOf(side) * PITCH.halfL, y: 0 }, owner.pos))
       const dir = norm(add(goalDir, { x: 0, y: w.rng.decision.range(-0.6, 0.6) }))
-      w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick }
+      w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick, decision: decisionAttrs(decision) }
       w.setPlayer({ ...owner, intent: { kind: "carry", dir, speed: w.p.carry.speed }, intentUntil: until(w.rng.decision.range(...w.p.carry.durationS)) })
       return
     }
@@ -3196,10 +3317,10 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
       const def = nearestOpponent(owner.pos, w.active(other(side)))!
       const pWin = 1 / (1 + Math.exp(-(w.p.takeOn.b0 + w.p.takeOn.bSkill * (owner.attrs.dribbling - def.attrs.tackling) + w.p.takeOn.bPressure * decision.pressure)))
       const won = w.rng.duel.chance(pWin)
-      w.emit(w.pending("take_on", owner, owner.pos, { outcome: won ? "won" : "lost", defender_id: def.id }))
+      w.emit(w.pending("take_on", owner, owner.pos, { ...decisionAttrs(decision), outcome: won ? "won" : "lost", defender_id: def.id }))
       if (won) {
         const dir = norm(sub({ x: dirOf(side) * PITCH.halfL, y: 0 }, owner.pos))
-        w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick }
+        w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick, decision: {} }
         w.setPlayer({ ...owner, intent: { kind: "carry", dir, speed: w.p.carry.speed * 1.2 }, intentUntil: until(1.2) })
         w.setPlayer({ ...w.player(def.id), vel: { x: 0, y: 0 }, intent: { kind: "hold" }, intentUntil: until(1.0) })
       } else changePossession(w, def, w.pending("tackle", def, def.pos, { outcome: "won", opponent_id: owner.id }))
@@ -3350,6 +3471,7 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
       const lastDef = lastDefenderAttackX(pl.side, w.active(other(pl.side)))
       const target = clampToPitch({ x: dirOf(pl.side) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
       w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
+      w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
       return { target, speedCap: vmax }
     }
   }
@@ -3378,7 +3500,15 @@ const moveAll = (w: Work): void => {
 // ---------------------------------------------------------------- periods and frames
 
 const frameOf = (w: Work): Frame => {
-  const fp = (side: Side) => w.active(side).map((pl) => ({ id: pl.id, x: round2(pl.pos.x), y: round2(pl.pos.y) }))
+  const ownerId = w.possession.kind === "owned" ? w.possession.playerId : null
+  const fp = (side: Side) =>
+    w.active(side).map((pl) => ({
+      id: pl.id,
+      x: round2(pl.pos.x),
+      y: round2(pl.pos.y),
+      vel: round2(len(pl.vel)),
+      intent: pl.id === ownerId ? ("on_ball" as const) : pl.intent.kind
+    }))
   const possSide =
     w.possession.kind === "owned" ? w.player(w.possession.playerId).side : w.possession.kind === "in_flight" ? w.possession.flight.side : null
   return {
@@ -3486,7 +3616,7 @@ console.log(JSON.stringify({ seed, ms: Date.now() - t0, frames, inPlayPct: +(inP
 - [ ] **Step 6: Run the whole sim-core suite and typecheck**
 
 Run: `pnpm --filter @touchline/sim-core test && pnpm --filter @touchline/sim-core typecheck`
-Expected: 54 passed (about 60–90 s: several full matches run), no type errors
+Expected: 58 passed (about 60–90 s: several full matches run), no type errors
 
 - [ ] **Step 7: Look at a match**
 
@@ -3791,7 +3921,7 @@ The Effect Schema for the live domain stream (events and frames) that the stats 
 
 **Interfaces:**
 - Consumes: `effect@4.0.0` (`Schema.Struct`, `Schema.Literals`, `Schema.Union`, `Schema.NullOr`, `Schema.Finite`, `Schema.Int`, `Schema.Record`, `Schema.decodeUnknownSync`); `@touchline/sim-core` and its `testing` helpers (dev only).
-- Produces: schemas `EventType`, `Period`, `AttrValue`, `DomainEvent`, `Frame`; types `DomainEvent`, `Frame`; `decodeDomainEvent(u)`, `decodeFrame(u)` (throw on invalid input).
+- Produces: schemas `EventType` (includes `off_ball_run`), `Period`, `OptionRecord`, `AttrValue`, `Intent`, `DomainEvent`, `Frame` (players carry `vel` and `intent`); types `DomainEvent`, `Frame`; `decodeDomainEvent(u)`, `decodeFrame(u)` (throw on invalid input).
 
 - [ ] **Step 1: Write the package files**
 
@@ -3864,10 +3994,27 @@ import { Schema } from "effect"
 export const EventType = Schema.Literals([
   "match_start", "period_start", "period_end", "match_end", "pass", "reception", "carry", "take_on", "shot", "goal",
   "keeper_save", "keeper_distribution", "aerial_duel", "pressure", "tackle", "interception", "block", "clearance",
-  "ball_recovery", "possession_change", "ball_out", "foul", "card", "offside", "set_piece"
+  "ball_recovery", "possession_change", "ball_out", "foul", "card", "offside", "set_piece", "off_ball_run"
 ])
 export const Period = Schema.Literals(["first_half", "second_half"])
-export const AttrValue = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null, Schema.Array(Schema.String)])
+export const OptionRecord = Schema.Struct({
+  action: Schema.String,
+  receiver_id: Schema.String,
+  kind: Schema.String,
+  target_x: Schema.Finite,
+  target_y: Schema.Finite,
+  xpass: Schema.Finite,
+  value: Schema.Finite
+})
+export const AttrValue = Schema.Union([
+  Schema.String,
+  Schema.Number,
+  Schema.Boolean,
+  Schema.Null,
+  Schema.Array(Schema.String),
+  Schema.Array(OptionRecord),
+  Schema.Record(Schema.String, Schema.Finite)
+])
 
 export const DomainEvent = Schema.Struct({
   id: Schema.String,
@@ -3891,7 +4038,8 @@ export const DomainEvent = Schema.Struct({
 })
 export type DomainEvent = typeof DomainEvent.Type
 
-const FramePlayer = Schema.Struct({ id: Schema.String, x: Schema.Finite, y: Schema.Finite })
+export const Intent = Schema.Literals(["shape", "press", "run_in_behind", "chase", "carry", "hold", "on_ball"])
+const FramePlayer = Schema.Struct({ id: Schema.String, x: Schema.Finite, y: Schema.Finite, vel: Schema.Finite, intent: Intent })
 export const Frame = Schema.Struct({
   tick: Schema.Int,
   frame_id: Schema.Int,
@@ -3933,7 +4081,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 11: CDF v0.3.2 export
 
-Pure functions that turn engine output into CDF: `meta.json`, one `tracking.jsonl` line per frame, and `event.jsonl` lines. Domain events map to the nearest CDF type; reception and possession_change are not exported; referee events (foul, card, offside) carry `official_id` and **no** player or team id, as the v0.3.2 schema requires. Frame ids in events are period-relative.
+Pure functions that turn engine output into CDF: `meta.json`, one `tracking.jsonl` line per frame, and `event.jsonl` lines. Domain events map to the nearest CDF type; reception and possession_change are not exported; referee events (foul, card, offside) carry `official_id` and **no** player or team id, as the v0.3.2 schema requires. Frame ids in events are period-relative. Tracking players carry `id, x, y, vel` (CDF's optional speed field); `intent` stays in the domain stream.
 
 **Files:**
 - Create: `packages/sim/package.json`, `packages/sim/tsconfig.json`, `packages/sim/vitest.config.ts`, `packages/sim/src/cdf.ts`, `packages/sim/src/index.ts` (cdf only for now)
@@ -3941,7 +4089,7 @@ Pure functions that turn engine output into CDF: `meta.json`, one `tracking.json
 
 **Interfaces:**
 - Consumes: `DomainEvent`, `Frame`, `MatchConfig`, `TeamSetup` from `@touchline/sim-core`.
-- Produces: `CDF_VERSION = "0.3.2"`, `REFEREE_ID`, `ENGINE`; `interface PeriodInfo`; `periodsFromFrames(frames)`; `cdfMeta(cfg, periods, extra?)`; `cdfTrackingLine(matchId, cfg, frame): string`; `cdfTypeOf(event)` (null = not exported); `type TickClock = (tick) => ISO string`; `cdfEventLine(cfg, event, clock, periodStartTick, receiverTick): string | null`.
+- Produces: `CDF_VERSION = "0.3.2"`, `REFEREE_ID`, `ENGINE`; `interface PeriodInfo`; `periodsFromFrames(frames)`; `cdfMeta(cfg, periods, extra?)`; `cdfTrackingLine(matchId, cfg, frame): string`; `cdfTypeOf(event)` (null = not exported: reception, possession_change, off_ball_run, set_piece, ball_out, goal, lifecycle events); `type TickClock = (tick) => ISO string`; `cdfEventLine(cfg, event, clock, periodStartTick, receiverTick): string | null`.
 
 - [ ] **Step 1: Write the package files**
 
@@ -4008,6 +4156,7 @@ describe("CDF export", () => {
     const line = JSON.parse(cdfTrackingLine(cfg.matchId, cfg, frames[100]!))
     expect(Object.keys(line).sort()).toEqual(["ball", "frame_id", "match", "period", "teams", "timestamp"])
     expect(line.teams.home.players.length).toBe(11)
+    expect(Object.keys(line.teams.home.players[0]).sort()).toEqual(["id", "vel", "x", "y"])
   })
   it("referee events use official_id and no player or team", () => {
     const foul = events.find((e) => e.type === "foul")!
@@ -4016,8 +4165,9 @@ describe("CDF export", () => {
     expect(line.event.official_id).toBe(REFEREE_ID)
     expect(line.event.player_id).toBeUndefined()
   })
-  it("does not export reception or possession_change, and maps passes and shots", () => {
+  it("does not export reception, possession_change or off_ball_run, and maps passes and shots", () => {
     expect(cdfTypeOf(events.find((e) => e.type === "reception")!)).toBeNull()
+    expect(cdfTypeOf(events.find((e) => e.type === "off_ball_run")!)).toBeNull()
     expect(cdfTypeOf(events.find((e) => e.type === "pass")!)!.type).toBe("pass")
     expect(cdfTypeOf(events.find((e) => e.type === "shot")!)!.type).toBe("shot")
   })
@@ -4112,7 +4262,10 @@ export const cdfTrackingLine = (matchId: string, cfg: MatchConfig, f: Frame): st
     timestamp: f.timestamp,
     period: f.period,
     match: { id: matchId },
-    teams: { home: { id: cfg.home.id, players: f.home }, away: { id: cfg.away.id, players: f.away } },
+    teams: {
+      home: { id: cfg.home.id, players: f.home.map(({ id, x, y, vel }) => ({ id, x, y, vel })) },
+      away: { id: cfg.away.id, players: f.away.map(({ id, x, y, vel }) => ({ id, x, y, vel })) }
+    },
     ball: { x: f.ball.x, y: f.ball.y, z: f.ball.z, status: f.ball_in_play, ...(f.possession_side ? { poss_team_id: f.possession_side === "home" ? cfg.home.id : cfg.away.id } : {}) }
   })
 
@@ -4531,7 +4684,7 @@ diff <(jq .outputs out/m-1/manifest.json) <(jq .outputs out/m-1-again/manifest.j
 uv run --project python/analytics python -m touchline_analytics.validate_cdf out/m-1
 ```
 
-Expected: the CLI prints the stats line (about 56,000 frames); `identical`; then `meta: ok`, `event: ok`, `tracking: ok` (validation takes about 35 s).
+Expected: the CLI prints the stats line (about 56,000 frames; `tracking.jsonl` is about 72 MB); `identical`; then `meta: ok`, `event: ok`, `tracking: ok` (validation takes about 35 s).
 
 - [ ] **Step 8: Check bad input gives clear errors**
 
@@ -4669,7 +4822,7 @@ See `ATTRIBUTION.md` for credits and `docs/superpowers/` for the spec and plans.
 - [ ] **Step 3: Run everything once more**
 
 Run: `pnpm typecheck && pnpm test`
-Expected: `Tasks: 4 successful` for both; 69 tests in total (sim-core 54, league 6, schema 2, sim 7)
+Expected: `Tasks: 4 successful` for both; 73 tests in total (sim-core 58, league 6, schema 2, sim 7)
 
 - [ ] **Step 4: Commit**
 

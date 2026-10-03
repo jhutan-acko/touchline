@@ -5,7 +5,7 @@
 - **Author:** Jhutan Debnath, with Claude Code
 - **Visual companions:** system design https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS · simulator design https://claude.ai/artifact/FC9YH2kcGFr8tPchooBmpF (private design pages; this spec is authoritative where they differ)
 - **Research:** `../reports/Football match data simulators.md` (outside this repo, 2026-10-03)
-- **Revision:** 2026-10-03 r6 — execution and errors (§5.1.12): intended vs actual, misplaced/overhit/mis-hit passes, wrong options, critical errors
+- **Revision:** 2026-10-03 r7 — decision record (§5.1.4): options, best option, chosen rank, action probabilities; frames carry each player's speed and intent; `off_ball_run` events (§5.1.9–5.1.10)
 
 ## 1. Context
 
@@ -240,6 +240,13 @@ Each step runs, in order:
 - **Shots:** a logistic xG model with inputs distance, angle, body part and defenders in the cone. The aim point and power go through the execution model, so the outcome (goal, saved, wide, skied, scuffed) comes from where the ball actually travels. Execution noise is fitted so that goals per shot still match xG on average.
 - **Defending:** the press trigger rate is set from the style's target PPDA. Tackle and interception attempts come from proximity and per-second rates; fouls and cards from per-duel rates.
 - **Timing:** intents carry a duration (0.3–1.0 s) and an urgency, so players commit to a choice rather than jittering. The time between events is checked against fitted distributions by event type.
+- **Decision record (the "was there a better pass?" data).** At every decision the engine records what the player *could* have done:
+  - `action_probs`: the probability of each available action;
+  - `options`: the five best pass options, each with receiver, kind, target point, xPass and value (xPass × threat at the target);
+  - `best_receiver_id` and `best_value`;
+  - `chosen_value` and `chosen_rank` (1 = the best option was chosen).
+
+  It is attached to pass, shot, carry and take-on events in the domain stream. This is ground truth only a simulator has: real event data never records the alternatives. It feeds player feedback ("a better pass was on to #11 in space") and the evaluation harness (§5.3.1). "Best" is by the engine's own value model; the stats engine (§5.2) re-scores options independently from tracking (pitch control and xT), which also works on real matches. In the Plan 1 verification run, about 37 % of passes chose the best option.
 - **Game state:**
   - **Score effect:** a leading team's line drops and its tempo falls late in the match.
   - **Goal timing:** scoring intensity follows a fitted minute profile, so more goals come late.
@@ -354,8 +361,8 @@ Built-in scenarios:
    - **Stoppages and discipline:** `ball_out`, `foul`, `card`, `offside`, `substitution`.
    - **Set pieces:** `set_piece` (restart kind), followed by the delivering `pass` or `shot`.
 
-   Every domain event carries `frame_id`, `source` (`sim | replay | vision`), `confidence` (1.0 for `sim`), its attributes (for example `ball_speed_kmh`, `defenders_in_lane`, `under_pressure`) and ground-truth model values (`xg`, `xpass`).
-2. **CDF v0.3.2 files** per match: `meta.json`, `event.jsonl`, `tracking.jsonl`.
+   Every domain frame lists all 22 players with `x`, `y`, `vel` (speed, m/s) and `intent` (`shape`, `press`, `run_in_behind`, `chase`, `carry`, `hold` or `on_ball`), so off-ball positions **and** what each player is doing are both in the data. Every domain event carries `frame_id`, `source` (`sim | replay | vision`), `confidence` (1.0 for `sim`), its attributes (for example `ball_speed_kmh`, `defenders_in_lane`, `under_pressure`) and ground-truth model values (`xg`, `xpass`).
+2. **CDF v0.3.2 files** per match: `meta.json`, `event.jsonl`, `tracking.jsonl`. Tracking players carry `id`, `x`, `y` and CDF's optional `vel`; `intent` and the decision record stay in the domain stream.
    - Domain events map to CDF `type`/`sub_type`/`outcome_type`; for example, carry and pressure map to the nearest CDF types.
    - Events carry `tracking.frame_id` and `frame_id_end`, with `meta.is_synced: true`.
    - `meta.tracking.fps = 10`, `meta.cdf.version = "0.3.2"`.
@@ -372,7 +379,10 @@ Domain event example:
  "team_id":"ironmoor","player_id":"p-ir-08","receiver_id":"p-ir-10",
  "x":8.7,"y":-11.6,"x_end":36.0,"y_end":-3.9,"outcome":"successful","frame_id_end":41133,
  "under_pressure":true,"defenders_in_lane":2,"defenders_bypassed":4,"ball_speed_kmh":71.4,
- "xpass":0.58,"tags":["progressive","line_breaking","key_pass"],"source":"sim","confidence":1.0}
+ "xpass":0.58,"chosen_value":0.41,"chosen_rank":1,"best_receiver_id":"p-ir-10","best_value":0.41,
+ "action_probs":{"short_pass":0.42,"through_ball":0.31,"carry":0.17,"hold":0.06,"back_pass":0.04},
+ "options":[{"action":"through_ball","receiver_id":"p-ir-10","kind":"through","target_x":36.0,"target_y":-3.9,"xpass":0.58,"value":0.41}, …],
+ "tags":["progressive","line_breaking","key_pass"],"source":"sim","confidence":1.0}
 ```
 
 #### 5.1.10 Action and event taxonomy
@@ -426,6 +436,7 @@ The decision layer chooses an **action**. Executing it produces one or more **do
 | `card` | `colour` (yellow, second_yellow, red) |
 | `offside` | — |
 | `substitution` | — |
+| `off_ball_run` | `kind` (in_behind); `ball_carrier_id`; target as `x_end`, `y_end` |
 | `set_piece` | `kind` (kickoff, throw_in, corner, goal_kick, free_kick_direct, free_kick_indirect, penalty) |
 
 **Shot technique** comes from the ball state at contact:
@@ -570,6 +581,7 @@ This harness backs innovation #1 (§2.1). Scenario scripts (§5.1.7) record **ta
 | Explanation accuracy | Whether the Analyst names the correct cause (including mistakes such as a mis-hit under pressure versus a good interception), judged against the truth label by a rubric (LLM judge, spot-checked by hand) |
 | Evidence correctness | Whether cited metric IDs and frame ranges overlap the truth's expected metrics and window |
 | Grounding | Share of numeric claims verified by the Fact-Checker; target 100 % after gating |
+| Decision feedback | Where the Analyst or Narrator says a better option existed, does it name the option the decision record ranks first, and does it stay silent when the chosen pass was rank 1? |
 | Persona separation | Whether analyst and casual variants differ in depth (number count, length) and tone, per rubric |
 
 - **Runs:** the harness runs as **Foundry evaluations** with custom evaluators, so results appear in Foundry and are reproducible. A small fixed suite of seeds runs in CI with a stub model; the full suite runs nightly against real models.
