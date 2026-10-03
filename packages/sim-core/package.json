@@ -1,0 +1,10 @@
+{
+  "name": "@touchline/sim-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./testing": "./src/testing.ts" },
+  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "match": "tsx scripts/run-match.ts" },
+  "dependencies": {  },
+  "devDependencies": {  }
+}

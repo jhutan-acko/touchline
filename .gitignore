@@ -1,0 +1,8 @@
+node_modules/
+.turbo/
+out/
+data/raw/
+.venv/
+__pycache__/
+*.pyc
+.superpowers/
