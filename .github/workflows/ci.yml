@@ -13,5 +13,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm league
+      - run: git diff --exit-code data/league/league.json
       - run: pnpm typecheck
       - run: pnpm test
