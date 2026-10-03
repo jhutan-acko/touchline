@@ -5,7 +5,7 @@
 - **Author:** Jhutan Debnath, with Claude Code
 - **Visual companions:** system design https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS · simulator design https://claude.ai/artifact/FC9YH2kcGFr8tPchooBmpF (private design pages; this spec is authoritative where they differ)
 - **Research:** `../reports/Football match data simulators.md` (outside this repo, 2026-10-03)
-- **Revision:** 2026-10-03 r3 — real-data validation of the simulator (§5.1.8); auto-eventing hooks and stretch design (§5.8)
+- **Revision:** 2026-10-03 r4 — innovation statement (§2.1) and ground-truth agent evaluation harness (§5.3.1)
 
 ## 1. Context
 
@@ -43,6 +43,36 @@ Success means all of the following hold in the deployed demo:
 4. Output works in **English, Spanish and Hindi**.
 5. Stats overlay latency is under **250 ms** from event; AI insight latency is under **4 s** from signal (p95 for each, measured).
 6. The system is deployed on Azure, with the agents running on Microsoft Foundry and their traces visible.
+
+### 2.1 Innovation: what existing solutions don't provide
+
+The research (2026-10-03) found the separate capabilities scattered across broadcast products, open-source tools and papers, but never combined. Three of them don't exist publicly at all. Ranked by novelty:
+
+1. **AI insights scored against known truth.**
+   - **Gap:** on real broadcasts the true cause of a moment is unknown, so AI commentary and insight systems can't be scored on whether their explanations are *correct*. Published commentary research (MatchVoice, StreamSoccer) struggles with invented facts and misaligned timestamps.
+   - **Touchline:** we script tactical causes ("Ironmoor raise their press at 60'"; "red card at 55'"), then score whether the agents detected the moment, explained it correctly and cited the right metrics (§5.3.1). The same ground truth scores video auto-eventing (§5.8). Synthetic data becomes the test bench for the AI, not just a stand-in for real data.
+2. **An open, calibrated, scriptable match generator in the standard format.**
+   - **Gap:**
+     - No open engine emits CDF events plus tracking, and kloppy has no CDF exporter yet.
+     - The best generative models predict only a few seconds of play, with no public weights.
+     - Event-model papers don't compare whole-match statistics with real matches, so there is no standard realism benchmark.
+   - **Touchline:** seeded, reproducible 11v11 matches with exact event-to-tracking sync and the true model values (xG, xPass) attached, validated against the CDF v0.3.2 schema. A published realism report compares them with IDSSE and Wyscout (§5.1.8).
+3. **Every on-screen number is verified, and its evidence is one tap away.**
+   - **Gap:** to our knowledge, shipped products (Bundesliga Match Facts, Prime Video Prime Insights, IBM watsonx commentary) show stats or generated text without exposing the evidence behind each claim to the viewer.
+   - **Touchline:**
+     - A Fact-Checker blocks any number that isn't in the state store.
+     - The fan's "Why?" view shows the metric values, frame range and events behind each claim.
+     - Explanation frames (control vs chaos, pressure shift, rhythm) are computed metrics, not model guesses.
+4. **One verified insight, many audiences.**
+   - **Gap:** broadcasters offer a main feed, or at most one analyst alt-stream.
+   - **Touchline:** each verified moment is reshaped per fan segment — mode, clubs, player focus, single focus metric and language (EN/ES/HI), generated natively. A producer console keeps a human approving cues before they air.
+5. **A frame-anchored, versioned overlay format.**
+   - **Gap:** we found no open format for timed AI insights that a broadcast graphics system can render.
+   - **Touchline:** `touchline.cue/1` ties each insight to the frame range it describes, so a slow model makes an insight late, never wrong.
+
+**Not claimed as innovation** (good execution, not new): using Agent Framework, MCP and A2A; Azure deployment; multilingual generation; standard metrics (xG, PPDA, xT).
+
+**Pitch line:** *"Touchline is the first match-intelligence engine that can prove its AI is right. Because we generate the match, we know the truth behind every moment and score our agents against it, so fans only ever see insights that are checked, explained, and made for them."* Competitor statements rely on public material, so the pitch says "to our knowledge".
 
 ### Non-goals
 
@@ -389,6 +419,22 @@ Flow per moment:
 
 **Model choice:** a small, fast Foundry model for the live agents and a larger reasoning model for the Analyst and recaps. Exact models are picked from the Foundry catalog at build time, behind one config file.
 
+#### 5.3.1 Ground-truth evaluation harness (`services/agents/evals`)
+
+This harness backs innovation #1 (§2.1). Scenario scripts (§5.1.7) record **tactical truths** in the run manifest: what was injected, when, by which team, and which metrics should move. Examples: `press_surge`, `red_card`, `momentum_swing`, `keeper_heroics`, a style switch. The harness replays scripted matches through the full agent workflow and scores:
+
+| Score | Definition |
+|---|---|
+| Moment recall | Share of injected truths for which a moment is published within the window, plus 2 minutes |
+| Moment precision | Share of published moments that match an injected truth or a band-significant signal |
+| Explanation accuracy | Whether the Analyst names the correct cause, judged against the truth label by a rubric (LLM judge, spot-checked by hand) |
+| Evidence correctness | Whether cited metric IDs and frame ranges overlap the truth's expected metrics and window |
+| Grounding | Share of numeric claims verified by the Fact-Checker; target 100 % after gating |
+| Persona separation | Whether analyst and casual variants differ in depth (number count, length) and tone, per rubric |
+
+- **Runs:** the harness runs as **Foundry evaluations** with custom evaluators, so results appear in Foundry and are reproducible. A small fixed suite of seeds runs in CI with a stub model; the full suite runs nightly against real models.
+- **Publication:** results go in the README and the demo video as the "proof" moment.
+
 ### 5.4 Overlay cue contract (`packages/schema`)
 
 ```json
@@ -498,7 +544,7 @@ The brief asks us to *consider* running a model over a video feed to produce pas
 - **Agents:**
   - Fallback paths tested with a stubbed model.
   - Fact-Checker tested on seeded hallucinations, which must be caught.
-  - A Foundry evaluation run on grounding and on the analyst/casual difference.
+  - Ground-truth evaluation harness (§5.3.1): fixed seeds in CI with a stub model; full suite nightly with real models as Foundry evaluations.
 - **End to end:** a replay of a committed match through the full stack in CI with a stub model, asserting latency budgets and zero unverified cues.
 
 ## 8. Azure deployment
@@ -522,6 +568,7 @@ These costs are planning estimates to verify against current pricing. Infrastruc
   - Simulator and fictional league, plus replay files.
   - Stats engine with all Must metrics.
   - Six-agent workflow with the Fact-Checker and fallbacks.
+  - Ground-truth evaluation harness with scripted tactical truths (§5.3.1).
   - A2A gateway and MCP stats server.
   - Cue contract.
   - Fan app with 2D pitch, overlays, profiles and the "Why?" drawer.
@@ -529,7 +576,7 @@ These costs are planning estimates to verify against current pricing. Infrastruc
   - EN/ES/HI.
   - Recaps.
   - Azure deployment, tracing, README, demo video.
-- **Should:** xT; Event Hubs ingest; SignalR fan-out; Foundry evaluation run; ops view.
+- **Should:** xT; Event Hubs ingest; SignalR fan-out; ops view.
 - **Stretch:** 25 Hz tracking + pitch control; voice commentator; CV auto-eventing on rendered video with measured error; Fabric analyst store.
 
 **Rule:** no Stretch work starts before the week-3 checkpoint passes.
@@ -539,8 +586,8 @@ These costs are planning estimates to verify against current pricing. Infrastruc
 | Dates | Focus | Checkpoint |
 |---|---|---|
 | 10-04 – 10-11 | Monorepo, schema, league, simulator (§5.1 checklist: CDF writers → offline fit → shape/steering/ball → decisions → determinism → calibration → scripts), replay files, stats engine, basic live-stats view | A full match replays with live stats on screen; CDF valid; calibration bands green |
-| 10-12 – 10-18 | Agent workflow, Fact-Checker, A2A, MCP, cue bus, fan app overlays, profiles, EN/ES/HI, recaps | Analyst vs casual working locally |
-| 10-19 – 10-24 | Azure via azd, Foundry hosted agents, tracing, evaluations, Should items; Reactor session 10-21 | Public link works end to end |
+| 10-12 – 10-18 | Agent workflow, Fact-Checker, A2A, MCP, cue bus, fan app overlays, profiles, EN/ES/HI, recaps, evaluation harness (local, stub model) | Analyst vs casual working locally; first recall/precision numbers |
+| 10-19 – 10-24 | Azure via azd, Foundry hosted agents, tracing, evaluation harness as Foundry evaluations, Should items; Reactor session 10-21 | Public link works end to end; evaluation scores published |
 | 10-25 – 10-27 | Demo script, 2-minute video, README, pitch; submit by 10-26 | Submitted |
 
 ## 11. Risks
