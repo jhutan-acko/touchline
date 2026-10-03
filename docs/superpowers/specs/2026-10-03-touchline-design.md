@@ -5,7 +5,7 @@
 - **Author:** Jhutan Debnath, with Claude Code
 - **Visual companions:** system design https://claude.ai/artifact/TzdUVSecKaHafvjkpT4XWS · simulator design https://claude.ai/artifact/FC9YH2kcGFr8tPchooBmpF (private design pages; this spec is authoritative where they differ)
 - **Research:** `../reports/Football match data simulators.md` (outside this repo, 2026-10-03)
-- **Revision:** 2026-10-03 r2 — simulator section rewritten after research (CDF v0.3.2 output, calibration sources, tick/decision split)
+- **Revision:** 2026-10-03 r3 — real-data validation of the simulator (§5.1.8); auto-eventing hooks and stretch design (§5.8)
 
 ## 1. Context
 
@@ -123,7 +123,8 @@ touchline/
 │  ├─ rpc/            Effect RPC contracts (shared client/server)
 │  └─ mcp-stats/      MCP server exposing stats tools
 ├─ services/
-│  └─ agents/         Python (uv): Agent Framework workflow, A2A server
+│  ├─ agents/         Python (uv): Agent Framework workflow, A2A server
+│  └─ vision/         Python (uv): stretch — renderer, detection/tracking, scoring
 ├─ python/
 │  └─ analytics/      Python (uv): calibration + model fitting, offline only
 ├─ data/
@@ -166,7 +167,8 @@ Design references:
 
 - **Pitch:** 105 × 68 m, metres, origin at the centre spot.
 - **Direction:** CDF orientation is used internally too — **the home team attacks +x for the whole match**. The front end may mirror the second half for display.
-- **Frames:** a fixed tick of **0.1 s**, so one tick is one tracking frame (`fps = 10`). `frame_id` restarts at 0 each period, as CDF requires.
+- **Frames:** a fixed tick, by default **0.1 s**, so one tick is one tracking frame (`fps = 10`). `frame_id` restarts at 0 each period, as CDF requires.
+- **Render runs:** `--fps 25` runs the same engine at 0.04 s for video rendering (§5.8). Because probabilities are per action or per second, the football is statistically the same at any tick. Determinism holds per `(seed, …, fps)`.
 - **Ball sub-steps:** the ball takes 2–5 sub-steps per tick.
 - **Timestamps:** synthetic UTC derived from the match's `kickoff_time`. `match_clock` follows the CDF convention (`MM:SS.mm`, resetting to 45:00.00 at the second half).
 - **Added time:** sampled per half from fitted distributions.
@@ -226,7 +228,8 @@ Each step runs, in order:
   - `lineHeight`, `compactness`, `width`;
   - `tempo`, `longBallBias`, `crossBias`, `riskTolerance`.
 - **Styles:** at least four distinct archetypes — high press, possession, direct, low block.
-- **Squads:** 20 players per club, with role, preferred foot and attributes (pace, acceleration, passing, finishing, tackling, composure, stamina). A seeded name generator checks every name against a real-player blocklist. A synthetic season history supplies the milestones the narrative layer uses.
+- **Kits:** each club has contrasting home and away kits (primary and secondary colours chosen for high contrast and kept distinct across the league), so a detector can separate the teams.
+- **Squads:** 20 players per club, with unique shirt numbers, role, preferred foot and attributes (pace, acceleration, passing, finishing, tackling, composure, stamina). A seeded name generator checks every name against a real-player blocklist. A synthetic season history supplies the milestones the narrative layer uses.
 - **Stable:** the league is generated once from a fixed seed and committed as `data/league/*.json`, so IDs stay stable for the demo.
 
 #### 5.1.7 Scenario scripts
@@ -281,6 +284,23 @@ Built-in scenarios:
 - distance per outfield player within the IDSSE-fitted range;
 - ball within 1 m of the passer at each pass event, and within 1.5 m of the receiver at each reception.
 
+**Real-data validation of the simulator.** Real match data is used **only to test how realistic the synthetic output is**. It never enters the product, the demo, `data/matches/` or the video.
+- **Sources:** IDSSE (events + 25 Hz tracking, CC-BY 4.0), Wyscout public excluding England (events, CC BY 4.0), SkillCorner open data (broadcast tracking, MIT, optional). No StatsBomb, Metrica, PFF or IMPECT.
+- **Download:** `python/analytics/download.py` fetches the data into git-ignored `data/raw/`. Real-data tests carry a `real_data` tag and are skipped when the data is absent. An optional CI job downloads IDSSE first.
+- **Comparison:** the same metric code runs on real and synthetic matches. The stats engine reads real data through a kloppy → domain-event adapter. Compared side by side:
+  - event-type mix and transition matrix;
+  - pass length and angle by zone; completion by zone and pressure;
+  - time between events; possession-sequence length; xG per shot and per match;
+  - PPDA and field tilt by team style;
+  - speed, acceleration and distance per player;
+  - ball speeds; ball-in-play fraction.
+- **Scores:**
+  - Wasserstein-1 distance for continuous distributions;
+  - Jensen–Shannon divergence for categorical mixes and transitions;
+  - band checks for match totals.
+- **Report:** a generated `realism-report.md`, with plots, records each run. Its headline numbers go in the README with attribution ("validated against open DFL and Wyscout data").
+- **Bonus:** the adapter also proves the stats engine works on a real-format feed, not just our own output.
+
 **Other checks:**
 - **Formations:** EFPI detects the intended formation (offline, Python).
 - **Stretch:** OpenSTARLab LEM_3 trained on Wyscout (excluding England) as a likelihood scorer, comparing synthetic against real.
@@ -295,7 +315,7 @@ Built-in scenarios:
    - **Stoppages and discipline:** `ball_out`, `foul`, `card`, `offside`, `substitution`.
    - **Set pieces:** `set_piece` (the restart variants).
 
-   Every domain event carries `frame_id`, its attributes (for example `ball_speed_kmh`, `defenders_in_lane`, `under_pressure`) and ground-truth model values (`xg`, `xpass`).
+   Every domain event carries `frame_id`, `source` (`sim | replay | vision`), `confidence` (1.0 for `sim`), its attributes (for example `ball_speed_kmh`, `defenders_in_lane`, `under_pressure`) and ground-truth model values (`xg`, `xpass`).
 2. **CDF v0.3.2 files** per match: `meta.json`, `event.jsonl`, `tracking.jsonl`.
    - Domain events map to CDF `type`/`sub_type`/`outcome_type`; for example, carry and pressure map to the nearest CDF types.
    - Events carry `tracking.frame_id` and `frame_id_end`, with `meta.is_synced: true`.
@@ -427,6 +447,35 @@ Flow per moment:
   - `getRecap(matchId)`, `getEvidence(cueId)`
   - `studio.approve` / `studio.hold`
 - **Agent gateway:** an A2A client with timeout, retry and circuit breaker, all as Effect policies. When the circuit is open, the hot path continues and template cues fill in.
+
+### 5.8 Auto-eventing from video (Stretch, `services/vision`)
+
+The brief asks us to *consider* running a model over a video feed to produce pass and speed metrics. We do this on **video rendered from our own simulator**, never real broadcast footage, so every detection can be scored against exact ground truth. The core build only adds the cheap hooks below; the pipeline itself is Stretch.
+
+**Hooks in the core build:**
+- `--fps 25` render runs (§5.1.2);
+- `source` and `confidence` on domain events (§5.1.9);
+- contrasting kits and unique shirt numbers (§5.1.6);
+- a run manifest holding ground truth (§5.1.9);
+- an event bus that accepts any source (§4).
+
+**Pipeline (Stretch):**
+1. **Renderer.** It projects the 25 fps tracking through a virtual broadcast camera (pan, tilt and zoom following the ball) and draws the pitch, players (kit colour, number) and ball. The camera matrix is saved per frame, so the pitch-to-image homography is exact ground truth.
+   - **First choice:** a deterministic Python/OpenCV renderer.
+   - **Nicer alternative:** three.js captured to MP4.
+2. **Detection and tracking.** A permissively licensed detector — RF-DETR or the original RT-DETR (Apache-2.0); licences to verify. ByteTrack for tracking (MIT). Pitch keypoints estimate the homography; team split by kit colour. **No Ultralytics YOLO (AGPL-3.0).**
+3. **Events.** Pitch-plane tracks are smoothed with a Kalman filter. Ball speed and shot speed come from the tracks, and passes from possession changes. Output is domain events with `source: "vision"` and a confidence.
+4. **Scoring against ground truth:**
+   - detection mAP;
+   - tracking HOTA or IDF1;
+   - homography reprojection error;
+   - ball-speed and shot-speed MAE in km/h;
+   - pass-distance MAE in m;
+   - pass event F1 within ±0.5 s.
+   Published in the realism report.
+5. **Demo:** a "vision" toggle replays the same match driven by vision-derived events instead of simulator events, with a side-by-side error readout.
+
+**Runtime:** offline batch first. Azure Container Apps serverless GPU, or Azure Machine Learning, if run in the cloud.
 
 ## 6. Error handling and resilience
 
