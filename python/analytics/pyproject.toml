@@ -1,9 +1,9 @@
 [project]
 name = "touchline-analytics"
 version = "0.1.0"
-description = "Offline analytics for Touchline: CDF validation now; calibration fits in Plan 2."
+description = "Offline analytics for Touchline: CDF validation, real-data calibration targets, realism report."
 requires-python = ">=3.11"
-dependencies = ["common-data-format-validator==0.1.1"]
+dependencies = ["common-data-format-validator==0.1.1", "kloppy==3.19.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -11,3 +11,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["touchline_analytics"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
