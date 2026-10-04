@@ -13,6 +13,19 @@ pnpm sim --seed 1 --home ironmoor --away saltmarsh   # writes out/m-1/{meta.json
 uv run --project python/analytics python -m touchline_analytics.validate_cdf out/m-1
 ```
 
+## Calibration (method of simulated moments)
+
+The engine is tuned so that simulated matches reproduce real-match statistics measured on the open IDSSE dataset (see `ATTRIBUTION.md`):
+
+```bash
+uv run --project python/analytics python -m touchline_analytics.idsse      # download into git-ignored data/raw/idsse
+uv run --project python/analytics python -m touchline_analytics.targets    # data/params/targets-idsse.json (aggregates only)
+pnpm calibrate --from data/params/calibration-start.json                   # ~1 h; writes data/params/touchline-params.json
+pnpm realism --matches 16                                                  # held-out matches -> docs/realism/realism-report.md
+```
+
+`pnpm sim` loads `data/params/touchline-params.json` by default (`--params <file>` to override). Every parameter file must carry provenance with an allowed licence; StatsBomb-derived parameters are refused.
+
 Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids in `data/league/league.json`), `--fps` (10, or 25 for video render runs), `--match-id`, `--kickoff` (ISO time), `--out`.
 
 ## Packages
@@ -23,10 +36,11 @@ Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids
 | `packages/league` | Fictional league generator: 8 clubs, kits, styles, 160 players |
 | `packages/schema` | Effect Schema for the live domain stream (events and frames) |
 | `packages/sim` | Effect streams, CDF v0.3.2 writers, run manifest, CLI |
-| `python/analytics` | Offline tooling: CDF validation (calibration fits arrive in Plan 2) |
+| `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
+| `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report |
 
 ## Status
 
-The engine runs a full match in about 1.5 s and its output passes the CDF validator in strict mode. Its parameters are hand-set priors, not yet calibrated, so match statistics are off (for example ~1,400 passes and ~6 goals per match). Plan 2 fits them on open data.
+The engine runs a full match in about 1.5 s and its output passes the CDF validator in strict mode. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 13 of 17 statistics and within 2 SD on the rest (see `docs/realism/realism-report.md`). Known gaps: corners (about 2 vs 8 per match) and throw-ins (about 32 vs 44) are low, and goals run slightly high on new seeds.
 
 See `ATTRIBUTION.md` for credits and `docs/superpowers/` for the spec and plans.
