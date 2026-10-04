@@ -223,16 +223,31 @@ export const assertProvenance = (p: { provenance?: Partial<Provenance> }): void 
   if (!pv || !pv.dataset || !pv.licence || !pv.version) throw new ParamsError("params file is missing provenance")
   if (!(ALLOWED_LICENCES as ReadonlyArray<string>).includes(pv.licence))
     throw new ParamsError(`licence "${pv.licence}" is not allowed (allowed: ${ALLOWED_LICENCES.join(", ")})`)
-  if (/statsbomb/i.test(pv.dataset)) throw new ParamsError("StatsBomb-derived parameters are not allowed")
+  if (pv.licence !== "hand-set-prior" && (!pv.attribution || !pv.fitted_at))
+    throw new ParamsError(`licence "${pv.licence}" requires provenance attribution and fitted_at`)
+  if (/statsbomb/i.test(`${pv.dataset} ${pv.attribution ?? ""}`)) throw new ParamsError("StatsBomb-derived parameters are not allowed")
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
 
-const mergeInto = (base: unknown, over: unknown): unknown => {
-  if (!isObject(base) || !isObject(over)) return over === undefined ? base : over
-  const out: Record<string, unknown> = { ...base }
-  for (const [k, v] of Object.entries(over)) if (k in base) out[k] = mergeInto(base[k], v)
-  return out
+/** Merge `over` onto `base`, keeping only keys `base` owns; every value must have its default's type. */
+const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
+  if (over === undefined) return base
+  const bad = (): never => {
+    throw new ParamsError(`params field ${path} has the wrong type (expected ${Array.isArray(base) ? `array of ${(base as unknown[]).length}` : typeof base})`)
+  }
+  if (Array.isArray(base)) {
+    if (!Array.isArray(over) || over.length !== base.length) bad()
+    return base.map((b, i) => mergeInto(b, (over as unknown[])[i], `${path}[${i}]`))
+  }
+  if (isObject(base)) {
+    if (!isObject(over)) bad()
+    const out: Record<string, unknown> = { ...base }
+    for (const [k, v] of Object.entries(over as Record<string, unknown>)) if (Object.hasOwn(base, k)) out[k] = mergeInto(base[k], v, `${path}.${k}`)
+    return out
+  }
+  if (typeof base === "number" ? typeof over !== "number" || !Number.isFinite(over) : typeof over !== typeof base) bad()
+  return over
 }
 
 /**
@@ -242,5 +257,5 @@ const mergeInto = (base: unknown, over: unknown): unknown => {
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
-  return mergeInto(DEFAULT_PARAMS, json) as Params
+  return mergeInto(DEFAULT_PARAMS, json, "params") as Params
 }

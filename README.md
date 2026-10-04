@@ -22,6 +22,7 @@ uv run --project python/analytics python -m touchline_analytics.idsse      # dow
 uv run --project python/analytics python -m touchline_analytics.targets    # data/params/targets-idsse.json (aggregates only)
 pnpm calibrate --from data/params/calibration-start.json                   # ~1 h; writes data/params/touchline-params.json
 pnpm realism --matches 16                                                  # held-out matches -> docs/realism/realism-report.md
+UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-gate  # refresh data/params/realism-baseline.json
 ```
 
 `pnpm sim` loads `data/params/touchline-params.json` by default (`--params <file>` to override). Every parameter file must carry provenance with an allowed licence; StatsBomb-derived parameters are refused.
@@ -42,5 +43,7 @@ Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids
 ## Status
 
 The engine runs a full match in about 1.5 s and its output passes the CDF validator in strict mode. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 13 of 17 statistics and within 2 SD on the rest (see `docs/realism/realism-report.md`). Known gaps: corners (about 2 vs 8 per match) and throw-ins (about 32 vs 44) are low, and goals run slightly high on new seeds.
+
+The realism gate (`packages/calibrate/test/realism-gate.test.ts`) runs 16 more held-out matches (seeds 3000–3015). It fails if any statistic moves more than 3.5 standard errors from the committed baseline, or drifts away from the real targets. After an intended engine change, re-run calibration, the realism report and the baseline refresh, and commit all three.
 
 See `ATTRIBUTION.md` for credits and `docs/superpowers/` for the spec and plans.

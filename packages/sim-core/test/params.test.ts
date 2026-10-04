@@ -33,3 +33,27 @@ describe("params from JSON", () => {
     expect(() => paramsFromJson([1, 2])).toThrow(ParamsError)
   })
 })
+
+describe("params from JSON: review fixes", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("refuses values whose type differs from the default's", () => {
+    for (const bad of [
+      { kinematics: { vmaxBase: "fast" } },
+      { ball: null },
+      { shot: 5 },
+      { timing: { addedTimeMinS: [1] } },
+      { kinematics: { reachMargin: Number.NaN } }
+    ]) expect(() => paramsFromJson({ provenance: cc, ...bad }), JSON.stringify(bad)).toThrow(ParamsError)
+  })
+  it("requires attribution and fitting date for data-derived licences, and checks attribution for StatsBomb", () => {
+    expect(() => paramsFromJson({ provenance: { ...cc, attribution: undefined } })).toThrow(/attribution/)
+    expect(() => paramsFromJson({ provenance: { ...cc, fitted_at: "" } })).toThrow(/attribution/)
+    expect(() => paramsFromJson({ provenance: { ...cc, attribution: "StatsBomb" } })).toThrow(/StatsBomb/)
+    expect(paramsFromJson({ provenance: cc }).provenance.attribution).toBe(cc.attribution)
+  })
+  it("ignores inherited keys such as toString and __proto__", () => {
+    const p = paramsFromJson(JSON.parse(`{"provenance":${JSON.stringify(cc)},"kinematics":{"toString":"boom","__proto__":{"x":1}}}`)) as unknown as { kinematics: object }
+    expect(Object.hasOwn(p.kinematics, "toString")).toBe(false)
+    expect(String(p.kinematics)).toBe("[object Object]")
+  })
+})

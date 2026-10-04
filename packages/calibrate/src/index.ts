@@ -1,4 +1,5 @@
 export * from "./evaluate.js"
+export * from "./gate.js"
 export * from "./knobs.js"
 export * from "./metrics.js"
 export * from "./tune.js"

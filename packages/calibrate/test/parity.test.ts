@@ -15,7 +15,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const hasUv = spawnSync("uv", ["--version"]).status === 0
 
 describe("metric parity", () => {
-  it.skipIf(!hasUv)("TypeScript and Python compute identical statistics for the same synthetic match", async () => {
+  // In CI the test must run: a missing uv fails it rather than skipping it.
+  it.skipIf(!hasUv && !process.env.CI)("TypeScript and Python compute identical statistics for the same synthetic match", async () => {
     const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
     const cfg = { matchId: "parity", seed: 4242, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[0]!, away: league.clubs[3]!, params: DEFAULT_PARAMS, dt: 0.1 }
     const dir = mkdtempSync(join(tmpdir(), "touchline-parity-"))
