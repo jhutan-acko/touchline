@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect } from "effect"
 import type { League } from "@touchline/league"
-import { DEFAULT_PARAMS } from "@touchline/sim-core"
+import { DEFAULT_PARAMS, ParamsError, paramsFromJson, type Params } from "@touchline/sim-core"
 import { writeMatch } from "./writer.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -34,13 +34,25 @@ if (arg("home", "ironmoor") === arg("away", "kestrel-bay")) {
   console.error("--home and --away must be different clubs")
   process.exit(2)
 }
+// Calibrated parameters (Plan 2) load by default; --params overrides; hand-set priors if neither exists.
+const defaultParams = join(root, "data/params/touchline-params.json")
+const paramsPath = arg("params", existsSync(defaultParams) ? defaultParams : "")
+let params: Params = DEFAULT_PARAMS
+if (paramsPath) {
+  try {
+    params = paramsFromJson(JSON.parse(readFileSync(resolve(process.env.INIT_CWD ?? process.cwd(), paramsPath), "utf8")))
+  } catch (e) {
+    console.error(`Cannot use params file ${paramsPath}: ${e instanceof ParamsError ? e.message : String(e)}`)
+    process.exit(2)
+  }
+}
 const cfg = {
   matchId: arg("match-id", `m-${seed}`),
   seed,
   kickoffTime: arg("kickoff", "2026-10-18T14:00:00.000Z"),
   home: club(arg("home", "ironmoor")),
   away: club(arg("away", "kestrel-bay")),
-  params: DEFAULT_PARAMS,
+  params,
   dt: 1 / fps
 }
 // pnpm runs package scripts from the package folder; INIT_CWD is where the user typed the command.

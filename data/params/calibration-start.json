@@ -1,0 +1,25 @@
+{
+ "_comment": "Starting knob values for `pnpm calibrate --from data/params/calibration-start.json`. They come from two earlier exploratory tuning rounds (Plan 2a, 2026-10-04); tuning from here is deterministic and reproduces data/params/touchline-params.json.",
+ "calibration": {
+  "knobs": {
+   "decision_scale": 1,
+   "long_bias": -0.25,
+   "cross_bias": 0.125,
+   "shot_bias": 0,
+   "aim_noise": 1.35,
+   "xg_b0": -1.25,
+   "exec_scale": 1.15,
+   "reach_margin": 0.725,
+   "tackle_rate": 0.65,
+   "foul_per_tackle": 0.255,
+   "yellow_per_foul": 0.225,
+   "loose_share": 0.4,
+   "restart_scale": 1.25,
+   "shape_width": 1.35,
+   "shape_depth": 1.2,
+   "shape_speed": 0.9,
+   "box_intensity": 3,
+   "box_carry": -1
+  }
+ }
+}

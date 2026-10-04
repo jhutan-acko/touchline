@@ -8,7 +8,9 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "sim": "pnpm --filter @touchline/sim run sim",
-    "league": "pnpm --filter @touchline/league run generate"
+    "league": "pnpm --filter @touchline/league run generate",
+    "calibrate": "pnpm --filter @touchline/calibrate run calibrate",
+    "realism": "pnpm --filter @touchline/calibrate run realism"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
