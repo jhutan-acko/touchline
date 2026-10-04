@@ -18,9 +18,6 @@ export interface Resolution {
 /** Longest flight we predict before calling the ball stopped (seconds, so it is tick-length independent). */
 export const MAX_FLIGHT_S = 8
 
-/** Share of the straight-line reach used, leaving room for turning and the arrive() approach. */
-const REACH_MARGIN = 0.75
-
 const sigmoid = (z: number): number => 1 / (1 + Math.exp(-z))
 
 /** Where a ball moving from `a` to `b` crosses a goal line, if it does, with interpolated y and z. */
@@ -85,7 +82,7 @@ export const resolveFlight = (
       const reaction = pl.id === intendedId ? 0 : p.kinematics.reactionS
       const vmax = vmaxFor(pl.attrs, pl.energy, p)
       const drift = { x: pl.pos.x + pl.vel.x * tc, y: pl.pos.y + pl.vel.y * tc }
-      const radius = p.kinematics.reachM + REACH_MARGIN * reachIn(tc - reaction, 0, vmax, accelFor(pl.attrs, p))
+      const radius = p.kinematics.reachM + p.kinematics.reachMargin * reachIn(tc - reaction, 0, vmax, accelFor(pl.attrs, p))
       const fromDrift = Math.hypot(contact.x - drift.x, contact.y - drift.y)
       const withinSpeed = Math.hypot(contact.x - pl.pos.x, contact.y - pl.pos.y) <= p.kinematics.reachM + vmax * tc
       if (d <= p.kinematics.reachM && tc <= dt) qualifiers.push({ pl, slack: p.kinematics.reachM - d, f })

@@ -308,6 +308,9 @@ const knockLoose = (w: Work, toucher: PlayerState, at: Vec2): void => {
   w.pressedBy = []
 }
 
+/** How urgently `defSide` must defend a ball at `at`: 1 on its goal line, 0 beyond 30 m from its goal. */
+const danger = (defSide: Side, at: Vec2): number => Math.max(0, 1 - dist(at, { x: -dirOf(defSide) * PITCH.halfL, y: 0 }) / 30)
+
 const duels = (w: Work, owner: PlayerState): boolean => {
   const opps = w.active(other(owner.side))
   for (const o of opps) {
@@ -319,7 +322,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
   const def = nearestOpponent(owner.pos, opps)
   if (!def || dist(def.pos, owner.pos) > w.p.defending.tackleRadiusM) return false
   const style = teamOf(w.cfg, def.side).style
-  const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity)
+  const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, owner.pos))
   if (!w.rng.duel.chance(hazard(rate, w.dt))) return false
   const pWin = 1 / (1 + Math.exp(-(w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling))))
   if (w.rng.duel.chance(pWin)) {
@@ -330,7 +333,8 @@ const duels = (w: Work, owner: PlayerState): boolean => {
     } else changePossession(w, def, w.pending("tackle", def, def.pos, { outcome: "won", opponent_id: owner.id, ball: "won" }))
     return true
   }
-  if (w.rng.referee.chance(w.p.defending.foulPerTackle)) {
+  const victimInBox = attackX(owner.side, owner.pos.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
+  if (w.rng.referee.chance(w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1))) {
     finishCarry(w, owner)
     w.emit(w.pending("tackle", def, def.pos, { outcome: "foul", opponent_id: owner.id }))
     foulAndCards(w, def, owner)
@@ -688,11 +692,11 @@ const ballTick = (w: Work): void => {
 const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | null): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl.attrs, pl.energy, w.p)
-  const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, ballFlat, team.style, possSide === pl.side), speedCap: vmax * 0.7 })
+  const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, ballFlat, team.style, possSide === pl.side, w.p.shape), speedCap: vmax * w.p.movement.shapeSpeedShare })
   const ph = w.phase
   if (ph.kind === "restart") {
     if (takerFor(w, ph).id === pl.id) return { target: ph.at, speedCap: vmax * 0.8 }
-    const a = anchorFor(team.formation, pl.slot, pl.side, ph.at, team.style, ph.side === pl.side)
+    const a = anchorFor(team.formation, pl.slot, pl.side, ph.at, team.style, ph.side === pl.side, w.p.shape)
     if (ph.restart === "kickoff") return { target: kickoffAnchor(team.formation, pl.slot, pl.side, team.style), speedCap: vmax * 0.6 }
     if (pl.side !== ph.side && dist(a, ph.at) < 9.15 && pl.role !== "GK") {
       const away = add(ph.at, scale(norm(sub(a, ph.at)), 9.5))
@@ -712,7 +716,15 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
     if (chasers.some((c) => c.id === pl.id) && pl.role !== "GK")
       return { target: interceptPoint(pl.pos, vmax, ballFlat, { x: w.ball.vel.x, y: w.ball.vel.y }), speedCap: vmax }
   }
-  if (pl.role === "GK") return shape()
+  if (pl.role === "GK") {
+    // Close down a ball carrier who gets near goal: stand between them and the goal centre, 2.5 m off the ball.
+    if (pos.kind === "owned" && possSide !== pl.side) {
+      const owner = w.player(pos.playerId)
+      const goal = { x: -dirOf(pl.side) * PITCH.halfL, y: 0 }
+      if (dist(owner.pos, goal) < w.p.defending.keeperRushM) return { target: add(owner.pos, scale(norm(sub(goal, owner.pos)), 2.5)), speedCap: vmax }
+    }
+    return shape()
+  }
   if (pos.kind === "owned" && possSide !== pl.side) {
     const owner = w.player(pos.playerId)
     if (pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
@@ -720,7 +732,8 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
     const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
     if (defenders[0]?.id === pl.id && dist(pl.pos, owner.pos) < 18) {
       const style = team.style
-      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity), w.dt))) {
+      const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, owner.pos)
+      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency, w.dt))) {
         w.setPlayer({ ...pl, intent: { kind: "press", targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) })
         return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
       }

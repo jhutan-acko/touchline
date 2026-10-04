@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ACTIONS, assertProvenance, DEFAULT_PARAMS, ParamsError } from "../src/params.js"
+import { ACTIONS, assertProvenance, DEFAULT_PARAMS, ParamsError, paramsFromJson } from "../src/params.js"
 import { ACTION_ZONES } from "../src/geometry.js"
 
 describe("params", () => {
@@ -13,5 +13,23 @@ describe("params", () => {
   })
   it("has a logit for every action in every zone", () => {
     for (const z of ACTION_ZONES) for (const a of ACTIONS) expect(Number.isFinite(DEFAULT_PARAMS.actions.logits[z][a])).toBe(true)
+  })
+})
+
+describe("params from JSON", () => {
+  it("merges a partial file onto the defaults and keeps provenance", () => {
+    const p = paramsFromJson({ provenance: { ...DEFAULT_PARAMS.provenance, version: "calib-x" }, kinematics: { reachMargin: 0.6 } })
+    expect(p.kinematics.reachMargin).toBe(0.6)
+    expect(p.kinematics.vmaxBase).toBe(DEFAULT_PARAMS.kinematics.vmaxBase)
+    expect(p.provenance.version).toBe("calib-x")
+  })
+  it("ignores keys the engine does not know (e.g. the calibration record)", () => {
+    const p = paramsFromJson({ provenance: DEFAULT_PARAMS.provenance, calibration: { loss: 3 } }) as unknown as Record<string, unknown>
+    expect(p.calibration).toBeUndefined()
+  })
+  it("refuses files without an allowed licence", () => {
+    expect(() => paramsFromJson({ kinematics: {} })).toThrow(ParamsError)
+    expect(() => paramsFromJson({ provenance: { ...DEFAULT_PARAMS.provenance, dataset: "StatsBomb open data", licence: "CC-BY-4.0" } })).toThrow(/StatsBomb/)
+    expect(() => paramsFromJson([1, 2])).toThrow(ParamsError)
   })
 })

@@ -73,7 +73,8 @@ export const anchorFor = (
   side: Side,
   ball: Vec2,
   style: TeamStyle,
-  inPossession: boolean
+  inPossession: boolean,
+  spread: { readonly width: number; readonly depth: number } = { width: 1, depth: 1 }
 ): Vec2 => {
   const s = FORMATIONS[formation][slot]!
   const d = dirOf(side)
@@ -86,8 +87,12 @@ export const anchorFor = (
   const slide = 0.5
   const line = style.lineHeight * 8 + (inPossession ? 7 : -2)
   const compact = 1 - 0.35 * style.compactness
-  const x = clamp(s.x + slide * bx + line, -PITCH.halfL + 4, PITCH.halfL - 3)
-  const y = clamp(s.y * compact + 0.35 * by, -PITCH.halfW + 1.5, PITCH.halfW - 1.5)
+  // Width stretches the shape fully in possession and partly without it; depth stretches the
+  // distance between lines around the team's centre (x = -18 in attacking space).
+  const width = inPossession ? spread.width : 1 + (spread.width - 1) * 0.4
+  const sx = -18 + (s.x + 18) * spread.depth
+  const x = clamp(sx + slide * bx + line, -PITCH.halfL + 4, PITCH.halfL - 3)
+  const y = clamp(s.y * compact * width + 0.35 * by, -PITCH.halfW + 1.5, PITCH.halfW - 1.5)
   return { x: x * d, y: y * d }
 }
 

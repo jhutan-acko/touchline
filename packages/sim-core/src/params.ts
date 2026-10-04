@@ -47,6 +47,8 @@ export interface Params {
     readonly accelMax: number
     readonly reactionS: number
     readonly reachM: number
+    /** Share of the straight-line reach used when judging who can get to a ball (see resolve.ts). */
+    readonly reachMargin: number
     readonly controlHeightM: number
     readonly headerHeightM: number
   }
@@ -89,6 +91,8 @@ export interface Params {
     readonly maxDistanceM: number
     readonly speed: number
     readonly onTargetRate: number
+    /** Multiplier on shot aiming error (calibration knob for on-target share). */
+    readonly aimNoise: number
     readonly blockPerDefender: number
   }
   readonly defending: {
@@ -103,10 +107,20 @@ export interface Params {
     /** Share of won tackles / ground interceptions that knock the ball loose instead of winning it cleanly. */
     readonly tackleLooseShare: number
     readonly interceptLooseShare: number
+    /** Extra pressing and tackling near a team's own goal: rates scale by 1 + boxIntensity x danger (0..1 within 30 m). */
+    readonly boxIntensity: number
+    /** Foul probability multiplier when the fouled player is inside the opponent's penalty area (defenders are careful there). */
+    readonly boxFoulFactor: number
+    /** Keeper comes off the line to close down a ball carrier within this distance of goal (m). */
+    readonly keeperRushM: number
   }
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
   readonly carry: { readonly speed: number; readonly durationS: readonly [number, number] }
   readonly runs: { readonly runInBehindRatePerS: number }
+  /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
+  readonly movement: { readonly shapeSpeedShare: number }
+  /** Team shape spread: width (fully in possession, partly without) and depth between lines. */
+  readonly shape: { readonly width: number; readonly depth: number }
   readonly classifier: ClassifierThresholds
 }
 
@@ -128,7 +142,7 @@ export const DEFAULT_PARAMS: Params = {
     fitted_at: "2026-10-03",
     version: "prior-0"
   },
-  kinematics: { vmaxBase: 9.2, accelMax: 4.5, reactionS: 0.7, reachM: 1.0, controlHeightM: 1.0, headerHeightM: 2.4 },
+  kinematics: { vmaxBase: 9.2, accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   ball: { drag: 0.013, rollDecel: 1.2, bounce: 0.55, gravity: 9.81, substeps: 4 },
   timing: {
     decisionMinS: 0.9,
@@ -159,10 +173,12 @@ export const DEFAULT_PARAMS: Params = {
   },
   execution: { dirSigma: 0.035, distSigma: 0.07, pressureK: 1.6, weakFootK: 1.45, mishitBase: 0.006, mishitK: 0.11 },
   shot: {
-    xg: { b0: -3.38, bDist: -0.0443, bAngle: 5.06, bHeader: -1.0, bDefenders: -0.3 },
+    // Fitted to an approximate public reference xG curve (central and off-centre open-play shots, 2-30 m); a prior, not data-derived.
+    xg: { b0: -1.25, bDist: -0.08, bAngle: 1.2, bHeader: -1.0, bDefenders: -0.3 },
     maxDistanceM: 32,
     speed: 26,
     onTargetRate: 0.38,
+    aimNoise: 1.0,
     blockPerDefender: 0.15
   },
   defending: {
@@ -175,11 +191,16 @@ export const DEFAULT_PARAMS: Params = {
     yellowPerFoul: 0.15,
     redPerFoul: 0.004,
     tackleLooseShare: 0.4,
-    interceptLooseShare: 0.3
+    interceptLooseShare: 0.3,
+    boxIntensity: 0,
+    boxFoulFactor: 0.2,
+    keeperRushM: 12
   },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0] },
   runs: { runInBehindRatePerS: 0.12 },
+  movement: { shapeSpeedShare: 0.7 },
+  shape: { width: 1, depth: 1 },
   classifier: {
     longPassM: 32,
     switchLateralM: 25,
@@ -203,4 +224,23 @@ export const assertProvenance = (p: { provenance?: Partial<Provenance> }): void 
   if (!(ALLOWED_LICENCES as ReadonlyArray<string>).includes(pv.licence))
     throw new ParamsError(`licence "${pv.licence}" is not allowed (allowed: ${ALLOWED_LICENCES.join(", ")})`)
   if (/statsbomb/i.test(pv.dataset)) throw new ParamsError("StatsBomb-derived parameters are not allowed")
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
+
+const mergeInto = (base: unknown, over: unknown): unknown => {
+  if (!isObject(base) || !isObject(over)) return over === undefined ? base : over
+  const out: Record<string, unknown> = { ...base }
+  for (const [k, v] of Object.entries(over)) if (k in base) out[k] = mergeInto(base[k], v)
+  return out
+}
+
+/**
+ * Parameters from a JSON file: the provenance gate first, then a deep merge onto DEFAULT_PARAMS
+ * (fields the file omits keep their defaults; keys the engine does not know are ignored).
+ */
+export const paramsFromJson = (json: unknown): Params => {
+  if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
+  assertProvenance(json as { provenance?: Partial<Provenance> })
+  return mergeInto(DEFAULT_PARAMS, json) as Params
 }

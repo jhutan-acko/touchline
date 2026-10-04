@@ -27,6 +27,15 @@ describe("team shape", () => {
     const line = (style: keyof typeof STYLES) => anchorFor("4-4-2", 2, "home", { x: 0, y: 0 }, STYLES[style], false).x
     expect(line("high_press")).toBeGreaterThan(line("low_block") + 10)
   })
+  it("width stretches the shape fully in possession and partly without it; depth stretches the lines", () => {
+    const wide = { width: 1.4, depth: 1 }
+    const fb = (inPoss: boolean, spread = { width: 1, depth: 1 }) => anchorFor("4-3-3", 1, "home", { x: 0, y: 0 }, STYLES.possession, inPoss, spread)
+    expect(Math.abs(fb(true, wide).y)).toBeGreaterThan(Math.abs(fb(true).y) * 1.35)
+    expect(Math.abs(fb(false, wide).y)).toBeLessThan(Math.abs(fb(true, wide).y))
+    const st = (depth: number) => anchorFor("4-3-3", 9, "home", { x: 0, y: 0 }, STYLES.possession, true, { width: 1, depth })
+    const cb = (depth: number) => anchorFor("4-3-3", 2, "home", { x: 0, y: 0 }, STYLES.possession, true, { width: 1, depth })
+    expect(st(1.3).x - cb(1.3).x).toBeGreaterThan(st(1).x - cb(1).x)
+  })
   it("kickoff anchors are in the team's own half", () => {
     for (let slot = 0; slot < 11; slot++) {
       expect(kickoffAnchor("4-3-3", slot, "home", STYLES.high_press).x).toBeLessThan(0)
