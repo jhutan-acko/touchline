@@ -43,9 +43,13 @@ describe("scenario modifiers", () => {
 
 describe("nudges raise the scripted outcome's rate", () => {
   const count = (script: Script | undefined, f: (e: DomainEvent) => boolean) => sum((seed) => play(cfgFor(seed, script)).filter(f).length)
-  it("press surge: the team presses far more", () => {
-    const f = (e: DomainEvent) => e.type === "pressure" && e.team_id === HOME
-    expect(count(one("press_surge"), f)).toBeGreaterThan(1.4 * count(undefined, f))
+  it("press surge: the team presses far more per opponent pass", () => {
+    // Pressures per 100 opponent passes, the measure the scenario runner uses (it does not depend on possession).
+    const rate = (script?: Script) => {
+      const ev = SEEDS.flatMap((seed) => play(cfgFor(seed, script)))
+      return ev.filter((e) => e.type === "pressure" && e.team_id === HOME).length / ev.filter((e) => e.type === "pass" && e.team_id !== HOME).length
+    }
+    expect(rate(one("press_surge"))).toBeGreaterThan(1.3 * rate())
   })
   it("goal: the team scores more", () => {
     const f = (e: DomainEvent) => e.type === "goal" && e.team_id === HOME

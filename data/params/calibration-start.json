@@ -1,18 +1,18 @@
 {
- "_comment": "Starting knob values for `pnpm calibrate --from data/params/calibration-start.json --matches 12`: the Plan 2a calibration (2026-10-04) plus the Plan 2b knobs (deflect_behind, clear_to_touch) at their defaults. Tuning from here is deterministic and reproduces the knobs, loss and statistics in data/params/touchline-params.json (its fitted_at and version carry the date of the run).",
+ "_comment": "Starting knob values for the Plan 2c recalibration (`pnpm calibrate --from data/params/calibration-start.json --matches 12 --rounds 1 --out out/calib-1.json`, then two more chunks): the Plan 2b calibration plus the save_b0 knob at its default. Tuning from here is deterministic and reproduces the knobs, loss and statistics in data/params/touchline-params.json (its fitted_at and version carry the date of the run).",
  "calibration": {
   "knobs": {
-   "decision_scale": 1,
+   "decision_scale": 0.75,
    "long_bias": 1.25,
    "cross_bias": 0.375,
    "shot_bias": 0,
    "aim_noise": 1.55,
    "xg_b0": -1,
-   "exec_scale": 1.45,
+   "exec_scale": 1.15,
    "reach_margin": 0.725,
    "tackle_rate": 0.8,
    "foul_per_tackle": 0.345,
-   "yellow_per_foul": 0.2,
+   "yellow_per_foul": 0.15,
    "box_intensity": 2,
    "box_carry": -0.75,
    "loose_share": 0.3,
@@ -21,7 +21,8 @@
    "shape_depth": 1.2,
    "shape_speed": 0.9,
    "deflect_behind": 1,
-   "clear_to_touch": 0.2
+   "clear_to_touch": 0.2,
+   "save_b0": 1.3
   }
  }
 }
