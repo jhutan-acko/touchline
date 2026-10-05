@@ -51,6 +51,18 @@ pnpm stats --run out/m-7               # replay it through the stats engine: tea
 pnpm stats --run out/m-7 --signals out/m-7/signals.jsonl
 ```
 
+## MCP stats server
+
+Agents read the match only through MCP tools (spec §5.3): `match_info`, `list_metrics`, `get_metric`, `get_series`, `rank_players`, `get_signals`, `get_events`, `get_decision` and `verify_claim`. All are read-only, every answer says which frame it is as of, and nothing later than that is ever returned.
+
+```bash
+pnpm -s mcp-stats --run out/m-7                 # stdio (stdout carries the protocol; logs go to stderr)
+pnpm -s mcp-stats --run out/m-7 --minute 60     # the match as it stood at 60'
+pnpm -s mcp-stats --run out/m-7 --http 8787     # Streamable HTTP at http://127.0.0.1:8787/mcp
+```
+
+An MCP client can launch it directly, for example: `{"command": "npx", "args": ["tsx", "packages/mcp-stats/src/cli.ts", "--run", "out/m-7"]}`.
+
 ## Packages
 
 | Package | What it does |
@@ -60,6 +72,7 @@ pnpm stats --run out/m-7 --signals out/m-7/signals.jsonl
 | `packages/schema` | Effect Schema for the live domain stream (events and frames) and for signals and metric ids |
 | `packages/sim` | Effect streams, CDF v0.3.2 writers, run manifest, CLI |
 | `packages/stats` | Stats engine: metrics and signals on the domain stream, replay of run folders, `pnpm stats` |
+| `packages/mcp-stats` | MCP server exposing the stats tools to agents (stdio or Streamable HTTP) |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
 | `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report, stats-model fitting |
 

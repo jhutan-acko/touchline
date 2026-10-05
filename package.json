@@ -11,7 +11,8 @@
     "league": "pnpm --filter @touchline/league run generate",
     "calibrate": "pnpm --filter @touchline/calibrate run calibrate",
     "realism": "pnpm --filter @touchline/calibrate run realism",
-    "stats": "pnpm --filter @touchline/stats run stats"
+    "stats": "pnpm --filter @touchline/stats run stats",
+    "mcp-stats": "pnpm --filter @touchline/mcp-stats run serve"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
