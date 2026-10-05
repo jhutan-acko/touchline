@@ -9,14 +9,19 @@ export const inOwnBox = (side: Side, at: Vec2): boolean =>
   attackX(side, at.x) < -(PITCH.halfL - PITCH.boxDepth) && Math.abs(at.y) < PITCH.boxHalfWidth
 
 /**
- * Where a deflection behind `defSide`'s own goal line ends up: 2.5 m beyond the line and wide of the posts,
- * roughly straight back from `at` (it gives a corner). The ball travels there directly (see DEFLECT_SPEED).
+ * Where a deflection behind `defSide`'s own goal line ends up: 2.5 m beyond the line, on a straight path from `at`
+ * that crosses the line wide of the posts (it gives a corner), roughly straight back. The ball travels there directly (see DEFLECT_SPEED).
  */
 export const behindPoint = (defSide: Side, at: Vec2, rng: Rng): Vec3 => {
+  const back = -dirOf(defSide)
   const sy = at.y === 0 ? (rng.chance(0.5) ? 1 : -1) : Math.sign(at.y)
   const wide = PITCH.goalHalfWidth + 1.5
-  const ty = Math.abs(at.y) > wide + 3 ? at.y + rng.range(-4, 4) : sy * (wide + rng.range(0, 8))
-  return { x: -dirOf(defSide) * (PITCH.halfL + 2.5), y: Math.abs(ty) < wide ? sy * wide : Math.max(-PITCH.halfW + 1, Math.min(PITCH.halfW - 1, ty)), z: rng.range(0.3, 2.5) }
+  // Where the ball crosses the goal line: straight back from a wide position, else 1.5-9.5 m outside the post.
+  const cross = Math.abs(at.y) > wide + 3 ? at.y + rng.range(-4, 4) : sy * (wide + rng.range(0, 8))
+  const cy = Math.abs(cross) < wide ? sy * wide : Math.max(-PITCH.halfW + 1, Math.min(PITCH.halfW - 1, cross))
+  const line = { x: back * PITCH.halfL, y: cy }
+  const d = Math.hypot(line.x - at.x, line.y - at.y) || 1
+  return { x: line.x + ((line.x - at.x) / d) * 2.5, y: line.y + ((line.y - at.y) / d) * 2.5, z: rng.range(0.3, 2.5) }
 }
 
 /** Speed of a deflection (m/s). */

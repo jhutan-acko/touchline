@@ -23,7 +23,7 @@ import {
 } from "./geometry.js"
 import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
-import { goalLineCrossing, keeperLetsRun, resolveFlight } from "./resolve.js"
+import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
 import { parryBall, planShot } from "./shot.js"
@@ -95,7 +95,11 @@ const planSubs = (cfg: MatchConfig, side: Side, rng: Rng): SubsState => {
   const bench = teamOf(cfg, side).bench ?? []
   const plan = bench.length === 0
     ? []
-    : s.windowMinutes.map((m, i) => ({ minute: Math.max(46, m + rng.normal() * s.windowSdMin), players: s.perWindow[i]! })).sort((a, b) => a.minute - b.minute)
+    : s.windowMinutes
+        .map((m, i) => ({ minute: Math.max(46, m + rng.normal() * s.windowSdMin), players: s.perWindow[i]!, used: rng.chance(s.windowChance[i]!) }))
+        .filter((x) => x.used)
+        .map(({ minute, players }) => ({ minute, players }))
+        .sort((a, b) => a.minute - b.minute)
   return { plan, made: 0, windows: 0, used: [] }
 }
 
@@ -603,7 +607,8 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
       outcome,
       pending: finalMain,
       extra,
-      path: null,
+      // A blocked cross travels straight to the blocker; every other kick follows the ball physics.
+      path: blocked ? { from: start.pos, to: { x: blocker!.pos.x, y: blocker!.pos.y, z: 0.5 } } : null,
       restartAfter,
       looseBall: looseAfter,
       deflectTo
@@ -620,7 +625,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const isPenalty = restart === "penalty"
   const xg = isPenalty ? 0.76 : (d.xg ?? 0.02)
   // The recorded xG is the model's; the chance of scoring also follows the game state (minute, red cards).
-  const scoring = isPenalty ? 1 : scoringFactor(w.minute(), w.active(side).length, opps.length, w.p)
+  const scoring = isPenalty ? 1 : scoringFactor(w.minute(), w.active(side).length, opps.length, w.p, w.period)
   const weakFoot = !isPenalty && w.rng.execution.chance(0.2)
   const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, scoring)
   const tickAt = w.tick + plan.ticks
@@ -774,7 +779,7 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     const pressure = pressureFrom(opp ? dist(opp.pos, r.pos) : 50)
     const speed = Math.hypot(w.ball.vel.x, w.ball.vel.y, w.ball.vel.z)
     touch = drawFirstTouch(firstTouchError({ speed, height: w.ball.pos.z, pressure, skill: (r.attrs.dribbling + r.attrs.composure) / 2 }, w.p), w.rng.execution, w.p)
-    w.emit({ ...e, attrs: { ...e.attrs, first_touch: touch, under_pressure: pressure > 0.3, lost_possession: touch === "controlled" ? false : null } })
+    w.emit({ ...e, attrs: { ...e.attrs, first_touch: touch, under_pressure: pressure > 0.3, lost_possession: touch !== "controlled" } })
   }
   const goal = f.extra.find((e) => e.type === "goal")
   if (goal) w.score[goal.team_id === w.teamId("home") ? "home" : "away"] += 1
@@ -1054,7 +1059,9 @@ export const step = (s: MatchState): StepResult => {
   // The half ends when it is due, except while a set piece is being set up or the ball is in the air
   // (a flight lasts at most MAX_FLIGHT_S); the hard stop one minute later always applies.
   if (w.periodTick >= w.periodTicks && w.phase.kind !== "restart" && w.possession.kind !== "in_flight") return endPeriod(w)
-  if (w.periodTick >= w.periodTicks + Math.round(60 / w.dt)) return endPeriod(w)
+  // The hard stop a minute later still lets a ball in the air land (a flight lasts at most MAX_FLIGHT_S).
+  const hardStop = w.periodTicks + Math.round(60 / w.dt)
+  if (w.periodTick >= hardStop && (w.possession.kind !== "in_flight" || w.periodTick >= hardStop + Math.round(MAX_FLIGHT_S / w.dt))) return endPeriod(w)
   if (w.phase.kind === "restart") handleRestart(w)
   if (w.phase.kind === "open_play") ownedTick(w)
   moveAll(w)

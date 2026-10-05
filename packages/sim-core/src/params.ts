@@ -171,7 +171,14 @@ export interface Params {
    * red-card factors for the team down to fewer players and for its opponent.
    */
   readonly gameState: { readonly minuteProfile: readonly [number, number, number, number, number, number]; readonly redCardOwn: number; readonly redCardOpponent: number }
-  readonly substitutions: { readonly windowMinutes: readonly [number, number, number]; readonly windowSdMin: number; readonly perWindow: readonly [number, number, number]; readonly halfTimeChance: number }
+  readonly substitutions: {
+    readonly windowMinutes: readonly [number, number, number]
+    readonly windowSdMin: number
+    readonly perWindow: readonly [number, number, number]
+    /** Chance that each planned window is used. */
+    readonly windowChance: readonly [number, number, number]
+    readonly halfTimeChance: number
+  }
   readonly classifier: ClassifierThresholds
 }
 
@@ -269,7 +276,8 @@ export const DEFAULT_PARAMS: Params = {
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
-  substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], halfTimeChance: 0.2 },
+  // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
+  substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2 },
   classifier: {
     longPassM: 32,
     switchLateralM: 25,
