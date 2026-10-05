@@ -102,6 +102,8 @@ export interface Params {
     readonly blockPressure: number
     /** Share of blocked shots deflected behind the goal line (corners). */
     readonly blockBehind: number
+    /** Save model for shots on target (see saveChance): intercept and the effects of placement, distance and reflexes. */
+    readonly save: { readonly b0: number; readonly bWide: number; readonly bEdge: number; readonly bDistance: number; readonly bReflexes: number }
   }
   readonly defending: {
     readonly pressRatePerS: number
@@ -241,7 +243,9 @@ export const DEFAULT_PARAMS: Params = {
     blockPerDefender: 0.23,
     blockWidthM: 3.5,
     blockPressure: 0.2,
-    blockBehind: 0.5
+    blockBehind: 0.5,
+    // A prior shaped like public post-shot xG findings (corners and close range beat keepers); the intercept is tuned to the IDSSE save rate.
+    save: { b0: 1.3, bWide: -1.6, bEdge: -0.7, bDistance: 0.6, bReflexes: 2.0 }
   },
   defending: {
     pressRatePerS: 0.6,
@@ -332,7 +336,7 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
 /** Model coefficients and logits, which may take any sign. */
-const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "kinematics.reachMargin", "ball.bounce", "execution.mishitBase", "movement.shapeSpeedShare",

@@ -5,7 +5,7 @@ import { DEFAULT_PARAMS as P } from "../src/params.js"
 import * as KIN from "../src/kinematics.js"
 import { goalLineCrossing, resolveFlight } from "../src/resolve.js"
 import { Rng, seedRng } from "../src/rng.js"
-import { parryBall, planShot } from "../src/shot.js"
+import { parryBall, planShot, saveChance } from "../src/shot.js"
 import type { PlayerState } from "../src/types.js"
 import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
 
@@ -33,16 +33,28 @@ describe("resolveFlight", () => {
 })
 
 describe("planShot", () => {
-  it("goals per shot track xG on average (keeper only, no blockers)", () => {
+  it("keepers save corners and well-struck shots less often, close-range shots less often, and good keepers more", () => {
+    const keeper = at(base.find((p) => p.side === "away" && p.role === "GK")!, 51, 0)
+    const shot = { y: 0, z: 1.2, distance: 16 }
+    expect(saveChance({ ...shot, y: 3.4 }, keeper, P)).toBeLessThan(saveChance(shot, keeper, P))
+    expect(saveChance({ ...shot, z: 0.1 }, keeper, P)).toBeLessThan(saveChance(shot, keeper, P))
+    expect(saveChance({ ...shot, distance: 6 }, keeper, P)).toBeLessThan(saveChance(shot, keeper, P))
+    const great = { ...keeper, attrs: { ...keeper.attrs, reflexes: 0.95 } }, poor = { ...keeper, attrs: { ...keeper.attrs, reflexes: 0.3 } }
+    expect(saveChance(shot, great, P)).toBeGreaterThan(saveChance(shot, poor, P))
+  })
+  it("keepers save roughly two in three shots on target from the edge of the box", () => {
     const shooter = at(base[9]!, 36, 4)
     const keeper = at(base.find((p) => p.side === "away" && p.role === "GK")!, 51, 0)
     const xg = xgOf(P, "home", shooter.pos, false, 0)
     const r = new Rng(seedRng(3))
-    let goals = 0
-    const n = 6000
-    for (let i = 0; i < n; i++) if (planShot(shooter, "home", [keeper], xg, 0, false, P, 0.1, r).outcome === "goal") goals++
-    expect(goals / n).toBeGreaterThan(xg * 0.75)
-    expect(goals / n).toBeLessThan(xg * 1.25)
+    let on = 0, goals = 0
+    for (let i = 0; i < 6000; i++) {
+      const s = planShot(shooter, "home", [keeper], xg, 0, false, P, 0.1, r)
+      if (s.onTarget) on++
+      if (s.outcome === "goal") goals++
+    }
+    expect(1 - goals / on).toBeGreaterThan(0.55)
+    expect(1 - goals / on).toBeLessThan(0.8)
   })
   it("penalties score about three times in four", () => {
     const shooter = at(base[9]!, 41.5, 0)

@@ -52,7 +52,29 @@ export const parryBall = (side: Side, saveAt: Vec3, handling: Handling, rng: Rng
   return { pos: saveAt, vel: { x: -d * rng.range(3, 7), y: rng.range(-5, 5), z: 0.5 } }
 }
 
-/** Resolve a shot at release: blocks, execution error, on-target check, keeper. */
+/** Where an on-target shot crosses the goal line (m from the centre, m above the ground) and how far it was struck from. */
+export interface ShotOnTarget {
+  readonly y: number
+  readonly z: number
+  readonly distance: number
+}
+
+/**
+ * Chance that the keeper saves an on-target shot: lower towards the posts (`bWide`) and near the bar or the
+ * ground (`bEdge`), lower from close range (`bDistance` per 10 m beyond 16 m), higher for quick reflexes.
+ */
+export const saveChance = (s: ShotOnTarget, keeper: PlayerState, p: Params): number => {
+  const c = p.shot.save
+  const wide = Math.min(1, Math.abs(s.y) / PITCH.goalHalfWidth)
+  const edge = Math.min(1, Math.abs(s.z / PITCH.goalHeight - 0.5) * 2)
+  return 1 / (1 + Math.exp(-(c.b0 + c.bWide * wide + c.bEdge * edge + (c.bDistance * (s.distance - 16)) / 10 + c.bReflexes * (keeper.attrs.reflexes - 0.6))))
+}
+
+/**
+ * Resolve a shot at release in three steps: a block by a defender, then the aim (execution error decides
+ * whether it is on target), then the keeper's save (saveChance). `xg` is the decision model's value; it is
+ * recorded on the event and does not set the outcome.
+ */
 export const planShot = (
   shooter: PlayerState,
   side: Side,
@@ -116,10 +138,12 @@ export const planShot = (
   const onTarget = Math.abs(y) < PITCH.goalHalfWidth && z < PITCH.goalHeight
   const keeper = opponents.find((o) => o.role === "GK" && !o.sentOff) ?? null
   if (!onTarget) return { outcome: "wide", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }
-  // Scale by the expected on-target probability for this aim and noise, so goals per shot track xG.
+  // Penalties keep their fixed conversion (scaled by how likely this aim was to be on target); every other
+  // shot on target beats the keeper unless saved, by placement, distance and the keeper's reflexes (see saveChance).
   // Heights below 0 are clamped to the ground, so the vertical window is (-inf, crossbar).
-  const pOnTarget = Math.max(0.05, normalBetween(-PITCH.goalHalfWidth, PITCH.goalHalfWidth, aimY, sdY) * normalBetween(-50, PITCH.goalHeight, aimZ, sdZ))
-  const pGoalClean = Math.min(0.95, Math.max(0.03, Math.min(0.95, (isPenalty ? 0.76 : xg) / pOnTarget)) * scoring)
+  const pGoalClean = isPenalty
+    ? Math.min(0.95, 0.76 / Math.max(0.05, normalBetween(-PITCH.goalHalfWidth, PITCH.goalHalfWidth, aimY, sdY) * normalBetween(-50, PITCH.goalHeight, aimZ, sdZ)))
+    : Math.min(0.95, (keeper ? 1 - saveChance({ y, z, distance: d }, keeper, p) : 1) * scoring)
   const pGoal = mis ? pGoalClean * 0.3 : pGoalClean
   if (rng.chance(pGoal) || keeper === null)
     return { outcome: "goal", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }

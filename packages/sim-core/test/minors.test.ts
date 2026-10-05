@@ -41,7 +41,9 @@ describe("the hard stop at the end of a half", () => {
 })
 
 describe("blocked crosses and deflections", () => {
-  const runs = [1, 2, 3].map((seed) => play(makeConfig(seed, { params: calibrated })))
+  // Every cross within 8 m of a defender is blocked, so each match has plenty of blocks to check.
+  const blocky = { ...calibrated, defending: { ...calibrated.defending, crossBlock: 1, crossBlockM: 8 } }
+  const runs = [1, 2, 3].map((seed) => play(makeConfig(seed, { params: blocky })))
   it("the ball travels to the blocker: no jump in the frame before the block", () => {
     let n = 0
     for (const r of runs) {
@@ -53,7 +55,7 @@ describe("blocked crosses and deflections", () => {
         expect(Math.hypot(before.ball.x - e.x!, before.ball.y - e.y!), e.id).toBeLessThan(2.5)
       }
     }
-    expect(n).toBeGreaterThanOrEqual(2)
+    expect(n).toBeGreaterThan(10)
   })
   it("a deflection behind never crosses the goal line between the posts", () => {
     const r = new Rng(seedRng(9))
