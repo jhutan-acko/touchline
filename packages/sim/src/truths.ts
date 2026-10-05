@@ -78,7 +78,7 @@ export interface CriticalError {
 }
 
 /**
- * A mistake is critical when the opponent shoots within 15 s and before the mistake's team wins the ball back
+ * A mistake that lost the ball is critical when the opponent shoots within 15 s and before the mistake's team wins it back
  * (spec §5.1.10: error leading to a shot or goal); a goal from that shot makes it an error leading to a goal.
  */
 export const criticalErrors = (events: ReadonlyArray<DomainEvent>, cfg: MatchConfig): CriticalError[] => {
@@ -86,8 +86,15 @@ export const criticalErrors = (events: ReadonlyArray<DomainEvent>, cfg: MatchCon
   const horizon = Math.round(15 / cfg.dt)
   const ids = new Set(mistakes(ordered).map((m) => m.event_id))
   const out: CriticalError[] = []
+  // The mistake itself must have given the ball away: a kick that did not reach a teammate, or a bad touch
+  // after which the opponent had the ball within 5 s.
+  const lostBall = (m: DomainEvent, later: ReadonlyArray<DomainEvent>): boolean => {
+    if (m.type !== "reception") return m.outcome !== "successful"
+    const change = later.find((e) => e.type === "possession_change")
+    return change !== undefined && change.team_id !== m.team_id && change.frame_id - m.frame_id <= Math.round(5 / cfg.dt)
+  }
   ordered.forEach((m, i) => {
-    if (!ids.has(m.id)) return
+    if (!ids.has(m.id) || !lostBall(m, ordered.slice(i + 1))) return
     for (const e of ordered.slice(i + 1)) {
       if (e.frame_id - m.frame_id > horizon) break
       if (e.type === "possession_change" && e.team_id === m.team_id) break

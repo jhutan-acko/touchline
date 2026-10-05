@@ -21,9 +21,12 @@ export interface WindowResult {
   readonly toFrame: number
 }
 
+/** What a step produced: its frame and events (without the match state, which would cost ~25 kB per step). */
+export type StepOutput = Pick<StepResult, "frame" | "events">
+
 export interface ScriptedRun {
-  /** Every step of the accepted match, kickoff to full time, as from step(). */
-  readonly steps: ReadonlyArray<StepResult>
+  /** Every step of the accepted match, kickoff to full time: frame and events only. */
+  readonly steps: ReadonlyArray<StepOutput>
   readonly windows: ReadonlyArray<WindowResult>
 }
 
@@ -65,7 +68,7 @@ export const entryAchieved = (entry: ScriptEntry, events: ReadonlyArray<DomainEv
       return own >= 3 && own >= 2 * n((e) => e.type === "shot" && e.team_id === opp)
     }
     case "keeper_heroics":
-      return n((e) => e.type === "keeper_save" && e.team_id === team) >= 2
+      return n((e) => e.type === "keeper_save" && e.team_id === team) >= KEEPER_HEROICS_SAVES
     case "keeper_howler":
       return (
         n((e) => e.type === "keeper_save" && e.team_id === team && (e.attrs.handling === "fumble" || e.attrs.handling === "parried_dangerous")) >= 1 ||
@@ -74,7 +77,8 @@ export const entryAchieved = (entry: ScriptEntry, events: ReadonlyArray<DomainEv
     case "defensive_error": {
       const roles = rolesOf(cfg)
       const attack = entry.team === "home" ? 1 : -1
-      return n((e) => e.type === "pass" && e.team_id === team && e.attrs.execution === "mishit" && ["CB", "FB", "DM"].includes(roles.get(e.player_id ?? "") ?? "") && (e.x ?? 0) * attack < 0) >= 1
+      // A defender's mis-hit kick in their own half: a pass, or a clearance that was meant to get the ball away.
+      return n((e) => (e.type === "pass" || e.type === "clearance") && e.team_id === team && e.attrs.execution === "mishit" && ["CB", "FB", "DM"].includes(roles.get(e.player_id ?? "") ?? "") && (e.x ?? 0) * attack < 0) >= 1
     }
   }
 }
@@ -92,9 +96,15 @@ const groups = (entries: ReadonlyArray<ScriptEntry>): ScriptEntry[][] => {
   return out
 }
 
-/** Forced outcomes for a block: one per goal wanted, one per other forceable effect (pressing and momentum cannot be forced). */
-const forcesFor = (block: ReadonlyArray<ScriptEntry>): ScriptEntry[] =>
-  block.flatMap((e) => (e.effect === "press_surge" || e.effect === "momentum_swing" ? [] : Array.from({ length: e.effect === "goal" ? (e.count ?? 1) : 1 }, () => e)))
+/** How many forced outcomes an entry's target needs: its goals, two saves for heroics, one otherwise (pressing and momentum cannot be forced). */
+const forcesNeeded = (e: ScriptEntry): number =>
+  e.effect === "press_surge" || e.effect === "momentum_swing" ? 0 : e.effect === "goal" ? (e.count ?? 1) : e.effect === "keeper_heroics" ? KEEPER_HEROICS_SAVES : 1
+
+/** The number of saves that make keeper heroics. */
+const KEEPER_HEROICS_SAVES = 2
+
+/** Forced outcomes for a block: as many per entry as its target needs. */
+const forcesFor = (block: ReadonlyArray<ScriptEntry>): ScriptEntry[] => block.flatMap((e) => Array.from({ length: forcesNeeded(e) }, () => e))
 
 /**
  * Play a match under its scenario script (spec §5.1.7): nudge (the engine applies the script's modifiers inside
@@ -105,30 +115,31 @@ const forcesFor = (block: ReadonlyArray<ScriptEntry>): ScriptEntry[] =>
 export const runScript = (cfg: MatchConfig, opts: RunOptions = {}): ScriptedRun => {
   const retries = opts.retries ?? 5
   const blocks = groups(cfg.script?.entries ?? [])
-  const steps: StepResult[] = []
+  const steps: StepOutput[] = []
   const windows: WindowResult[] = []
   let s = initMatch(cfg)
   const advance = (until: (st: MatchState) => boolean) => {
     while (!isFinished(s) && !until(s)) {
       const r = step(s)
       s = r.state
-      steps.push(r)
+      steps.push({ frame: r.frame, events: r.events })
     }
   }
   blocks.forEach((block, bi) => {
     const [start, end] = block[0]!.window
-    advance((st) => minuteOf(st) >= start)
+    // A window starting at 45 or later waits for the second half (first-half added time also reaches minute 45+).
+    advance((st) => minuteOf(st) >= start && (start < 45 || st.period === "second_half"))
     if (isFinished(s)) return
     const checkpoint = s
     for (let attempt = 0; attempt <= retries + 1; attempt++) {
       const forcing = attempt === retries + 1
       let t = attempt === 0 ? checkpoint : reseed(checkpoint, bi, attempt)
       if (forcing) t = { ...t, forced: forcesFor(block) }
-      const buffer: StepResult[] = []
+      const buffer: StepOutput[] = []
       while (!isFinished(t) && minuteOf(t) < end) {
         const r = step(t)
         t = r.state
-        buffer.push(r)
+        buffer.push({ frame: r.frame, events: r.events })
       }
       const events = buffer.flatMap((r) => r.events)
       const achieved = block.every((e) => entryAchieved(e, events, cfg))

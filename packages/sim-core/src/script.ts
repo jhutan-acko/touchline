@@ -1,5 +1,6 @@
 import type { Side } from "./geometry.js"
 import type { Params } from "./params.js"
+import type { Period } from "./types.js"
 
 /** What a scenario script can make happen (spec §5.1.7). */
 export const EFFECTS = ["goal", "red_card", "press_surge", "keeper_heroics", "momentum_swing", "keeper_howler", "defensive_error"] as const
@@ -48,15 +49,23 @@ export interface Mods {
 export const NO_MODS: Mods = { shotLogit: 0, attackLogit: 0, scoring: 1, press: 1, tackle: 1, foul: 1, red: 1, saveLogit: 0, fumble: 0, mishit: 1, aim: 1 }
 
 /**
- * The modifiers for `side` at `minute`: neutral without a script, outside every window, or for the other team.
- * `goals[i]` counts the goals scored so far in entry i's window; a goal entry stops nudging once its count is reached.
+ * Whether match minute `minute` of `period` is inside a window. Minutes 45+ happen in both halves (first-half added
+ * time, then the second half), so a window starting at 45 or later belongs to the second half and one ending at 45 or
+ * earlier to the first; without a period only the minutes are compared.
  */
-export const modsFor = (script: Script | undefined, side: Side, minute: number, p: Params, goals: ReadonlyArray<number> = []): Mods => {
+export const inWindow = (window: readonly [number, number], minute: number, period?: Period): boolean =>
+  minute >= window[0] && minute < window[1] && !(period === "first_half" && window[0] >= 45) && !(period === "second_half" && window[1] <= 45)
+
+/**
+ * The modifiers for `side` at `minute` of `period`: neutral without a script, outside every window, or for the other
+ * team. `goals[i]` counts the goals scored so far in entry i's window; a goal entry stops nudging once its count is reached.
+ */
+export const modsFor = (script: Script | undefined, side: Side, minute: number, p: Params, goals: ReadonlyArray<number> = [], period?: Period): Mods => {
   if (!script) return NO_MODS
   const s = p.script
   let m = NO_MODS
   script.entries.forEach((e, i) => {
-    if (e.team !== side || minute < e.window[0] || minute >= e.window[1]) return
+    if (e.team !== side || !inWindow(e.window, minute, period)) return
     switch (e.effect) {
       case "goal": {
         if ((goals[i] ?? 0) >= (e.count ?? 1)) return
@@ -97,5 +106,5 @@ export const modsFor = (script: Script | undefined, side: Side, minute: number, 
 }
 
 /** Count a goal for `side` at `minute` against every goal entry for that side whose window contains it. */
-export const countGoal = (script: Script | undefined, goals: ReadonlyArray<number>, side: Side, minute: number): number[] =>
-  (script?.entries ?? []).map((e, i) => (goals[i] ?? 0) + (e.effect === "goal" && e.team === side && minute >= e.window[0] && minute < e.window[1] ? 1 : 0))
+export const countGoal = (script: Script | undefined, goals: ReadonlyArray<number>, side: Side, minute: number, period?: Period): number[] =>
+  (script?.entries ?? []).map((e, i) => (goals[i] ?? 0) + (e.effect === "goal" && e.team === side && inWindow(e.window, minute, period) ? 1 : 0))

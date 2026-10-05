@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { initMatch, isFinished, modsFor, paramsFromJson, step, type DomainEvent, type MatchConfig, type MatchState, type Script, type ScenarioEffect } from "../src/index.js"
+import { initMatch, isFinished, modsFor, NO_MODS, paramsFromJson, step, type DomainEvent, type MatchConfig, type MatchState, type Script, type ScenarioEffect } from "../src/index.js"
 import { makeConfig } from "../src/testing.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -28,6 +28,13 @@ describe("scenario modifiers", () => {
     expect(modsFor(s, "home", 30, params)).toEqual(neutral)
     expect(modsFor(s, "away", 65, params)).toEqual(neutral)
     expect(modsFor(s, "home", 65, params).press).toBeGreaterThan(1)
+  })
+  it("a second-half window is not opened by first-half added time (minutes 45+ happen in both halves)", () => {
+    const s = one("press_surge", [46, 55])
+    expect(modsFor(s, "home", 46.5, params, [], "first_half")).toEqual(NO_MODS)
+    expect(modsFor(s, "home", 46.5, params, [], "second_half").press).toBeGreaterThan(1)
+    const first = one("press_surge", [30, 45])
+    expect(modsFor(first, "home", 44, params, [], "second_half")).toEqual(NO_MODS)
   })
   it("a goal entry stops nudging once its count is reached", () => {
     const s: Script = { name: "g", entries: [{ window: [0, 95], team: "home", effect: "goal", count: 2 }] }

@@ -42,6 +42,14 @@ describe("critical errors", () => {
     expect(e.map((c) => c.kind)).toEqual(["error_leading_to_goal"])
     expect(e[0]).toMatchObject({ mistake_id: mistake.id, shot_id: goal.id, team_id: H })
   })
+  it("not when the mistake did not lose the ball: a mis-hit pass that still found a teammate, or a heavy touch the player kept", () => {
+    const kept = ev("pass", 1000, H, { execution: "mishit", under_pressure: true }, { outcome: "successful" })
+    expect(criticalErrors([kept, ev("possession_change", 1040, A), ev("shot", 1100, A, {}, { outcome: "goal" })], cfg)).toEqual([])
+    const touchKept = ev("reception", 1000, H, { first_touch: "heavy", under_pressure: true })
+    expect(criticalErrors([touchKept, ev("shot", 1100, A, {}, { outcome: "goal" })], cfg)).toEqual([])
+    const touchLost = ev("reception", 1000, H, { first_touch: "heavy", under_pressure: true })
+    expect(criticalErrors([touchLost, ev("possession_change", 1010, A), ev("shot", 1100, A, {}, { outcome: "goal" })], cfg).map((c) => c.kind)).toEqual(["error_leading_to_goal"])
+  })
   it("not when the team wins the ball back first, or the shot comes more than 15 s later", () => {
     const regain = ev("possession_change", 1050, H)
     expect(criticalErrors([mistake, regain, ev("shot", 1100, A, {}, { outcome: "goal" })], cfg)).toEqual([])

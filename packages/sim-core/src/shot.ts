@@ -158,14 +158,18 @@ export const planShot = (
     const closer = opponents.filter((o) => !o.sentOff && o.role !== "GK").sort((a, b) => dist(a.pos, shooter.pos) - dist(b.pos, shooter.pos))[0]
     if (closer && rng.chance(p.shot.blockPressure * pressure)) return blocked(closer)
   }
-  const onTarget = Math.abs(y) < PITCH.goalHalfWidth && z < PITCH.goalHeight
   const keeper = opponents.find((o) => o.role === "GK" && !o.sentOff) ?? null
+  if (keeper && (mods.force === "save" || mods.force === "keeper_error")) {
+    // Scripted, last resort: this (unblocked) shot is on target, and the keeper saves it or lets it in.
+    const fy = Math.max(-(PITCH.goalHalfWidth - 0.4), Math.min(PITCH.goalHalfWidth - 0.4, y))
+    const fz = Math.min(z, PITCH.goalHeight - 0.4)
+    if (mods.force === "save")
+      return { outcome: "saved", ticks: travel(d), from, to: { x: goal.x - dirOf(side) * 0.8, y: fy, z: fz }, execution, onTarget: true, blockerId: null, keeperId: keeper.id, handling: "clean", forced: true }
+    return { outcome: "goal", ticks: travel(d), from, to: { x: goal.x, y: fy, z: fz }, execution, onTarget: true, blockerId: null, keeperId: null, handling: null, forced: true }
+  }
+  const onTarget = Math.abs(y) < PITCH.goalHalfWidth && z < PITCH.goalHeight
   if (!onTarget) return { outcome: "wide", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }
   const saveAt: Vec3 = { x: goal.x - dirOf(side) * 0.8, y: Math.max(-3.5, Math.min(3.5, y)), z }
-  if (keeper && mods.force === "save")
-    return { outcome: "saved", ticks: travel(d), from, to: saveAt, execution, onTarget, blockerId: null, keeperId: keeper.id, handling: "clean", forced: true }
-  if (keeper && mods.force === "keeper_error")
-    return { outcome: "goal", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null, forced: true }
   // Penalties keep their fixed conversion (scaled by how likely this aim was to be on target); every other
   // shot on target beats the keeper unless saved, by placement, distance and the keeper's reflexes (see saveChance).
   // Heights below 0 are clamped to the ground, so the vertical window is (-inf, crossbar).

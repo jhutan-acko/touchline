@@ -19,11 +19,12 @@ const ev = (type: DomainEvent["type"], team: string, attrs: Record<string, unkno
 const one = (e: DomainEvent) => spadlActions([e], cfg)[0]!
 
 describe("SPADL view", () => {
-  it("uses SPADL's coordinates (0..105 x 0..68) with every action going left to right: the away team is flipped", () => {
+  it("uses SPADL's coordinates (0..105 x 0..68) in socceraction's stored frame: home attacks left to right, the away team is not flipped", () => {
+    // socceraction's converters store actions this way; its play_left_to_right() flips the away team for analysis.
     const home = one(ev("pass", H, { kind: "short" }, { outcome: "successful" }))
     expect([home.start_x, home.start_y, home.end_x, home.end_y]).toEqual([52.5, 34, 62.5, 39])
     const away = one(ev("pass", A, { kind: "short" }, { outcome: "successful" }))
-    expect([away.start_x, away.start_y, away.end_x, away.end_y]).toEqual([52.5, 34, 42.5, 29])
+    expect([away.start_x, away.start_y, away.end_x, away.end_y]).toEqual([52.5, 34, 62.5, 39])
   })
   it("maps passes by kind and restart, and their results", () => {
     const t = (attrs: Record<string, unknown>, outcome = "successful") => one(ev("pass", H, attrs, { outcome }))

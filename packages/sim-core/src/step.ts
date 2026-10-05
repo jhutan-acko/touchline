@@ -243,12 +243,12 @@ class Work {
   }
   /** Scenario-script modifiers for `side` now. */
   mods(side: Side): Mods {
-    return modsFor(this.cfg.script, side, this.minute(), this.p, this.scriptGoals)
+    return modsFor(this.cfg.script, side, this.minute(), this.p, this.scriptGoals, this.period)
   }
   /** A goal for `side`: the score, and the script's goal progress. */
   addGoal(side: Side): void {
     this.score[side] += 1
-    if (this.cfg.script) this.scriptGoals = countGoal(this.cfg.script, this.scriptGoals, side, this.minute())
+    if (this.cfg.script) this.scriptGoals = countGoal(this.cfg.script, this.scriptGoals, side, this.minute(), this.period)
   }
   /** Whether an outcome of `effect` is forced for `side`'s next qualifying action. */
   hasForced(side: Side, effect: ScenarioEffect): boolean {
@@ -675,7 +675,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
         : undefined
   const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, aim: isPenalty ? 1 : own.aim, ...(force ? { force } : {}) }
   const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
-  // A forced save or keeper error is used up only by a shot that reached the target.
+  // A forced save or keeper error is used up by the next shot that is not blocked.
   if (plan.forced && force === "save") w.takeForced(other(side), "keeper_heroics")
   if (plan.forced && force === "keeper_error") w.takeForced(other(side), "keeper_howler")
   const tickAt = w.tick + plan.ticks
@@ -741,8 +741,9 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
 /** Scenario-script logit shifts for the team on the ball (see script.ts). */
 const scriptBias = (w: Work, side: Side): Partial<Record<Action, number>> => {
   const m = w.mods(side)
-  // While a goal is forced, the team pushes forward and looks for the shot that will carry it.
-  const forcing = w.hasForced(side, "goal") ? w.p.script.forcedShotLogit : 0
+  // While a goal is forced, the team pushes forward and looks for the shot that will carry it; while the other
+  // keeper's saves are forced (heroics), this team shoots so that there is something to save.
+  const forcing = w.hasForced(side, "goal") || w.hasForced(other(side), "keeper_heroics") ? w.p.script.forcedShotLogit : 0
   const shot = m.shotLogit + forcing
   const attack = m.attackLogit + forcing / 2
   if (shot === 0 && attack === 0) return {}

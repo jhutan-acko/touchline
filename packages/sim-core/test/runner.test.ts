@@ -58,4 +58,24 @@ describe("scenario runner", () => {
     const script: Script = { name: "t", entries: [{ window: [20, 40], team: "home", effect: "goal" }, { window: [30, 50], team: "away", effect: "goal" }] }
     expect(() => runScript(makeConfig(1, { params, script }))).toThrow(ScriptError)
   })
+  it("a forced window always meets its target (keeper heroics needs two saves; a forced defensive error counts on a clearance too)", () => {
+    for (const effect of ["keeper_heroics", "defensive_error"] as const) {
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const script: Script = { name: effect, entries: [{ window: [20, 40], team: "home", effect }] }
+        const w = runScript(makeConfig(seed, { params, script }), { retries: 0 }).windows[0]!
+        if (w.forced) expect(w.achieved, `${effect} seed ${seed}`).toBe(true)
+      }
+    }
+  })
+  it("keeps only frames and events per step, not whole match states (memory for a 25 fps match)", () => {
+    const script: Script = { name: "t", entries: [{ window: [20, 30], team: "home", effect: "goal" }] }
+    const run = runScript(makeConfig(10, { params, script }))
+    expect(run.steps.every((r) => Object.keys(r).sort().join() === "events,frame")).toBe(true)
+  })
+  it("opens a second-half window in the second half, even after long first-half added time", () => {
+    const script: Script = { name: "t", entries: [{ window: [46, 55], team: "home", effect: "press_surge" }] }
+    const run = runScript(makeConfig(11, { params, script }))
+    const w = run.windows[0]!
+    expect(run.steps.find((r) => r.frame?.tick === w.fromFrame)!.frame!.period).toBe("second_half")
+  })
 })

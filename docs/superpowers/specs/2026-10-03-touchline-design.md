@@ -367,7 +367,7 @@ Built-in scenarios:
    - Events carry `tracking.frame_id` and `frame_id_end`, with `meta.is_synced: true`.
    - `meta.tracking.fps = 10`, `meta.cdf.version = "0.3.2"`.
    - No keys outside the schema, so the strict ("extreme") validator passes.
-3. **SPADL view** (Should): an in-house mapper (x + 52.5, y + 34, away team flipped).
+3. **SPADL view** (Should): an in-house mapper (x + 52.5, y + 34) in socceraction's stored frame: the home team attacks left to right; socceraction's `play_left_to_right()` flips the away team for analysis.
 4. **Run manifest:** seed, teams, script, params version, git SHA, scripted-event list, output hashes.
 5. **Optional realism-noise flag:** event-time jitter N(−0.37 s, 1.82 s) and location noise, to imitate unsynced real data. Off by default.
 
