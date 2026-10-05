@@ -1,9 +1,12 @@
 import type { DomainEvent, MetricId, Signal, SignalType } from "@touchline/schema"
-import { matchClock } from "@touchline/sim-core"
+import { attackX, matchClock, PITCH } from "@touchline/sim-core"
+
+const PITCH_HALF_L = PITCH.halfL
 import { metricDef, type SubjectKind } from "./catalog.js"
 import { passValues, shotXg } from "./derive.js"
 import { emittedAt, type MatchInfo, type StatsInput, type TeamInfo, type TrackFrame } from "./input.js"
 import type { StatsModels } from "./models.js"
+import { Momentum, threatAt } from "./momentum.js"
 import { Counters, maxBetween, Series } from "./store.js"
 
 /** A query the engine cannot answer (unknown subject, metric not defined for it) or input out of order. */
@@ -23,6 +26,25 @@ export const DIFFICULT_PASS_XP = 0.55
 /** A shot at least this likely to score (xG) is a big chance. */
 export const BIG_CHANCE_XG = 0.3
 /** Counts at which a player milestone is raised. */
+/** Opponent passes behind this line (attacking x, i.e. in their own 60 % of the pitch) and defensive actions beyond it count for PPDA. */
+export const PPDA_LINE_X = -PITCH_HALF_L + 0.6 * 2 * PITCH_HALF_L
+/** Passes from beyond this line (attacking x) are in the final third. */
+export const FINAL_THIRD_X = PITCH_HALF_L / 3
+/** Team dynamics are evaluated every 10 s, over 5-minute windows. */
+export const DYNAMICS_EVERY_S = 10
+export const DYNAMICS_WINDOW_S = 300
+/** A team's signal of one kind is not repeated within this time. */
+export const SIGNAL_COOLDOWN_S = 300
+export const PRESSURE_SHIFT = { rise: 0.15, minPressures: 10 } as const
+/** A shot adds this many times its xG to its team's momentum (passes and carries add their gain in threat). */
+export const MOMENTUM_SHOT_WEIGHT = 3
+/** A momentum swing: the team's mean momentum share over 5 minutes rises this much over the previous 5, to at least `level`. */
+export const MOMENTUM_SWING = { level: 0.55, rise: 0.2 } as const
+export const CHAOS_SPIKE = { level: 0.7, rise: 0.2 } as const
+/** Scales of the chaos components (each component is capped at 1). */
+export const CHAOS_SCALE = { turnoversPerMin: 6, passesPerPossession: 9, momentumSd: 0.3 } as const
+/** Substitution impact compares the team's momentum share over 10 minutes before and after. */
+export const SUB_IMPACT = { windowS: 600, change: 0.15 } as const
 export const PLAYER_MILESTONES: Readonly<Record<string, ReadonlyArray<number>>> = { passes_completed: [50, 75, 100], goals: [2, 3], tackles_won: [5] }
 
 export interface QueryOptions {
@@ -77,6 +99,14 @@ export class StatsEngine {
   private readonly signalIds = new Set<string>()
   private readonly frames = new Map<number, TrackFrame>()
   private readonly tallies = new Map<string, Map<string, number>>()
+  private readonly momentum: Momentum
+  /** The home team's momentum share, sampled every 10 s (the away share is 1 minus it). */
+  private readonly momSamples = new Series()
+  private readonly lastSignal = new Map<string, number>()
+  /** A frame whose 10-second checks run once every input of its tick is in (see ingest). */
+  private pendingDynamics: TrackFrame | null = null
+  /** Substitutions awaiting their impact check; a team's changes at the same moment are judged together. */
+  private readonly pendingSubs: Array<{ readonly team: TeamInfo; readonly tick: number; readonly events: DomainEvent[] }> = []
 
   constructor(
     readonly info: MatchInfo,
@@ -88,6 +118,11 @@ export class StatsEngine {
     }
     this.speedWindow = Math.max(1, Math.round(0.5 / info.dt))
     this.ballWindow = Math.max(1, Math.round(0.2 / info.dt))
+    this.momentum = new Momentum(info.dt)
+  }
+
+  opponentOf(team: TeamInfo): TeamInfo {
+    return team.side === "home" ? this.info.away : this.info.home
   }
 
   /** The latest tick ingested. */
@@ -114,6 +149,9 @@ export class StatsEngine {
 
   ingest(input: StatsInput): ReadonlyArray<Signal> {
     const before = this.signals.length
+    // A tick's team-dynamics checks wait until the next tick starts, so events arriving after the frame count too.
+    const tick = input.kind === "frame" ? input.frame.tick : emittedAt(input.event)
+    if (this.pendingDynamics && tick > this.pendingDynamics.tick) this.flushDynamics()
     if (input.kind === "frame") {
       const f = input.frame
       if (f.tick <= this.lastFrameTick || f.tick < this.lastEventTick)
@@ -125,7 +163,6 @@ export class StatsEngine {
       this.onFrame(f)
     } else {
       const e = input.event
-      const tick = emittedAt(e)
       if (tick < this.lastFrameTick) throw new StatsError(`input out of order: event ${e.id} (tick ${tick}) after frame ${this.lastFrameTick}`)
       this.lastEventTick = Math.max(this.lastEventTick, tick)
       this.events.push(e)
@@ -133,6 +170,19 @@ export class StatsEngine {
       this.onEvent(e, tick)
     }
     return this.signals.slice(before)
+  }
+
+  /** Run the checks still pending for the last tick; call once the stream ends. */
+  finish(): ReadonlyArray<Signal> {
+    const before = this.signals.length
+    this.flushDynamics()
+    return this.signals.slice(before)
+  }
+
+  private flushDynamics(): void {
+    const f = this.pendingDynamics
+    this.pendingDynamics = null
+    if (f) this.dynamics(f)
   }
 
   protected onEvent(e: DomainEvent, tick: number): void {
@@ -157,6 +207,28 @@ export class StatsEngine {
       }
       case "tackle":
         if (e.player_id && e.outcome === "won") this.tally(e, "tackles_won")
+        // A foul in a tackle is also a foul event; count it once.
+        if (team && e.outcome !== "foul") this.defensiveAction(e, tick, team)
+        break
+      case "interception":
+      case "foul":
+        if (team) this.defensiveAction(e, tick, team)
+        break
+      case "pressure":
+        if (team) this.counters.add("pressures", team.id, tick, 1)
+        break
+      case "carry":
+        if (team && e.x !== null && e.y !== null && e.x_end !== null && e.y_end !== null) this.addThreat(team, tick, e.x, e.y, e.x_end, e.y_end)
+        break
+      case "possession_change":
+        this.counters.add("turnovers", "match", tick, 1)
+        break
+      case "substitution":
+        if (team) {
+          const same = this.pendingSubs.find((p) => p.team === team && p.tick === tick)
+          if (same) same.events.push(e)
+          else this.pendingSubs.push({ team, tick, events: [e] })
+        }
         break
     }
   }
@@ -184,6 +256,20 @@ export class StatsEngine {
       })
     }
     if (ok && e.player_id) this.tally(e, "passes_completed")
+    const ax = attackX(team.side, e.x!)
+    if (ax < PPDA_LINE_X) this.counters.add("ppda_passes", this.opponentOf(team).id, tick, 1)
+    if (ax > FINAL_THIRD_X) this.counters.add("final_third", team.id, tick, 1)
+    if (ok) this.addThreat(team, tick, e.x!, e.y!, e.x_end!, e.y_end!)
+  }
+
+  /** A tackle, interception or foul in the opponent's own 60 % of the pitch counts for PPDA. */
+  private defensiveAction(e: DomainEvent, tick: number, team: TeamInfo): void {
+    if (e.x !== null && attackX(team.side, e.x) > -PPDA_LINE_X) this.counters.add("ppda_actions", team.id, tick, 1)
+  }
+
+  private addThreat(team: TeamInfo, tick: number, x: number, y: number, xEnd: number, yEnd: number): void {
+    const attack = team.side === "home" ? 1 : -1
+    this.momentum.add(team.id, tick, threatAt(xEnd, yEnd, attack) - threatAt(x, y, attack))
   }
 
   private onShot(e: DomainEvent, tick: number, team: TeamInfo): void {
@@ -192,6 +278,7 @@ export class StatsEngine {
     // Peak ball speed in the 0.3 s after the strike (frames up to the shot's resolution).
     const speed = this.ballSpeedMax(e.frame_id, Math.min(e.frame_id + this.ticks(0.3), tick))
     this.derived.set(e.id, speed === null ? { "shot.xg": xg } : { "shot.xg": xg, "shot.speed": speed })
+    this.momentum.add(team.id, tick, MOMENTUM_SHOT_WEIGHT * xg)
     for (const subject of [e.player_id, team.id]) {
       if (subject === null) continue
       this.counters.add("shots", subject, tick, 1)
@@ -290,6 +377,105 @@ export class StatsEngine {
       this.counters.add("inplay", "match", f.tick, 1)
       if (f.possession_side) this.counters.add("poss", (f.possession_side === "home" ? this.info.home : this.info.away).id, f.tick, 1)
     }
+    if (f.tick % this.ticks(DYNAMICS_EVERY_S) === 0) this.pendingDynamics = f
+  }
+
+  private cooledDown(key: string, tick: number): boolean {
+    const last = this.lastSignal.get(key)
+    return last === undefined || tick - last >= this.ticks(SIGNAL_COOLDOWN_S)
+  }
+
+  /** Every 10 s: sample momentum, then check for pressure shifts, momentum swings, chaos spikes and substitution impact. */
+  private dynamics(f: TrackFrame): void {
+    const t = f.tick
+    const w = this.ticks(DYNAMICS_WINDOW_S)
+    const home = this.momentum.share(this.info.home.id, this.info.away.id, t)
+    if (home !== null) this.momSamples.push(t, home)
+    const r3 = (v: number) => Math.round(v * 1000) / 1000
+
+    for (const team of [this.info.home, this.info.away]) {
+      if (t - w < 0) break
+      const now = this.compute("team.press", team.id, t, t - w)
+      const before = this.compute("team.press", team.id, t - w, t - 2 * w)
+      const pressures = this.counters.between("pressures", team.id, t - w, t)
+      if (now !== null && before !== null && pressures >= PRESSURE_SHIFT.minPressures && now - before >= PRESSURE_SHIFT.rise && this.cooledDown(`press|${team.id}`, t)) {
+        this.lastSignal.set(`press|${team.id}`, t)
+        this.raise("pressure_shift", f, {
+          team_id: team.id, player_id: null, metric: "team.press", value: r3(now), frame_from: t - w, frame_to: t,
+          salience: Math.min(0.9, 0.5 + (now - before)), evidence: [`team.press@${t - w}-${t}`], data: { before: r3(before), after: r3(now), pressures }
+        })
+      }
+    }
+
+    if (t - w >= 0)
+      for (const team of [this.info.home, this.info.away]) {
+        const now = this.compute("team.mom", team.id, t, t - w)
+        const before = this.compute("team.mom", team.id, t - w, t - 2 * w)
+        if (now !== null && before !== null && now >= MOMENTUM_SWING.level && now - before >= MOMENTUM_SWING.rise && this.cooledDown(`mom|${team.id}`, t)) {
+          this.lastSignal.set(`mom|${team.id}`, t)
+          this.raise("momentum_swing", f, {
+            team_id: team.id, player_id: null, metric: "team.mom", value: r3(now), frame_from: t - w, frame_to: t,
+            salience: Math.min(0.8, 0.4 + (now - before)), evidence: [`team.mom@${t - w}-${t}`], data: { before: r3(before), after: r3(now) }
+          })
+        }
+      }
+
+    if (t - w >= 0) {
+      const chaos = this.chaosAt(t)
+      const before = this.chaosAt(t - w)
+      if (chaos !== null && before !== null && chaos >= CHAOS_SPIKE.level && chaos - before >= CHAOS_SPIKE.rise && this.cooledDown("chaos", t)) {
+        this.lastSignal.set("chaos", t)
+        this.raise("chaos_spike", f, {
+          team_id: null, player_id: null, metric: "game.chaos", value: r3(chaos), frame_from: t - w, frame_to: t,
+          salience: 0.5, evidence: [`game.chaos@${t - w}-${t}`], data: { before: r3(before), after: r3(chaos) }
+        })
+      }
+    }
+
+    const sw = this.ticks(SUB_IMPACT.windowS)
+    for (let i = 0; i < this.pendingSubs.length; i++) {
+      const sub = this.pendingSubs[i]!
+      if (t < sub.tick + sw) continue
+      this.pendingSubs.splice(i--, 1)
+      const mean = (from: number, to: number) => {
+        let sum = 0
+        let n = 0
+        for (let j = this.momSamples.indexAt(to); j >= 0 && this.momSamples.ticks[j]! > from; j--) {
+          sum += sub.team.side === "home" ? this.momSamples.values[j]! : 1 - this.momSamples.values[j]!
+          n++
+        }
+        return n ? sum / n : null
+      }
+      const before = mean(sub.tick - sw, sub.tick)
+      const after = mean(sub.tick, sub.tick + sw)
+      if (before === null || after === null || Math.abs(after - before) < SUB_IMPACT.change) continue
+      const on = typeof sub.events[0]!.attrs.player_on === "string" ? sub.events[0]!.attrs.player_on : null
+      this.raise("substitution_impact", f, {
+        team_id: sub.team.id, player_id: on, metric: "team.mom", value: r3(after - before), frame_from: sub.tick, frame_to: t,
+        salience: Math.min(0.8, 0.4 + Math.abs(after - before)), evidence: [...sub.events.map((e) => e.id), `team.mom@${sub.tick - sw}-${sub.tick + sw}`], data: { before: r3(before), after: r3(after), substitutions: sub.events.length }
+      })
+    }
+  }
+
+  /**
+   * Control vs chaos over the 5 minutes to `at`: turnovers per minute, passes per possession (fewer is more
+   * chaotic) and the spread of the momentum share, each scaled to 0..1 and averaged. Null in the first minute.
+   */
+  chaosAt(at: number): number | null {
+    const w = this.ticks(DYNAMICS_WINDOW_S)
+    const from = Math.max(-1, at - w)
+    const minutes = ((at - from) * this.info.dt) / 60
+    if (minutes < 1) return null
+    const turnovers = this.counters.between("turnovers", "match", from, at)
+    const passes = this.counters.between("passes", this.info.home.id, from, at) + this.counters.between("passes", this.info.away.id, from, at)
+    const samples: number[] = []
+    for (let i = this.momSamples.indexAt(at); i >= 0 && this.momSamples.ticks[i]! > from; i--) samples.push(this.momSamples.values[i]!)
+    const mean = samples.reduce((a, b) => a + b, 0) / Math.max(1, samples.length)
+    const sd = samples.length > 1 ? Math.sqrt(samples.reduce((a, v) => a + (v - mean) ** 2, 0) / samples.length) : 0
+    const c1 = Math.min(1, turnovers / minutes / CHAOS_SCALE.turnoversPerMin)
+    const c2 = 1 - Math.min(1, passes / Math.max(1, turnovers) / CHAOS_SCALE.passesPerPossession)
+    const c3 = Math.min(1, sd / CHAOS_SCALE.momentumSd)
+    return (c1 + c2 + c3) / 3
   }
 
   private onSpeed(id: string, team: TeamInfo, f: TrackFrame, kmh: number): void {
@@ -391,6 +577,32 @@ export class StatsEngine {
         return this.counters.between("xg", subject, from, at)
       case "shot.speed":
         return ratio(this.counters.between("shot_speed", subject, from, at), this.counters.between("shot_speed_n", subject, from, at))
+      case "team.press": {
+        const opp = this.opponentOf(this.teamById.get(subject)!)
+        const p = this.counters.between("pressures", subject, from, at)
+        return ratio(p, p + this.counters.between("passes", opp.id, from, at))
+      }
+      case "ppda":
+        return ratio(this.counters.between("ppda_passes", subject, from, at), this.counters.between("ppda_actions", subject, from, at))
+      case "tilt": {
+        const opp = this.opponentOf(this.teamById.get(subject)!)
+        const own = this.counters.between("final_third", subject, from, at)
+        return ratio(own, own + this.counters.between("final_third", opp.id, from, at))
+      }
+      case "team.mom": {
+        const home = subject === this.info.home.id
+        if (from === null) return this.momentum.share(subject, this.opponentOf(this.teamById.get(subject)!).id, at)
+        // Over a window: the mean of the 10-second samples.
+        let sum = 0
+        let n = 0
+        for (let i = this.momSamples.indexAt(at); i >= 0 && this.momSamples.ticks[i]! > from; i--) {
+          sum += home ? this.momSamples.values[i]! : 1 - this.momSamples.values[i]!
+          n++
+        }
+        return n ? sum / n : null
+      }
+      case "game.chaos":
+        return this.chaosAt(at)
       case "team.poss":
         return ratio(this.counters.between("poss", subject, from, at), this.counters.between("inplay", "match", from, at))
       default:
