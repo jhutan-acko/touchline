@@ -3,6 +3,7 @@ import { decide, lastDefenderAttackX, nearestOpponent, type Decision } from "./d
 import { buildEvent, round2 } from "./events.js"
 import { behindPoint, clearAway, crossBlocker, DEFLECT_SPEED, deflectLoose, inOwnBox, keeperAction, keeperCanCome } from "./deflect.js"
 import { executeKick, pressureFrom } from "./execute.js"
+import { scoringFactor } from "./gamestate.js"
 import {
   add,
   attackX,
@@ -617,8 +618,10 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const opps = w.active(other(side))
   const isPenalty = restart === "penalty"
   const xg = isPenalty ? 0.76 : (d.xg ?? 0.02)
+  // The recorded xG is the model's; the chance of scoring also follows the game state (minute, red cards).
+  const scoring = isPenalty ? 1 : scoringFactor(w.minute(), w.active(side).length, opps.length, w.p)
   const weakFoot = !isPenalty && w.rng.execution.chance(0.2)
-  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot)
+  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, scoring)
   const tickAt = w.tick + plan.ticks
   const at = (pe: PendingEvent): PendingEvent => ({ ...pe, frame_id: tickAt })
   const end = { x: plan.to.x, y: plan.to.y }

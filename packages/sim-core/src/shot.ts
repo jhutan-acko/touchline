@@ -64,7 +64,9 @@ export const planShot = (
   dt: number,
   rng: Rng,
   /** Shooting with the weaker foot widens the aiming error by execution.weakFootK. */
-  weakFoot = false
+  weakFoot = false,
+  /** Game-state multiplier on the chance of scoring (see scoringFactor); 1 leaves goals per shot tracking xG. */
+  scoring = 1
 ): ShotPlan => {
   const goal = goalOf(side)
   const from: Vec3 = { x: shooter.pos.x, y: shooter.pos.y, z: 0.2 }
@@ -117,7 +119,7 @@ export const planShot = (
   // Scale by the expected on-target probability for this aim and noise, so goals per shot track xG.
   // Heights below 0 are clamped to the ground, so the vertical window is (-inf, crossbar).
   const pOnTarget = Math.max(0.05, normalBetween(-PITCH.goalHalfWidth, PITCH.goalHalfWidth, aimY, sdY) * normalBetween(-50, PITCH.goalHeight, aimZ, sdZ))
-  const pGoalClean = Math.max(0.03, Math.min(0.95, (isPenalty ? 0.76 : xg) / pOnTarget))
+  const pGoalClean = Math.min(0.95, Math.max(0.03, Math.min(0.95, (isPenalty ? 0.76 : xg) / pOnTarget)) * scoring)
   const pGoal = mis ? pGoalClean * 0.3 : pGoalClean
   if (rng.chance(pGoal) || keeper === null)
     return { outcome: "goal", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }

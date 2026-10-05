@@ -162,6 +162,11 @@ export interface Params {
   readonly firstTouch: { readonly b0: number; readonly bSpeed: number; readonly bHigh: number; readonly bPressure: number; readonly bSkill: number; readonly missedShare: number; readonly miscontrolShare: number }
   /** Loose balls two opponents can both reach are decided by a ground duel: logit = bSkill x skill difference + bReach x reach advantage (m). */
   readonly groundDuel: { readonly bSkill: number; readonly bReach: number; readonly contestM: number }
+  /**
+   * Game state on scoring: a multiplier per 15-minute bin (mean 1; the last bin includes added time), and the
+   * red-card factors for the team down to fewer players and for its opponent.
+   */
+  readonly gameState: { readonly minuteProfile: readonly [number, number, number, number, number, number]; readonly redCardOwn: number; readonly redCardOpponent: number }
   readonly substitutions: { readonly windowMinutes: readonly [number, number, number]; readonly windowSdMin: number; readonly perWindow: readonly [number, number, number]; readonly halfTimeChance: number }
   readonly classifier: ClassifierThresholds
 }
@@ -257,6 +262,8 @@ export const DEFAULT_PARAMS: Params = {
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
+  // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
+  gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], halfTimeChance: 0.2 },
   classifier: {
     longPassM: 32,
