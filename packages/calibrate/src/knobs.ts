@@ -14,6 +14,9 @@ export interface Knob {
   readonly apply: (p: Params, v: number) => Params
 }
 
+/** A probability scaled by a knob, kept at most 1. */
+const share = (x: number): number => Math.min(1, x)
+
 const shiftLogits = (p: Params, actions: ReadonlyArray<Action>, v: number): Params => {
   const logits = { ...p.actions.logits }
   for (const z of ACTION_ZONES) {
@@ -58,7 +61,15 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "shape_depth", what: "distance between lines (pass length, long passes)", init: 1, min: 0.8, max: 1.6, step: 0.1,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, depth: v } }) },
   { name: "shape_speed", what: "share of top speed used when moving into shape (speeds, distance)", init: 0.7, min: 0.5, max: 1, step: 0.05,
-    apply: (p, v) => ({ ...p, movement: { ...p.movement, shapeSpeedShare: v } }) }
+    apply: (p, v) => ({ ...p, movement: { ...p.movement, shapeSpeedShare: v } }) },
+  { name: "deflect_behind", what: "scale on the shares of blocks, headers and sliced clearances that go behind (corners)", init: 1, min: 0.3, max: 2, step: 0.25,
+    apply: (p, v) => ({
+      ...p,
+      defending: { ...p.defending, crossBlockBehind: share(p.defending.crossBlockBehind * v), headBehind: share(p.defending.headBehind * v), clearSliceBehind: share(p.defending.clearSliceBehind * v) },
+      shot: { ...p.shot, blockBehind: share(p.shot.blockBehind * v) }
+    }) },
+  { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
+    apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

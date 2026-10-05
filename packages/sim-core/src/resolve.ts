@@ -1,8 +1,8 @@
 import { stepBall } from "./ball.js"
-import { inPitch, PITCH, type Side, type Vec2 } from "./geometry.js"
+import { dirOf, inPitch, PITCH, type Side, type Vec2 } from "./geometry.js"
 import { accelFor, reachIn, vmaxFor } from "./kinematics.js"
 import type { Params } from "./params.js"
-import type { Rng } from "./rng.js"
+import { Rng } from "./rng.js"
 import type { BallState, PlayerState } from "./types.js"
 
 export interface Resolution {
@@ -110,4 +110,27 @@ export const resolveFlight = (
     return { ticks: k, winnerId: winner.pl.id, result: "reached", ball: contactBall(winner.f), aerial: null }
   }
   return { ticks: maxTicks, winnerId: null, result: "stopped", ball: b, aerial: null }
+}
+
+/**
+ * A defending keeper does not collect a ball that would run out over their own goal line without them: with
+ * probability keeper.letRunShare they let it go for a goal kick, and the resolution becomes the ball going out.
+ * The "without the keeper" prediction runs on a copy of `rng`; only the let-it-go decision draws from `rng`.
+ */
+export const keeperLetsRun = (
+  start: BallState,
+  fromId: string,
+  intendedId: string | null,
+  players: ReadonlyArray<PlayerState>,
+  res: Resolution,
+  p: Params,
+  dt: number,
+  rng: Rng
+): Resolution => {
+  const keeper = players.find((x) => x.id === res.winnerId && x.role === "GK")
+  const passer = players.find((x) => x.id === fromId)
+  if (!keeper || !passer || keeper.side === passer.side) return res
+  const without = resolveFlight(start, fromId, intendedId, players.filter((x) => x.id !== keeper.id), p, dt, new Rng(rng.state))
+  const overOwnLine = without.result === "out" && Math.abs(without.ball.pos.y) <= PITCH.halfW && Math.sign(without.ball.pos.x) === -dirOf(keeper.side)
+  return overOwnLine && rng.chance(p.keeper.letRunShare) ? without : res
 }

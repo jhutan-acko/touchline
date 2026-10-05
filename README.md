@@ -20,7 +20,10 @@ The engine is tuned so that simulated matches reproduce real-match statistics me
 ```bash
 uv run --project python/analytics python -m touchline_analytics.idsse      # download into git-ignored data/raw/idsse
 uv run --project python/analytics python -m touchline_analytics.targets    # data/params/targets-idsse.json (aggregates only)
-pnpm calibrate --from data/params/calibration-start.json                   # ~1 h; writes data/params/touchline-params.json
+# tune in one-round chunks (~45 min each, 12 matches per evaluation); the last one writes data/params/touchline-params.json
+pnpm calibrate --from data/params/calibration-start.json --matches 12 --rounds 1 --out out/calib-1.json
+pnpm calibrate --from out/calib-1.json --matches 12 --rounds 1 --out out/calib-2.json
+pnpm calibrate --from out/calib-2.json --matches 12 --rounds 1
 pnpm realism --matches 16                                                  # held-out matches -> docs/realism/realism-report.md
 UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-gate  # refresh data/params/realism-baseline.json
 ```
@@ -42,7 +45,7 @@ Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids
 
 ## Status
 
-The engine runs a full match in about 1.5 s and its output passes the CDF validator in strict mode. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 13 of 17 statistics and within 2 SD on the rest (see `docs/realism/realism-report.md`). Known gaps: corners (about 2 vs 8 per match) and throw-ins (about 32 vs 44) are low, and goals run slightly high on new seeds.
+The engine runs a full match in about 2 s and its output passes the CDF validator in strict mode. Matches include substitutions, fatigue, first-touch errors, ground duels, keeper claims and punches, blocked crosses and shots, and deflections behind. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 13 of 17 statistics and within 2 SD on 3 (see `docs/realism/realism-report.md`); corners (8.4 vs 8.1), goal kicks (18.0 vs 17.0) and goals (2.4 vs 2.7) are close. Known gaps: shots on target are low (20 % vs 35 % of shots; the shot model needs separate block, aim and save steps), cards are low (about 3 vs 5) and penalties high (0.75 vs 0.43).
 
 The realism gate (`packages/calibrate/test/realism-gate.test.ts`) runs 16 more held-out matches (seeds 3000–3015). It fails if any statistic moves more than 3.5 standard errors from the committed baseline, or drifts away from the real targets. After an intended engine change, re-run calibration, the realism report and the baseline refresh, and commit all three.
 

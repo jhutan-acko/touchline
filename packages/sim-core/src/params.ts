@@ -133,8 +133,12 @@ export interface Params {
     /** Share of clearances from inside a team's own box that are sliced behind for a corner (a defensive slip). */
     readonly clearSliceBehind: number
   }
-  /** Keepers coming for high balls: reach (m) and depth from the goal line (m), how often they come, catch vs punch vs fumble. */
+  /**
+   * Keepers coming for high balls: reach (m) and depth from the goal line (m), how often they come, catch vs punch vs fumble;
+   * and the share of balls running out over their own goal line they let go for a goal kick instead of collecting.
+   */
   readonly keeper: {
+    readonly letRunShare: number
     readonly claimRangeM: number
     readonly claimDepthM: number
     readonly comeShare: number
@@ -226,9 +230,10 @@ export const DEFAULT_PARAMS: Params = {
     speed: 26,
     onTargetRate: 0.38,
     aimNoise: 1.0,
-    blockPerDefender: 0.35,
+    // Set so that about 23 % of shots are blocked, as in the IDSSE matches (39 of 171 shots).
+    blockPerDefender: 0.23,
     blockWidthM: 3.5,
-    blockPressure: 0.3,
+    blockPressure: 0.2,
     blockBehind: 0.5
   },
   defending: {
@@ -253,7 +258,7 @@ export const DEFAULT_PARAMS: Params = {
     clearToTouch: 0.2,
     clearSliceBehind: 0.2
   },
-  keeper: { claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
+  keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0] },
   runs: { runInBehindRatePerS: 0.12 },

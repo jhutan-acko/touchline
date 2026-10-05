@@ -23,7 +23,7 @@ import {
 } from "./geometry.js"
 import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
-import { goalLineCrossing, resolveFlight } from "./resolve.js"
+import { goalLineCrossing, keeperLetsRun, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
 import { parryBall, planShot } from "./shot.js"
@@ -486,7 +486,8 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   )
   const start: BallState = { pos: { x: owner.pos.x, y: owner.pos.y, z: 0 }, vel: exe.vel }
   const intended = d.candidate?.receiverId ?? null
-  const res = resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel)
+  // A keeper lets a ball that is running out over their own goal line go for a goal kick (see keeperLetsRun).
+  const res = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel), p, w.dt, w.rng.duel)
   const lastDef = lastDefenderAttackX(side, opps)
   const winner = res.winnerId ? w.player(res.winnerId) : null
   const offside =

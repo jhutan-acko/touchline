@@ -3,8 +3,8 @@
   "dataset": "calibrated by simulated moments against IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
   "licence": "CC-BY-4.0",
   "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
-  "fitted_at": "2026-10-04",
-  "version": "calib-2026-10-04"
+  "fitted_at": "2026-10-05",
+  "version": "calib-2026-10-05"
  },
  "kinematics": {
   "vmaxBase": 9.2,
@@ -23,8 +23,8 @@
   "substeps": 4
  },
  "timing": {
-  "decisionMinS": 0.9,
-  "decisionMaxS": 2.2,
+  "decisionMinS": 0.675,
+  "decisionMaxS": 1.6500000000000001,
   "keeperHoldS": 4,
   "restartDelayS": {
    "kickoff": 56.25,
@@ -164,8 +164,8 @@
   "choiceTemperature": 0.35
  },
  "execution": {
-  "dirSigma": 0.05075,
-  "distSigma": 0.1015,
+  "dirSigma": 0.04025,
+  "distSigma": 0.0805,
   "pressureK": 1.6,
   "weakFootK": 1.45,
   "mishitBase": 0.006,
@@ -183,7 +183,10 @@
   "speed": 26,
   "onTargetRate": 0.38,
   "aimNoise": 1.55,
-  "blockPerDefender": 0.15
+  "blockPerDefender": 0.23,
+  "blockWidthM": 3.5,
+  "blockPressure": 0.2,
+  "blockBehind": 0.5
  },
  "defending": {
   "pressRatePerS": 0.6,
@@ -192,13 +195,29 @@
   "tackleRadiusM": 1.6,
   "tackleBase": 0,
   "foulPerTackle": 0.345,
-  "yellowPerFoul": 0.2,
+  "yellowPerFoul": 0.15,
   "redPerFoul": 0.004,
   "tackleLooseShare": 0.3,
   "interceptLooseShare": 0.3,
   "boxIntensity": 2,
   "boxFoulFactor": 0.2,
-  "keeperRushM": 12
+  "keeperRushM": 12,
+  "crossBlock": 0.6,
+  "crossBlockM": 4,
+  "crossBlockBehind": 0.6,
+  "headClearShare": 0.85,
+  "headBehind": 0.35,
+  "clearToTouch": 0.2,
+  "clearSliceBehind": 0.2
+ },
+ "keeper": {
+  "letRunShare": 0.85,
+  "claimRangeM": 11,
+  "claimDepthM": 13,
+  "comeShare": 0.85,
+  "catchBase": 0.4,
+  "catchHandling": 0.35,
+  "fumbleShare": 0.06
  },
  "takeOn": {
   "b0": -0.2,
@@ -222,6 +241,53 @@
   "width": 1.35,
   "depth": 1.2
  },
+ "fatigue": {
+  "drainBase": 0.00004,
+  "drainSpeed2": 0.000012,
+  "staminaSlope": 0.8,
+  "halfTimeRecovery": 0.1,
+  "executionK": 0.25
+ },
+ "firstTouch": {
+  "b0": -3.9,
+  "bSpeed": 1,
+  "bHigh": 1.2,
+  "bPressure": 1.5,
+  "bSkill": -3.5,
+  "missedShare": 0.15,
+  "miscontrolShare": 0.35
+ },
+ "groundDuel": {
+  "bSkill": 3,
+  "bReach": 2,
+  "contestM": 0.6
+ },
+ "gameState": {
+  "minuteProfile": [
+   0.85,
+   0.95,
+   1.05,
+   0.95,
+   1.05,
+   1.15
+  ],
+  "redCardOwn": 0.67,
+  "redCardOpponent": 1.2
+ },
+ "substitutions": {
+  "windowMinutes": [
+   62,
+   72,
+   81
+  ],
+  "windowSdMin": 5,
+  "perWindow": [
+   2,
+   2,
+   1
+  ],
+  "halfTimeChance": 0.2
+ },
  "classifier": {
   "longPassM": 32,
   "switchLateralM": 25,
@@ -237,48 +303,50 @@
  "calibration": {
   "method": "coordinate search on engine knobs, minimising weighted squared z-scores of match statistics (common random numbers)",
   "targets": "targets-2026-10-04",
-  "matches": 8,
-  "rounds": 3,
-  "evals": 115,
-  "loss": 4.009,
+  "matches": 12,
+  "rounds": 1,
+  "evals": 41,
+  "loss": 6.356,
   "knobs": {
-   "decision_scale": 1,
+   "decision_scale": 0.75,
    "long_bias": 1.25,
    "cross_bias": 0.375,
    "shot_bias": 0,
    "aim_noise": 1.55,
    "xg_b0": -1,
-   "exec_scale": 1.45,
+   "exec_scale": 1.15,
    "reach_margin": 0.725,
    "tackle_rate": 0.8,
    "foul_per_tackle": 0.345,
-   "yellow_per_foul": 0.2,
+   "yellow_per_foul": 0.15,
    "box_intensity": 2,
    "box_carry": -0.75,
    "loose_share": 0.3,
    "restart_scale": 1.25,
    "shape_width": 1.35,
    "shape_depth": 1.2,
-   "shape_speed": 0.9
+   "shape_speed": 0.9,
+   "deflect_behind": 1,
+   "clear_to_touch": 0.2
   },
   "simulated": {
-   "passes": 836.75,
-   "completion": 0.74,
-   "long_share": 0.153,
-   "pass_len_median": 17.1642,
-   "shots": 24.125,
-   "on_target_share": 0.3367,
-   "goals": 2.875,
-   "penalties": 0.5,
-   "corners": 2.375,
-   "throw_ins": 39.25,
-   "goal_kicks": 15.375,
-   "free_kicks": 23,
-   "fouls": 24.25,
-   "cards": 5.75,
-   "in_play_share": 0.5591,
-   "distance_km_median": 10.7635,
-   "peak_speed_kmh_median": 28.2766
+   "passes": 900.5833,
+   "completion": 0.7221,
+   "long_share": 0.1465,
+   "pass_len_median": 16.5752,
+   "shots": 24.5,
+   "on_target_share": 0.2846,
+   "goals": 2.9167,
+   "penalties": 0.5833,
+   "corners": 6.4167,
+   "throw_ins": 39.9167,
+   "goal_kicks": 14.5833,
+   "free_kicks": 20.1667,
+   "fouls": 20.5833,
+   "cards": 3.5,
+   "in_play_share": 0.5453,
+   "distance_km_median": 11.037,
+   "peak_speed_kmh_median": 28.1201
   },
   "real": {
    "passes": 866,

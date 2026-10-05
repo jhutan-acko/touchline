@@ -12,7 +12,7 @@
 
 **How code is given:** new files in full; changes to existing files as exact patches, applied from the repository root with the `git apply <<'PATCH' … PATCH` block shown. Every patch was produced from the verified prototype, task by task, so each applies cleanly on top of the previous task.
 
-**Verification status:** Tasks 1–8 were built and run in full before this plan was written, one commit per task, with the whole suite green at every commit (the realism gate included); their code and expected outputs are exact. Task 9's code was built and tested the same way; its recalibration numbers are being produced by the verification run and are added to this plan when it finishes (until then its expected outputs are stated as acceptance criteria).
+**Verification status:** every task was built and run in full before this plan was finalised, one commit per task, with the whole suite green at every commit (the realism gate included); the code blocks reproduce the prototype file for file (checked by replaying the plan on a fresh clone). Final calibration: loss 6.36 on the tuning seeds; 16 held-out matches give 13 statistics within 1 SD, 3 within 2 SD and 1 off (shots on target, a recorded known gap).
 
 ## Global Constraints
 
@@ -3302,53 +3302,76 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Two engine corrections found while recalibrating, then the recalibration itself. (1) The IDSSE matches give a measured blocked-shot share (39 of 171 shots, 22.8 %); the blocking defaults are set to reproduce it and blocking is no longer a tuning knob, because no tuned statistic can see it (too many blocks had pushed shots on target down to about 25 %). (2) Keepers collected every ball played in behind; a real keeper lets a ball that is running out over their own goal line go for a goal kick. The check re-predicts the flight without the keeper on a copy of the duel stream, so it consumes no random draws of its own. Then two new knobs (`deflect_behind`, `clear_to_touch`) join the tuner, which runs in one-round chunks from the Plan 2a knobs, and the realism report, gate baseline and README are regenerated.
 
 **Files:**
-- Modify: `packages/sim-core/src/step.ts`, `packages/sim-core/src/params.ts`, `packages/calibrate/src/knobs.ts`, `data/params/calibration-start.json` (full new contents), `README.md`
+- Modify: `packages/sim-core/src/resolve.ts` (`keeperLetsRun`), `packages/sim-core/src/step.ts`, `packages/sim-core/src/params.ts`, `packages/calibrate/src/knobs.ts`, `data/params/calibration-start.json` (full new contents), `README.md`
 - Regenerate: `data/params/touchline-params.json`, `docs/realism/realism-report.md`, `data/params/realism-baseline.json`
-- Test: `packages/sim-core/test/wide.test.ts` (keeper let-run test; own-goal limit stated for six matches)
+- Test: `packages/sim-core/test/letrun.test.ts` (new, deterministic: a constructed ball rolling past the keeper), `packages/sim-core/test/wide.test.ts` (own-goal limit stated for six matches)
 
 **Interfaces:**
 - Consumes: Tasks 1–8; `resolveFlight`; the tuner (`tune`, `--from`, `--out`, `--matches`, `--rounds`).
-- Produces: `params.keeper.letRunShare` (0.85); shot blocking defaults `blockPerDefender` 0.23, `blockPressure` 0.2; knobs `deflect_behind` (scales the four behind-the-line shares, each kept at most 1) and `clear_to_touch`; calibrated `data/params/touchline-params.json` with provenance and calibration record.
+- Produces: `keeperLetsRun(start, fromId, intendedId, players, res, p, dt, rng): Resolution` (resolve.ts); `params.keeper.letRunShare` (0.85); shot blocking defaults `blockPerDefender` 0.23, `blockPressure` 0.2; knobs `deflect_behind` (scales the four behind-the-line shares, each kept at most 1) and `clear_to_touch`; calibrated `data/params/touchline-params.json` with provenance and calibration record.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
+
+Create `packages/sim-core/test/letrun.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest"
+import { launchVelocity } from "../src/ball.js"
+import { DEFAULT_PARAMS as P } from "../src/params.js"
+import { keeperLetsRun, resolveFlight } from "../src/resolve.js"
+import { Rng, seedRng } from "../src/rng.js"
+import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
+import type { PlayerState } from "../src/types.js"
+
+const base = kickoffPlayersFor(makeConfig(1))
+const at = (p: PlayerState, x: number, y: number): PlayerState => ({ ...p, pos: { x, y }, vel: { x: 0, y: 0 } })
+
+describe("keeper lets the ball run out", () => {
+  // A home attacker plays the ball towards the away goal line; only the away keeper is near it.
+  const passer = at(base[9]!, 30, 6)
+  const keeper = at(base.find((p) => p.side === "away" && p.role === "GK")!, 49, 5)
+  const players = [passer, keeper]
+  const ball = { pos: { x: 30, y: 6, z: 0 }, vel: launchVelocity(passer.pos, { x: 50, y: 7 }, "ground", P) }
+  const res = resolveFlight(ball, passer.id, null, players, P, 0.1, new Rng(seedRng(1)))
+
+  it("the keeper could collect it", () => {
+    expect(res.winnerId).toBe(keeper.id)
+  })
+  it("lets it go for a goal kick when it would cross their own goal line", () => {
+    const p = { ...P, keeper: { ...P.keeper, letRunShare: 1 } }
+    const r = keeperLetsRun(ball, passer.id, null, players, res, p, 0.1, new Rng(seedRng(2)))
+    expect(r.result).toBe("out")
+    expect(r.ball.pos.x).toBeGreaterThan(52.5)
+  })
+  it("collects it when letRunShare is 0, and never lets a ball go that would stay in play", () => {
+    const keep = { ...P, keeper: { ...P.keeper, letRunShare: 0 } }
+    expect(keeperLetsRun(ball, passer.id, null, players, res, keep, 0.1, new Rng(seedRng(2)))).toBe(res)
+    const short = { pos: { x: 30, y: 6, z: 0 }, vel: launchVelocity(passer.pos, { x: 44, y: 6 }, "ground", { ...P, pass: { ...P.pass, arriveSpeed: 1 } }) }
+    const near = at(keeper, 44, 6)
+    const r0 = resolveFlight(short, passer.id, null, [passer, near], P, 0.1, new Rng(seedRng(1)))
+    const always = { ...P, keeper: { ...P.keeper, letRunShare: 1 } }
+    expect(keeperLetsRun(short, passer.id, null, [passer, near], r0, always, 0.1, new Rng(seedRng(2)))).toBe(r0)
+  })
+  it("only the defending keeper does it: a team's own keeper still collects its own back pass", () => {
+    const ownKeeper = at(base.find((p) => p.side === "home" && p.role === "GK")!, -49, 5)
+    const back = { pos: { x: -30, y: 6, z: 0 }, vel: launchVelocity({ x: -30, y: 6 }, { x: -50, y: 7 }, "ground", P) }
+    const from = at(base[2]!, -30, 6)
+    const r0 = resolveFlight(back, from.id, null, [from, ownKeeper], P, 0.1, new Rng(seedRng(1)))
+    const always = { ...P, keeper: { ...P.keeper, letRunShare: 1 } }
+    expect(keeperLetsRun(back, from.id, null, [from, ownKeeper], r0, always, 0.1, new Rng(seedRng(2)))).toBe(r0)
+  })
+})
+```
 
 Apply this change to `packages/sim-core/test/wide.test.ts` (from the repository root):
 
 ```bash
 git apply <<'PATCH'
 diff --git a/packages/sim-core/test/wide.test.ts b/packages/sim-core/test/wide.test.ts
-index b444530..7fa6425 100644
+index b444530..159578d 100644
 --- a/packages/sim-core/test/wide.test.ts
 +++ b/packages/sim-core/test/wide.test.ts
-@@ -66,6 +66,27 @@ describe("high balls into the box", () => {
-   })
- })
- 
-+describe("balls played in behind", () => {
-+  it("keepers let a ball running out over their own goal line go for a goal kick", () => {
-+    // Same seeds with keepers who always collect vs keepers who let such balls go.
-+    const passesOutForGoalKicks = (letRunShare: number) => {
-+      let n = 0
-+      for (const seed of [1, 2, 3, 4, 5, 6]) {
-+        const p = { ...params, keeper: { ...params.keeper, letRunShare } }
-+        const ev = play(makeConfig(seed, { params: p }))
-+        ev.forEach((e, i) => {
-+          if (e.type !== "ball_out" || e.attrs.side !== "byline") return
-+          const restart = ev.slice(i + 1).find((x) => x.type === "set_piece")
-+          const kick = ev.slice(0, i).reverse().find((x) => x.type === "pass" || x.type === "shot" || x.type === "clearance")
-+          if (restart?.attrs.kind === "goal_kick" && kick?.type === "pass") n++
-+        })
-+      }
-+      return n
-+    }
-+    expect(passesOutForGoalKicks(1)).toBeGreaterThan(passesOutForGoalKicks(0))
-+  })
-+})
-+
- describe("deflections", () => {
-   it("send some balls straight behind for corners (blocks, headers, sliced clearances)", () => {
-     let fromDeflection = 0
-@@ -89,6 +110,7 @@ describe("deflections", () => {
+@@ -89,6 +89,7 @@ describe("deflections", () => {
    })
    it("deflected shots rarely end in own goals", () => {
      const own = runs.reduce((n, r) => n + r.events.filter((e) => e.type === "goal" && e.attrs.own_goal === true).length, 0)
@@ -3360,14 +3383,14 @@ index b444530..7fa6425 100644
 PATCH
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [ ] **Step 2: Run them to make sure they fail**
 
-Run: `pnpm --filter @touchline/sim-core test wide`
-Expected: 1 failed: `keepers let a ball running out…` (the two counts are equal: `letRunShare` does not exist yet, so both runs are the same match)
+Run: `pnpm --filter @touchline/sim-core test letrun`
+Expected: 4 failed: `TypeError: keeperLetsRun is not a function`. (A match-level comparison with the behaviour on and off was tried first and rejected: one changed moment reshapes the rest of the match, so its counts flip with any recalibration.)
 
 - [ ] **Step 3: Implement the keeper behaviour and the measured blocking defaults**
 
-Apply this change to `packages/sim-core/src/step.ts`, `packages/sim-core/src/params.ts` (from the repository root):
+Apply this change to `packages/sim-core/src/resolve.ts`, `packages/sim-core/src/step.ts`, `packages/sim-core/src/params.ts` (from the repository root):
 
 ```bash
 git apply <<'PATCH'
@@ -3411,24 +3434,68 @@ index 3e748c0..444cc27 100644
    takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
    carry: { speed: 5.5, durationS: [0.8, 2.0] },
    runs: { runInBehindRatePerS: 0.12 },
+diff --git a/packages/sim-core/src/resolve.ts b/packages/sim-core/src/resolve.ts
+index 82042da..d3d6d51 100644
+--- a/packages/sim-core/src/resolve.ts
++++ b/packages/sim-core/src/resolve.ts
+@@ -1,8 +1,8 @@
+ import { stepBall } from "./ball.js"
+-import { inPitch, PITCH, type Side, type Vec2 } from "./geometry.js"
++import { dirOf, inPitch, PITCH, type Side, type Vec2 } from "./geometry.js"
+ import { accelFor, reachIn, vmaxFor } from "./kinematics.js"
+ import type { Params } from "./params.js"
+-import type { Rng } from "./rng.js"
++import { Rng } from "./rng.js"
+ import type { BallState, PlayerState } from "./types.js"
+ 
+ export interface Resolution {
+@@ -111,3 +111,26 @@ export const resolveFlight = (
+   }
+   return { ticks: maxTicks, winnerId: null, result: "stopped", ball: b, aerial: null }
+ }
++
++/**
++ * A defending keeper does not collect a ball that would run out over their own goal line without them: with
++ * probability keeper.letRunShare they let it go for a goal kick, and the resolution becomes the ball going out.
++ * The "without the keeper" prediction runs on a copy of `rng`; only the let-it-go decision draws from `rng`.
++ */
++export const keeperLetsRun = (
++  start: BallState,
++  fromId: string,
++  intendedId: string | null,
++  players: ReadonlyArray<PlayerState>,
++  res: Resolution,
++  p: Params,
++  dt: number,
++  rng: Rng
++): Resolution => {
++  const keeper = players.find((x) => x.id === res.winnerId && x.role === "GK")
++  const passer = players.find((x) => x.id === fromId)
++  if (!keeper || !passer || keeper.side === passer.side) return res
++  const without = resolveFlight(start, fromId, intendedId, players.filter((x) => x.id !== keeper.id), p, dt, new Rng(rng.state))
++  const overOwnLine = without.result === "out" && Math.abs(without.ball.pos.y) <= PITCH.halfW && Math.sign(without.ball.pos.x) === -dirOf(keeper.side)
++  return overOwnLine && rng.chance(p.keeper.letRunShare) ? without : res
++}
 diff --git a/packages/sim-core/src/step.ts b/packages/sim-core/src/step.ts
-index 2f3552f..e912094 100644
+index 2f3552f..6f274a9 100644
 --- a/packages/sim-core/src/step.ts
 +++ b/packages/sim-core/src/step.ts
-@@ -486,7 +486,15 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
+@@ -23,7 +23,7 @@ import {
+ } from "./geometry.js"
+ import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
+ import type { Action } from "./params.js"
+-import { goalLineCrossing, resolveFlight } from "./resolve.js"
++import { goalLineCrossing, keeperLetsRun, resolveFlight } from "./resolve.js"
+ import { hazard, Rng, substream } from "./rng.js"
+ import { anchorFor, kickoffAnchor } from "./shape.js"
+ import { parryBall, planShot } from "./shot.js"
+@@ -486,7 +486,8 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
    )
    const start: BallState = { pos: { x: owner.pos.x, y: owner.pos.y, z: 0 }, vel: exe.vel }
    const intended = d.candidate?.receiverId ?? null
 -  const res = resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel)
-+  let res = resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel)
-+  // A keeper does not collect a ball that is running out over their own goal line anyway: they let it go for a goal kick.
-+  // (The check re-predicts the flight without the keeper on a copy of the duel stream, so it draws nothing itself.)
-+  const ownKeeper = w.active(other(side)).find((o) => o.role === "GK")
-+  if (ownKeeper && res.winnerId === ownKeeper.id) {
-+    const without = resolveFlight(start, owner.id, intended, w.active().filter((x) => x.id !== ownKeeper.id), p, w.dt, new Rng(w.rng.duel.state))
-+    const overOwnLine = without.result === "out" && Math.abs(without.ball.pos.y) <= PITCH.halfW && Math.sign(without.ball.pos.x) === -dirOf(ownKeeper.side)
-+    if (overOwnLine && w.rng.duel.chance(p.keeper.letRunShare)) res = without
-+  }
++  // A keeper lets a ball that is running out over their own goal line go for a goal kick (see keeperLetsRun).
++  const res = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel), p, w.dt, w.rng.duel)
    const lastDef = lastDefenderAttackX(side, opps)
    const winner = res.winnerId ? w.player(res.winnerId) : null
    const offside =
@@ -3437,8 +3504,8 @@ PATCH
 
 - [ ] **Step 4: Run the tests**
 
-Run: `pnpm --filter @touchline/sim-core test wide`
-Expected: 9 passed (the let-run comparison is 8 vs 6 goal kicks from passes over six matches)
+Run: `pnpm --filter @touchline/sim-core test letrun wide`
+Expected: 12 passed
 
 - [ ] **Step 5: Add the knobs and the start values**
 
@@ -3525,12 +3592,12 @@ pnpm calibrate --from out/calib-2.json --matches 12 --rounds 1      # writes dat
 
 Each chunk is one coordinate-search round (about 45 minutes; 12 matches per evaluation) and continues from the previous chunk's knobs, so a stopped run loses at most one round. Keep the machine awake (for example `caffeinate -i` on macOS): a sleeping laptop stretched one earlier run past two hours.
 
-Expected: each chunk prints `eval N: loss …` lines and a final `wrote … loss L after N evaluations`, with L lower than the chunk's starting loss. (Exact values are added to this plan from the verification run.)
+Expected: chunk 1 ends `loss 6.36 after 44 evaluations`; chunks 2 and 3 find no further improvement (`loss 6.36 after 41 evaluations` each), so the search has converged. The last chunk ends `wrote …/data/params/touchline-params.json: loss 6.36 after 41 evaluations`. The search is deterministic, so the knobs should match: decision_scale 0.75, long_bias 1.25, cross_bias 0.375, shot_bias 0, aim_noise 1.55, xg_b0 -1, exec_scale 1.15, reach_margin 0.725, tackle_rate 0.8, foul_per_tackle 0.345, yellow_per_foul 0.15, box_intensity 2, box_carry -0.75, loose_share 0.3, restart_scale 1.25, shape_width 1.35, shape_depth 1.2, shape_speed 0.9, deflect_behind 1, clear_to_touch 0.2
 
 - [ ] **Step 7: Regenerate the realism report**
 
 Run: `pnpm realism --matches 16`
-Expected: `Summary: … 0 off.` The report's 'More than 30 % from the real mean' line names the remaining gaps; acceptance requires no statistic marked 'off'.
+Expected: `Summary: 13 within 1 SD, 3 within 2 SD, 1 off.`; the report lists `More than 30 % from the real mean: Shots on target, share (-42 %), Penalties per match (+75 %), Cards (-42 %).` Corners 8.4 (real 8.1), goal kicks 18.0 (17.0), goals 2.44 (2.71), pass completion 72.5 % (78.1 %). The one statistic marked off is shots on target (20.4 % vs 35.4 %): a known gap, recorded in the README; it needs a shot model with separate block, aim and save steps
 
 - [ ] **Step 8: Refresh the gate baseline and run everything**
 
@@ -3538,14 +3605,44 @@ Run: `UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-
 Expected: 1 passed (the real-target half of the gate must pass: every |z| < 3, loss < 30)
 
 Run: `pnpm turbo run typecheck test --force && uv run --locked --project python/analytics --group dev pytest python/analytics/tests -q`
-Expected: `Tasks: 10 successful` (the realism gate passes against the refreshed baseline and the real targets); 10 passed
+Expected: `Tasks: 10 successful`; the gate logs about `"loss":7.1`; 10 passed
 
 Run: `pnpm sim --seed 1 --home ironmoor --away saltmarsh && uv run --project python/analytics python -m touchline_analytics.validate_cdf out/m-1`
 Expected: `meta: ok`, `event: ok`, `tracking: ok`
 
 - [ ] **Step 9: Update the README**
 
-In `README.md`, replace the `pnpm calibrate --from …` line in the Calibration block with the three chunk commands above, and replace the Status paragraph's figures and "Known gaps" sentence with the new report's summary line and its "More than 30 % from the real mean" list. (The exact patch is added to this plan from the verification run.)
+Apply this change to `README.md` (from the repository root):
+
+````bash
+git apply <<'PATCH'
+diff --git a/README.md b/README.md
+index ce5bbb3..c01f516 100644
+--- a/README.md
++++ b/README.md
+@@ -20,7 +20,10 @@ The engine is tuned so that simulated matches reproduce real-match statistics me
+ ```bash
+ uv run --project python/analytics python -m touchline_analytics.idsse      # download into git-ignored data/raw/idsse
+ uv run --project python/analytics python -m touchline_analytics.targets    # data/params/targets-idsse.json (aggregates only)
+-pnpm calibrate --from data/params/calibration-start.json                   # ~1 h; writes data/params/touchline-params.json
++# tune in one-round chunks (~45 min each, 12 matches per evaluation); the last one writes data/params/touchline-params.json
++pnpm calibrate --from data/params/calibration-start.json --matches 12 --rounds 1 --out out/calib-1.json
++pnpm calibrate --from out/calib-1.json --matches 12 --rounds 1 --out out/calib-2.json
++pnpm calibrate --from out/calib-2.json --matches 12 --rounds 1
+ pnpm realism --matches 16                                                  # held-out matches -> docs/realism/realism-report.md
+ UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-gate  # refresh data/params/realism-baseline.json
+ ```
+@@ -42,7 +45,7 @@ Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids
+ 
+ ## Status
+ 
+-The engine runs a full match in about 1.5 s and its output passes the CDF validator in strict mode. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 13 of 17 statistics and within 2 SD on the rest (see `docs/realism/realism-report.md`). Known gaps: corners (about 2 vs 8 per match) and throw-ins (about 32 vs 44) are low, and goals run slightly high on new seeds.
++The engine runs a full match in about 2 s and its output passes the CDF validator in strict mode. Matches include substitutions, fatigue, first-touch errors, ground duels, keeper claims and punches, blocked crosses and shots, and deflections behind. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 13 of 17 statistics and within 2 SD on 3 (see `docs/realism/realism-report.md`); corners (8.4 vs 8.1), goal kicks (18.0 vs 17.0) and goals (2.4 vs 2.7) are close. Known gaps: shots on target are low (20 % vs 35 % of shots; the shot model needs separate block, aim and save steps), cards are low (about 3 vs 5) and penalties high (0.75 vs 0.43).
+ 
+ The realism gate (`packages/calibrate/test/realism-gate.test.ts`) runs 16 more held-out matches (seeds 3000–3015). It fails if any statistic moves more than 3.5 standard errors from the committed baseline, or drifts away from the real targets. After an intended engine change, re-run calibration, the realism report and the baseline refresh, and commit all three.
+ 
+PATCH
+````
 
 - [ ] **Step 10: Commit**
 

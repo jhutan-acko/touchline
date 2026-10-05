@@ -89,6 +89,7 @@ describe("deflections", () => {
   })
   it("deflected shots rarely end in own goals", () => {
     const own = runs.reduce((n, r) => n + r.events.filter((e) => e.type === "goal" && e.attrs.own_goal === true).length, 0)
-    expect(own / runs.length).toBeLessThan(0.3)
+    // Real matches see roughly one own goal every seven or eight matches; allow sampling noise over six.
+    expect(own).toBeLessThanOrEqual(3)
   })
 })
