@@ -40,3 +40,20 @@ def test_tracking_metrics_distance_speed_and_in_play():
     assert math.isclose(m["in_play_share"], 0.5)
     assert abs(m["distance_km_median"] - 0.2995) < 0.002  # ~5 m/s * 59.9 s
     assert abs(m["peak_speed_kmh_median"] - 18.0) < 0.1
+
+
+def test_touchline_events_reads_details_from_attrs(tmp_path):
+    import json
+
+    from touchline_analytics.metrics import touchline_events
+
+    base = {"x": 0.0, "y": 0.0, "x_end": 20.0, "y_end": 0.0}
+    lines = [
+        {"type": "pass", "outcome": "successful", "attrs": {"restart": "corner"}, **base},
+        {"type": "shot", "outcome": "saved", "attrs": {"technique": "penalty"}, **base},
+    ]
+    f = tmp_path / "domain.jsonl"
+    f.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    ev = touchline_events(f)
+    assert ev[0]["set_piece"] == "corner" and ev[0]["length"] == 20.0
+    assert ev[1]["set_piece"] == "penalty" and ev[1]["on_target"]

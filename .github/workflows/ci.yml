@@ -38,3 +38,5 @@ jobs:
       - run: pnpm sim --seed 1 --home ironmoor --away saltmarsh
       - uses: astral-sh/setup-uv@v6
       - run: uv run --project python/analytics python -m touchline_analytics.validate_cdf out/m-1
+      - run: pnpm sim --seed 2 --home eastvale --away larkspur --fps 25 --match-id m-2-25fps
+      - run: uv run --project python/analytics python -m touchline_analytics.validate_cdf out/m-2-25fps

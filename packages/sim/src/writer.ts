@@ -55,10 +55,13 @@ export const writeMatch = (cfg: MatchConfig, dir: string, script: string | null 
     if (last) periods.push(last)
     const lastFrame = last as Frame | null
     const clock = (t: number) => tickTime.get(t) ?? lastFrame!.timestamp
+    // Flights are emitted when they resolve and carries when they end; files list events in frame order
+    // (stable, so events of the same frame keep their emission order).
+    const ordered = [...events].sort((a, b) => a.frame_id - b.frame_id)
     const recv = new Map(events.filter((e) => e.type === "pass" && e.frame_id_end !== null).map((e) => [e.id, e.frame_id_end!]))
-    const cdfLines = events.map((e) => cdfEventLine(cfg, e, clock, (p) => periodStart.get(p) ?? 0, recv.get(e.id) ?? null)).filter((x): x is string => x !== null)
+    const cdfLines = ordered.map((e) => cdfEventLine(cfg, e, clock, (p) => periodStart.get(p) ?? 0, recv.get(e.id) ?? null)).filter((x): x is string => x !== null)
     writeFileSync(join(dir, "event.jsonl"), cdfLines.join("\n") + "\n")
-    writeFileSync(join(dir, "domain.jsonl"), events.map((e) => JSON.stringify({ ...e, ...e.attrs, attrs: undefined })).join("\n") + "\n")
+    writeFileSync(join(dir, "domain.jsonl"), ordered.map((e) => JSON.stringify(e)).join("\n") + "\n")
     writeFileSync(join(dir, "meta.json"), JSON.stringify(cdfMeta(cfg, periodsFromFrames(periods)), null, 1))
     const goals = events.filter((e) => e.type === "goal")
     const score = `${goals.filter((g) => g.team_id === cfg.home.id).length}-${goals.filter((g) => g.team_id === cfg.away.id).length}`

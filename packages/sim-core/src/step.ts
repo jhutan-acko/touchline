@@ -45,6 +45,7 @@ import {
 } from "./types.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
+const OUTCOME_IN_ATTRS: ReadonlySet<string> = new Set(["take_on", "tackle"])
 
 const teamOf = (cfg: MatchConfig, side: Side): TeamSetup => (side === "home" ? cfg.home : cfg.away)
 
@@ -179,8 +180,10 @@ class Work {
   }
   emit(pe: PendingEvent, extra: { frame_id_end?: number | null; outcome?: string | null } = {}): void {
     this.seq += 1
+    // Duels state their result in attrs.outcome; it is also the event's outcome.
+    const outcome = extra.outcome !== undefined ? extra.outcome : OUTCOME_IN_ATTRS.has(pe.type) && typeof pe.attrs.outcome === "string" ? pe.attrs.outcome : null
     this.events.push(
-      buildEvent({ matchId: this.cfg.matchId, period: this.period, periodStartTick: this.periodStartTick, dt: this.dt }, this.seq, pe, extra)
+      buildEvent({ matchId: this.cfg.matchId, period: this.period, periodStartTick: this.periodStartTick, dt: this.dt }, this.seq, pe, { ...extra, outcome })
     )
   }
   pending(type: PendingEvent["type"], pl: PlayerState | null, at: Vec2 | null, attrs: Record<string, AttrValue> = {}, end: Vec2 | null = null, side?: Side): PendingEvent {

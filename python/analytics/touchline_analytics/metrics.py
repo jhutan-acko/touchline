@@ -135,12 +135,13 @@ def touchline_events(domain_jsonl: Path) -> list[dict]:
         for line in fh:
             e = json.loads(line)
             t = e["type"]
+            a = e["attrs"]
             if t == "pass":
                 ok = e["outcome"] == "successful"
                 length = math.hypot(e["x_end"] - e["x"], e["y_end"] - e["y"]) if ok and e["x_end"] is not None else None
-                out.append({"type": "pass", "set_piece": _SET_PIECE.get(e.get("restart") or "", None), "complete": ok, "length": length, "goal": False, "on_target": False})
+                out.append({"type": "pass", "set_piece": _SET_PIECE.get(a.get("restart") or "", None), "complete": ok, "length": length, "goal": False, "on_target": False})
             elif t == "shot":
-                sp = "penalty" if e.get("technique") == "penalty" else None
+                sp = "penalty" if a.get("technique") == "penalty" else None
                 out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": e["outcome"] == "goal", "on_target": e["outcome"] in ("goal", "saved")})
             elif t in ("foul", "card"):
                 out.append({"type": t, "set_piece": None, "complete": False, "length": None, "goal": False, "on_target": False})
