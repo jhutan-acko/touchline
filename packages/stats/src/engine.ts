@@ -1,6 +1,7 @@
 import type { DomainEvent, MetricId, Signal, SignalType } from "@touchline/schema"
 import { matchClock } from "@touchline/sim-core"
 import { metricDef, type SubjectKind } from "./catalog.js"
+import { passValues, shotXg } from "./derive.js"
 import { emittedAt, type MatchInfo, type StatsInput, type TeamInfo, type TrackFrame } from "./input.js"
 import type { StatsModels } from "./models.js"
 import { Counters, maxBetween, Series } from "./store.js"
@@ -15,6 +16,14 @@ export const DISTANCE_MILESTONES_M = [10_000, 12_000] as const
 /** Faster than this between frames is a jump (half-time reset, substitution), not running. */
 const MAX_RUN_MS = 12
 const MAX_BALL_KMH = 200
+/** Frames kept for looking up the frame at a pass's or shot's release (flights end within a few seconds). */
+const FRAME_MEMORY_S = 30
+/** A completed pass this unlikely (xPass) is a difficult pass (about the hardest 1 % of completed passes). */
+export const DIFFICULT_PASS_XP = 0.55
+/** A shot at least this likely to score (xG) is a big chance. */
+export const BIG_CHANCE_XG = 0.3
+/** Counts at which a player milestone is raised. */
+export const PLAYER_MILESTONES: Readonly<Record<string, ReadonlyArray<number>>> = { passes_completed: [50, 75, 100], goals: [2, 3], tackles_won: [5] }
 
 export interface QueryOptions {
   /** Global tick to answer at (default: the latest ingested). */
@@ -47,6 +56,9 @@ export class StatsEngine {
   readonly events: DomainEvent[] = []
   /** Emission tick of each stored event (index-aligned with `events`). */
   readonly eventTicks: number[] = []
+  /** Values the engine derived for each pass and shot (pass.dist, pass.xp, shot.xg, shot.speed), by event id. */
+  readonly derived = new Map<string, Readonly<Record<string, number>>>()
+  readonly score = { home: 0, away: 0 }
   protected readonly counters = new Counters()
   private readonly speeds = new Map<string, Series>()
   private readonly vmax = new Map<string, Series>()
@@ -63,6 +75,8 @@ export class StatsEngine {
   private lastEventTick = -1
   private lastFrame: TrackFrame | null = null
   private readonly signalIds = new Set<string>()
+  private readonly frames = new Map<number, TrackFrame>()
+  private readonly tallies = new Map<string, Map<string, number>>()
 
   constructor(
     readonly info: MatchInfo,
@@ -106,6 +120,8 @@ export class StatsEngine {
         throw new StatsError(`input out of order: frame ${f.tick} after frame ${this.lastFrameTick} and events of tick ${this.lastEventTick}`)
       this.lastFrameTick = f.tick
       this.lastFrame = f
+      this.frames.set(f.tick, f)
+      this.frames.delete(f.tick - this.ticks(FRAME_MEMORY_S))
       this.onFrame(f)
     } else {
       const e = input.event
@@ -119,7 +135,115 @@ export class StatsEngine {
     return this.signals.slice(before)
   }
 
-  protected onEvent(_e: DomainEvent, _tick: number): void {}
+  protected onEvent(e: DomainEvent, tick: number): void {
+    const team = e.team_id === null ? undefined : this.teamById.get(e.team_id)
+    switch (e.type) {
+      case "pass":
+        if (team) this.onPass(e, tick, team)
+        break
+      case "shot":
+        if (team) this.onShot(e, tick, team)
+        break
+      case "goal":
+        if (team) this.onGoal(e, team)
+        break
+      case "card": {
+        const red = e.attrs.colour !== "yellow"
+        this.raise("card", e, {
+          team_id: e.team_id, player_id: e.player_id, metric: null, value: null, frame_from: e.frame_id, frame_to: e.frame_id,
+          salience: red ? 0.9 : 0.5, evidence: [e.id], data: { red: red ? 1 : 0 }
+        })
+        break
+      }
+      case "tackle":
+        if (e.player_id && e.outcome === "won") this.tally(e, "tackles_won")
+        break
+    }
+  }
+
+  private onPass(e: DomainEvent, tick: number, team: TeamInfo): void {
+    const v = passValues(e, this.frames.get(e.frame_id), team.side, this.models)
+    if (!v) return
+    this.derived.set(e.id, v["pass.xp"] === null ? { "pass.dist": v["pass.dist"] } : { "pass.dist": v["pass.dist"], "pass.xp": v["pass.xp"] })
+    const ok = e.outcome === "successful"
+    for (const subject of [e.player_id, team.id]) {
+      if (subject === null) continue
+      this.counters.add("passes", subject, tick, 1)
+      this.counters.add("pass_len", subject, tick, v["pass.dist"])
+      if (ok) this.counters.add("passes_ok", subject, tick, 1)
+      if (v["pass.xp"] !== null) {
+        this.counters.add("xp_sum", subject, tick, v["pass.xp"])
+        this.counters.add("xp_n", subject, tick, 1)
+      }
+    }
+    if (ok && v["pass.xp"] !== null && v["pass.xp"] < DIFFICULT_PASS_XP) {
+      const xp = Math.round(v["pass.xp"] * 1000) / 1000
+      this.raise("difficult_pass_completed", e, {
+        team_id: team.id, player_id: e.player_id, metric: "pass.xp", value: xp, frame_from: e.frame_id, frame_to: tick,
+        salience: Math.min(0.6, 0.25 + (DIFFICULT_PASS_XP - v["pass.xp"])), evidence: [e.id], data: { "pass.xp": xp, "pass.dist": Math.round(v["pass.dist"] * 10) / 10 }
+      })
+    }
+    if (ok && e.player_id) this.tally(e, "passes_completed")
+  }
+
+  private onShot(e: DomainEvent, tick: number, team: TeamInfo): void {
+    const xg = shotXg(e, this.frames.get(e.frame_id), team.side, this.models)
+    if (xg === null) return
+    // Peak ball speed in the 0.3 s after the strike (frames up to the shot's resolution).
+    const speed = this.ballSpeedMax(e.frame_id, Math.min(e.frame_id + this.ticks(0.3), tick))
+    this.derived.set(e.id, speed === null ? { "shot.xg": xg } : { "shot.xg": xg, "shot.speed": speed })
+    for (const subject of [e.player_id, team.id]) {
+      if (subject === null) continue
+      this.counters.add("shots", subject, tick, 1)
+      this.counters.add("xg", subject, tick, xg)
+      if (speed !== null) {
+        this.counters.add("shot_speed", subject, tick, speed)
+        this.counters.add("shot_speed_n", subject, tick, 1)
+      }
+    }
+    if (xg >= BIG_CHANCE_XG && e.outcome !== "goal") {
+      const v = Math.round(xg * 1000) / 1000
+      this.raise("big_chance", e, {
+        team_id: team.id, player_id: e.player_id, metric: "shot.xg", value: v, frame_from: e.frame_id, frame_to: tick,
+        salience: Math.min(0.9, 0.4 + 0.6 * xg), evidence: [e.id], data: { "shot.xg": v }
+      })
+    }
+  }
+
+  private onGoal(e: DomainEvent, team: TeamInfo): void {
+    this.score[team.side]++
+    // The shot that scored is the last shot by this team with outcome "goal" (none for an own goal or a loose ball).
+    let shot: DomainEvent | undefined
+    for (let i = this.events.length - 2; i >= 0 && i >= this.events.length - 6; i--) {
+      const c = this.events[i]!
+      if (c.type === "shot" && c.outcome === "goal" && c.team_id === team.id) {
+        shot = c
+        break
+      }
+    }
+    const xg = shot ? (this.derived.get(shot.id)?.["shot.xg"] ?? null) : null
+    this.raise("goal", e, {
+      team_id: team.id, player_id: e.player_id, metric: xg === null ? null : "shot.xg", value: xg === null ? null : Math.round(xg * 1000) / 1000,
+      frame_from: shot?.frame_id ?? e.frame_id, frame_to: e.frame_id, salience: 1, evidence: shot ? [shot.id, e.id] : [e.id],
+      data: { home: this.score.home, away: this.score.away, own_goal: e.attrs.own_goal === true ? 1 : 0 }
+    })
+    if (e.attrs.own_goal !== true && e.player_id) this.tally(e, "goals")
+  }
+
+  /** Count a player's passes completed, goals and tackles won, raising a milestone at the listed counts. */
+  private tally(e: DomainEvent, what: keyof typeof PLAYER_MILESTONES): void {
+    const id = e.player_id!
+    let t = this.tallies.get(id)
+    if (!t) this.tallies.set(id, (t = new Map()))
+    const n = (t.get(what) ?? 0) + 1
+    t.set(what, n)
+    if (!PLAYER_MILESTONES[what]!.includes(n)) return
+    this.raise("player_milestone", e, {
+      team_id: e.team_id, player_id: id, metric: what === "passes_completed" ? "pass.acc" : null,
+      value: what === "passes_completed" ? this.value("pass.acc", id, { at: emittedAt(e) }) : null,
+      frame_from: e.frame_id, frame_to: e.frame_id, salience: what === "goals" ? 0.8 : 0.3, evidence: [e.id], data: { [what]: n }
+    })
+  }
 
   protected onFrame(f: TrackFrame): void {
     const dt = this.info.dt
@@ -257,6 +381,16 @@ export class StatsEngine {
         const i = this.ballSpeed.indexAt(at)
         return i < 0 ? null : this.ballSpeed.values[i]!
       }
+      case "pass.dist":
+        return ratio(this.counters.between("pass_len", subject, from, at), this.counters.between("passes", subject, from, at))
+      case "pass.acc":
+        return ratio(this.counters.between("passes_ok", subject, from, at), this.counters.between("passes", subject, from, at))
+      case "pass.xp":
+        return ratio(this.counters.between("xp_sum", subject, from, at), this.counters.between("xp_n", subject, from, at))
+      case "shot.xg":
+        return this.counters.between("xg", subject, from, at)
+      case "shot.speed":
+        return ratio(this.counters.between("shot_speed", subject, from, at), this.counters.between("shot_speed_n", subject, from, at))
       case "team.poss":
         return ratio(this.counters.between("poss", subject, from, at), this.counters.between("inplay", "match", from, at))
       default:
