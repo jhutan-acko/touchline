@@ -142,7 +142,8 @@ export type FlightOutcome =
 export type Possession =
   | { readonly kind: "owned"; readonly playerId: string; readonly since: number; readonly restart: RestartKind | null }
   | { readonly kind: "in_flight"; readonly flight: Flight }
-  | { readonly kind: "loose" }
+  /** A loose ball; after a bad first touch the toucher cannot play it again until `noTouchUntil` (global tick). */
+  | { readonly kind: "loose"; readonly noTouchId?: string; readonly noTouchUntil?: number }
   | { readonly kind: "dead" }
 
 export type RestartKind = "kickoff" | "throw_in" | "corner" | "goal_kick" | "free_kick" | "penalty"
@@ -186,6 +187,7 @@ export type EventType =
   | "set_piece"
   | "off_ball_run"
   | "substitution"
+  | "ground_duel"
 
 /** One alternative the player could have chosen, recorded at the moment of decision. */
 export interface OptionRecord {

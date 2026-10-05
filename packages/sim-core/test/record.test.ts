@@ -82,11 +82,12 @@ describe("on-ball records", () => {
   })
   it("passes and shots use the player's preferred foot, and the other foot for weak-foot kicks", () => {
     const cfg = makeConfig(5)
-    const lefty = { ...cfg, home: { ...cfg.home, starters: cfg.home.starters.map((p) => ({ ...p, preferredFoot: "left" as const })) } }
+    const left = (ps: MatchConfig["home"]["starters"]) => ps.map((p) => ({ ...p, preferredFoot: "left" as const }))
+    const lefty = { ...cfg, home: { ...cfg.home, starters: left(cfg.home.starters), bench: left(cfg.home.bench ?? []) } }
     const m = play(lefty)
     const kicks = m.events.filter((e) => (e.type === "pass" || e.type === "shot") && e.team_id === cfg.home.id && e.attrs.technique !== "throw")
-    const left = kicks.filter((e) => e.attrs.body_part === "left_foot").length
-    expect(left / kicks.length).toBeGreaterThan(0.7)
-    expect(left / kicks.length).toBeLessThan(0.95)
+    const share = kicks.filter((e) => e.attrs.body_part === "left_foot").length / kicks.length
+    expect(share).toBeGreaterThan(0.7)
+    expect(share).toBeLessThan(0.95)
   })
 })

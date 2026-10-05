@@ -118,6 +118,7 @@ export const cdfTypeOf = (e: DomainEvent): CdfType => {
     case "carry":
     case "take_on":
     case "aerial_duel":
+    case "ground_duel":
     case "ball_recovery":
       return { type: "misc", sub_type: "other_ball_action", outcome_type: a.outcome === "lost" ? "unsuccessful" : "successful", is_successful: a.outcome !== "lost" }
     case "foul":

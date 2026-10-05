@@ -127,6 +127,13 @@ export interface Params {
    */
   readonly fatigue: { readonly drainBase: number; readonly drainSpeed2: number; readonly staminaSlope: number; readonly halfTimeRecovery: number; readonly executionK: number }
   /** Substitution policy: planned windows (match minute, mean and SD), players per window, chance of a half-time change. */
+  /**
+   * First touch on a reception: P(error) = sigmoid(b0 + bSpeed x (speed - 12) / 10 + bHigh x height share + bPressure x pressure + bSkill x (skill - 0.6));
+   * errors split into missed, miscontrol and (the rest) heavy.
+   */
+  readonly firstTouch: { readonly b0: number; readonly bSpeed: number; readonly bHigh: number; readonly bPressure: number; readonly bSkill: number; readonly missedShare: number; readonly miscontrolShare: number }
+  /** Loose balls two opponents can both reach are decided by a ground duel: logit = bSkill x skill difference + bReach x reach advantage (m). */
+  readonly groundDuel: { readonly bSkill: number; readonly bReach: number; readonly contestM: number }
   readonly substitutions: { readonly windowMinutes: readonly [number, number, number]; readonly windowSdMin: number; readonly perWindow: readonly [number, number, number]; readonly halfTimeChance: number }
   readonly classifier: ClassifierThresholds
 }
@@ -209,6 +216,8 @@ export const DEFAULT_PARAMS: Params = {
   movement: { shapeSpeedShare: 0.7 },
   shape: { width: 1, depth: 1 },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
+  firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
+  groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], halfTimeChance: 0.2 },
   classifier: {
     longPassM: 32,

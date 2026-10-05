@@ -1,7 +1,7 @@
 import { stepBall } from "./ball.js"
 import { decide, lastDefenderAttackX, nearestOpponent, type Decision } from "./decide.js"
 import { buildEvent, round2 } from "./events.js"
-import { executeKick } from "./execute.js"
+import { executeKick, pressureFrom } from "./execute.js"
 import {
   add,
   attackX,
@@ -25,6 +25,7 @@ import { goalLineCrossing, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
 import { parryBall, planShot } from "./shot.js"
+import { ballAfterTouch, drawFirstTouch, firstTouchError, type FirstTouch } from "./touch.js"
 import {
   CONCERNS,
   type AttrValue,
@@ -705,7 +706,20 @@ const ownedTick = (w: Work): void => {
 
 const resolveFlightNow = (w: Work, f: Flight): void => {
   w.emit(f.pending, { frame_id_end: f.resolveTick, outcome: f.outcome })
-  for (const e of f.extra) w.emit(e)
+  // The receiver's first touch is decided now, at contact, from the ball as it arrives and the pressure on them.
+  let touch: FirstTouch | null = null
+  for (const e of f.extra) {
+    if (e.type !== "reception" || !f.winnerId) {
+      w.emit(e)
+      continue
+    }
+    const r = w.player(f.winnerId)
+    const opp = nearestOpponent(r.pos, w.active(other(r.side)))
+    const pressure = pressureFrom(opp ? dist(opp.pos, r.pos) : 50)
+    const speed = Math.hypot(w.ball.vel.x, w.ball.vel.y, w.ball.vel.z)
+    touch = drawFirstTouch(firstTouchError({ speed, height: w.ball.pos.z, pressure, skill: (r.attrs.dribbling + r.attrs.composure) / 2 }, w.p), w.rng.execution, w.p)
+    w.emit({ ...e, attrs: { ...e.attrs, first_touch: touch, under_pressure: pressure > 0.3, lost_possession: touch === "controlled" ? false : null } })
+  }
   const goal = f.extra.find((e) => e.type === "goal")
   if (goal) w.score[goal.team_id === w.teamId("home") ? "home" : "away"] += 1
   if (f.restartAfter) {
@@ -717,6 +731,14 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     if (toucher) w.lastTouch = { playerId: toucher, side: w.player(toucher).side }
     w.ball = f.looseBall
     w.possession = { kind: "loose" }
+    return
+  }
+  if (f.winnerId && touch !== null && touch !== "controlled") {
+    const r = w.player(f.winnerId)
+    w.ball = ballAfterTouch(touch, r.pos, w.ball.vel, w.rng.execution)
+    w.possession = { kind: "loose", noTouchId: r.id, noTouchUntil: w.tick + Math.round(0.4 / w.dt) }
+    w.lastTouch = { playerId: r.id, side: r.side }
+    w.pressedBy = []
     return
   }
   if (f.winnerId) {
@@ -777,9 +799,23 @@ const ballTick = (w: Work): void => {
     return
   }
   if (w.ball.pos.z > w.p.kinematics.controlHeightM) return
-  const near = w.active().filter((pl) => dist(pl.pos, flat) <= w.p.kinematics.reachM).sort((a, b) => dist(a.pos, flat) - dist(b.pos, flat))
-  const first = near[0]
-  if (first) changePossession(w, first, w.pending("ball_recovery", first, flat, { kind: "loose_ball" }))
+  const blocked = pos.noTouchId !== undefined && w.tick < (pos.noTouchUntil ?? 0) ? pos.noTouchId : null
+  const reach = w.p.kinematics.reachM
+  const eligible = w.active().filter((pl) => pl.id !== blocked).sort((a, b) => dist(a.pos, flat) - dist(b.pos, flat))
+  const first = eligible[0]
+  if (!first || dist(first.pos, flat) > reach) return
+  // An opponent who can also get there contests it: a ground duel decides who comes away with the ball.
+  const rival = eligible.find((pl) => pl.side !== first.side && dist(pl.pos, flat) <= reach + w.p.groundDuel.contestM)
+  let winner = first
+  if (rival) {
+    const g = w.p.groundDuel
+    const skill = (pl: PlayerState) => (pl.attrs.tackling + pl.attrs.dribbling) / 2
+    const pFirst = 1 / (1 + Math.exp(-(g.bSkill * (skill(first) - skill(rival)) + g.bReach * (dist(rival.pos, flat) - dist(first.pos, flat)))))
+    winner = w.rng.duel.chance(pFirst) ? first : rival
+    const loser = winner === first ? rival : first
+    w.emit(w.pending("ground_duel", winner, flat, { kind: "loose_ball", winner_id: winner.id, loser_id: loser.id }))
+  }
+  changePossession(w, winner, w.pending("ball_recovery", winner, flat, { kind: "loose_ball" }))
 }
 
 // ---------------------------------------------------------------- movement
