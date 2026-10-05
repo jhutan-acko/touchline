@@ -17,6 +17,20 @@ export interface ShotPlan {
   readonly blockerId: string | null
   readonly keeperId: string | null
   readonly handling: Handling | null
+  /** True when a scenario script forced this outcome. */
+  readonly forced?: boolean
+}
+
+/**
+ * Adjustments from the game state and scenario scripts: a multiplier on the chance of scoring, a shift of the
+ * keeper's save logit, an extra share of fumbled saves, and a forced outcome ("goal": this shot scores;
+ * "save" / "keeper_error": if this shot is on target, the keeper saves it / lets it in).
+ */
+export interface ShotMods {
+  readonly scoring?: number
+  readonly saveLogit?: number
+  readonly fumble?: number
+  readonly force?: "goal" | "save" | "keeper_error"
 }
 
 const segmentDistance = (a: Vec2, b: Vec2, q: Vec2): { d: number; t: number } => {
@@ -63,11 +77,11 @@ export interface ShotOnTarget {
  * Chance that the keeper saves an on-target shot: lower towards the posts (`bWide`) and near the bar or the
  * ground (`bEdge`), lower from close range (`bDistance` per 10 m beyond 16 m), higher for quick reflexes.
  */
-export const saveChance = (s: ShotOnTarget, keeper: PlayerState, p: Params): number => {
+export const saveChance = (s: ShotOnTarget, keeper: PlayerState, p: Params, logitShift = 0): number => {
   const c = p.shot.save
   const wide = Math.min(1, Math.abs(s.y) / PITCH.goalHalfWidth)
   const edge = Math.min(1, Math.abs(s.z / PITCH.goalHeight - 0.5) * 2)
-  return 1 / (1 + Math.exp(-(c.b0 + c.bWide * wide + c.bEdge * edge + (c.bDistance * (s.distance - 16)) / 10 + c.bReflexes * (keeper.attrs.reflexes - 0.6))))
+  return 1 / (1 + Math.exp(-(logitShift + c.b0 + c.bWide * wide + c.bEdge * edge + (c.bDistance * (s.distance - 16)) / 10 + c.bReflexes * (keeper.attrs.reflexes - 0.6))))
 }
 
 /**
@@ -87,9 +101,9 @@ export const planShot = (
   rng: Rng,
   /** Shooting with the weaker foot widens the aiming error by execution.weakFootK. */
   weakFoot = false,
-  /** Game-state multiplier on the chance of scoring (see scoringFactor); 1 leaves goals per shot tracking xG. */
-  scoring = 1
+  mods: ShotMods = {}
 ): ShotPlan => {
+  const scoring = mods.scoring ?? 1
   const goal = goalOf(side)
   const from: Vec3 = { x: shooter.pos.x, y: shooter.pos.y, z: 0.2 }
   const d = dist(shooter.pos, goal)
@@ -116,6 +130,12 @@ export const planShot = (
       z = 0
     }
   }
+  if (mods.force === "goal") {
+    // Scripted: a clean strike inside the frame that beats the keeper.
+    const fy = Math.max(-(PITCH.goalHalfWidth - 0.4), Math.min(PITCH.goalHalfWidth - 0.4, y))
+    const goalTo: Vec3 = { x: goal.x, y: fy, z: Math.min(z, PITCH.goalHeight - 0.4) }
+    return { outcome: "goal", ticks: Math.max(1, Math.ceil(d / p.shot.speed / dt)), from, to: goalTo, execution: "clean", onTarget: true, blockerId: null, keeperId: null, handling: null, forced: true }
+  }
   const to: Vec3 = { x: goal.x, y, z }
   const speed = execution === "scuffed" ? p.shot.speed * 0.5 : p.shot.speed
   const travel = (m: number) => Math.max(1, Math.ceil(m / speed / dt))
@@ -138,18 +158,23 @@ export const planShot = (
   const onTarget = Math.abs(y) < PITCH.goalHalfWidth && z < PITCH.goalHeight
   const keeper = opponents.find((o) => o.role === "GK" && !o.sentOff) ?? null
   if (!onTarget) return { outcome: "wide", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }
+  const saveAt: Vec3 = { x: goal.x - dirOf(side) * 0.8, y: Math.max(-3.5, Math.min(3.5, y)), z }
+  if (keeper && mods.force === "save")
+    return { outcome: "saved", ticks: travel(d), from, to: saveAt, execution, onTarget, blockerId: null, keeperId: keeper.id, handling: "clean", forced: true }
+  if (keeper && mods.force === "keeper_error")
+    return { outcome: "goal", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null, forced: true }
   // Penalties keep their fixed conversion (scaled by how likely this aim was to be on target); every other
   // shot on target beats the keeper unless saved, by placement, distance and the keeper's reflexes (see saveChance).
   // Heights below 0 are clamped to the ground, so the vertical window is (-inf, crossbar).
   const pGoalClean = isPenalty
     ? Math.min(0.95, 0.76 / Math.max(0.05, normalBetween(-PITCH.goalHalfWidth, PITCH.goalHalfWidth, aimY, sdY) * normalBetween(-50, PITCH.goalHeight, aimZ, sdZ)))
-    : Math.min(0.95, (keeper ? 1 - saveChance({ y, z, distance: d }, keeper, p) : 1) * scoring)
+    : Math.min(0.95, (keeper ? 1 - saveChance({ y, z, distance: d }, keeper, p, mods.saveLogit ?? 0) : 1) * scoring)
   const pGoal = mis ? pGoalClean * 0.3 : pGoalClean
   if (rng.chance(pGoal) || keeper === null)
     return { outcome: "goal", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }
   const h = rng.uniform()
   const k = keeper.attrs.handling
-  const handling: Handling = h < 0.35 + 0.35 * k ? "clean" : h < 0.85 ? "parried_safe" : h < 0.97 ? "parried_dangerous" : "fumble"
-  const saveAt: Vec3 = { x: goal.x - dirOf(side) * 0.8, y: Math.max(-3.5, Math.min(3.5, y)), z }
+  const natural: Handling = h < 0.35 + 0.35 * k ? "clean" : h < 0.85 ? "parried_safe" : h < 0.97 ? "parried_dangerous" : "fumble"
+  const handling: Handling = (mods.fumble ?? 0) > 0 && rng.chance(mods.fumble!) ? "fumble" : natural
   return { outcome: "saved", ticks: travel(d), from, to: saveAt, execution, onTarget, blockerId: null, keeperId: keeper.id, handling }
 }

@@ -26,7 +26,8 @@ import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
-import { parryBall, planShot } from "./shot.js"
+import { modsFor, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
+import { parryBall, planShot, type ShotMods } from "./shot.js"
 import { ballAfterTouch, drawFirstTouch, firstTouchError, type FirstTouch } from "./touch.js"
 import {
   CONCERNS,
@@ -132,6 +133,7 @@ export const initMatch = (cfg: MatchConfig): MatchState => {
     pressedBy: [],
     carry: null,
     subs,
+    forced: [],
     rng,
     eventSeq: 0
   }
@@ -157,6 +159,7 @@ class Work {
   pressedBy: string[]
   carry: MatchState["carry"]
   subs: Record<Side, SubsState>
+  forced: ScriptEntry[]
   rng: Record<Concern, Rng>
   seq: number
   events: DomainEvent[] = []
@@ -178,6 +181,7 @@ class Work {
     this.pressedBy = [...s.pressedBy]
     this.carry = s.carry
     this.subs = { ...s.subs }
+    this.forced = [...s.forced]
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
@@ -234,6 +238,21 @@ class Work {
       attrs
     }
   }
+  /** Scenario-script modifiers for `side` now. */
+  mods(side: Side): Mods {
+    return modsFor(this.cfg.script, side, this.minute(), this.p)
+  }
+  /** Whether an outcome of `effect` is forced for `side`'s next qualifying action. */
+  hasForced(side: Side, effect: ScenarioEffect): boolean {
+    return this.forced.some((f) => f.team === side && f.effect === effect)
+  }
+  /** Use up one forced `effect` for `side`; true if there was one. */
+  takeForced(side: Side, effect: ScenarioEffect): boolean {
+    const i = this.forced.findIndex((f) => f.team === side && f.effect === effect)
+    if (i < 0) return false
+    this.forced.splice(i, 1)
+    return true
+  }
   decisionDelayTicks(): number {
     const t = this.p.timing
     return Math.max(1, Math.round(this.rng.decision.range(t.decisionMinS, t.decisionMaxS) / this.dt))
@@ -257,6 +276,7 @@ class Work {
       pressedBy: this.pressedBy,
       carry: this.carry,
       subs: this.subs,
+      forced: this.forced,
       rng: out,
       eventSeq: this.seq
     }
@@ -377,10 +397,11 @@ const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState): void
   w.emit(w.pending("foul", offender, offender.pos, { kind: "tackle", victim_id: victim.id }))
   const ref = w.rng.referee
   let card: "yellow" | "second_yellow" | "red" | null = null
-  if (ref.chance(w.p.defending.redPerFoul)) card = "red"
+  const forcedRed = w.takeForced(offender.side, "red_card")
+  if (forcedRed || ref.chance(Math.min(1, w.p.defending.redPerFoul * w.mods(offender.side).red))) card = "red"
   else if (ref.chance(w.p.defending.yellowPerFoul)) card = offender.yellow >= 1 ? "second_yellow" : "yellow"
   if (card) {
-    w.emit(w.pending("card", offender, offender.pos, { colour: card }))
+    w.emit(w.pending("card", offender, offender.pos, forcedRed ? { colour: card, scripted: true } : { colour: card }))
     w.setPlayer({ ...w.player(offender.id), yellow: offender.yellow + 1, sentOff: card !== "yellow" })
   }
   const inBox = attackX(victim.side, victim.pos.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(victim.pos.y) < PITCH.boxHalfWidth
@@ -416,7 +437,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
   const def = nearestOpponent(owner.pos, opps)
   if (!def || dist(def.pos, owner.pos) > w.p.defending.tackleRadiusM) return false
   const style = teamOf(w.cfg, def.side).style
-  const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, owner.pos))
+  const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, owner.pos)) * w.mods(def.side).tackle
   if (!w.rng.duel.chance(hazard(rate, w.dt))) return false
   const pWin = 1 / (1 + Math.exp(-(w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling))))
   if (w.rng.duel.chance(pWin)) {
@@ -428,7 +449,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
     return true
   }
   const victimInBox = attackX(owner.side, owner.pos.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
-  if (w.rng.referee.chance(w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1))) {
+  if (w.rng.referee.chance(Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul)) || w.hasForced(def.side, "red_card")) {
     finishCarry(w, owner)
     w.emit(w.pending("tackle", def, def.pos, { outcome: "foul", opponent_id: owner.id }))
     foulAndCards(w, def, owner)
@@ -483,8 +504,14 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
       : d.candidate!.target
   const height = isClear ? "high" : d.candidate!.height
   const weakFoot = w.rng.execution.chance(0.2)
+  // Scenario scripts: a defensive error raises (or forces) mis-hits by the team's defenders in their own half.
+  const errorProne = (owner.role === "CB" || owner.role === "FB" || owner.role === "DM") && attackX(side, owner.pos.x) < 0
+  const forceMishit = errorProne && !restart && w.takeForced(side, "defensive_error")
   const exe = executeKick(
-    { from: owner.pos, to: target, height, technique: technique(d.action, owner), composure: owner.attrs.composure, pressure: d.pressure, weakFoot, fatigue: 1 - owner.energy },
+    {
+      from: owner.pos, to: target, height, technique: technique(d.action, owner), composure: owner.attrs.composure, pressure: d.pressure, weakFoot,
+      fatigue: 1 - owner.energy, mishitScale: errorProne ? w.mods(side).mishit : 1, forceMishit
+    },
     p,
     w.rng.execution
   )
@@ -525,6 +552,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     intended_end_x: round2(target.x),
     intended_end_y: round2(target.y),
     execution: sliced ? "sliced" : exe.execution,
+    ...(forceMishit ? { scripted: true } : {}),
     error_m: round2(exe.errorM),
     decision_quality: d.decisionQuality === null ? null : round2(d.decisionQuality),
     ...decisionAttrs(d),
@@ -627,7 +655,20 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   // The recorded xG is the model's; the chance of scoring also follows the game state (minute, red cards).
   const scoring = isPenalty ? 1 : scoringFactor(w.minute(), w.active(side).length, opps.length, w.p, w.period)
   const weakFoot = !isPenalty && w.rng.execution.chance(0.2)
-  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, scoring)
+  // Scenario scripts: this team's scoring nudge; the defending keeper's save shift and fumbles; forced outcomes.
+  const own = w.mods(side), def = w.mods(other(side))
+  const force: ShotMods["force"] = w.takeForced(side, "goal")
+    ? "goal"
+    : w.hasForced(other(side), "keeper_heroics")
+      ? "save"
+      : w.hasForced(other(side), "keeper_howler")
+        ? "keeper_error"
+        : undefined
+  const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, ...(force ? { force } : {}) }
+  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
+  // A forced save or keeper error is used up only by a shot that reached the target.
+  if (plan.forced && force === "save") w.takeForced(other(side), "keeper_heroics")
+  if (plan.forced && force === "keeper_error") w.takeForced(other(side), "keeper_howler")
   const tickAt = w.tick + plan.ticks
   const at = (pe: PendingEvent): PendingEvent => ({ ...pe, frame_id: tickAt })
   const end = { x: plan.to.x, y: plan.to.y }
@@ -638,6 +679,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     execution: plan.execution,
     on_target: plan.onTarget,
     xg: Math.round(xg * 1000) / 1000,
+    ...(plan.forced ? { scripted: true } : {}),
     shot_speed_kmh: round2(w.p.shot.speed * 3.6 * (plan.execution === "scuffed" ? 0.5 : 1))
   }, end)
   const extra: PendingEvent[] = []
@@ -687,7 +729,12 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   w.lastTouch = { playerId: owner.id, side }
 }
 
-const scriptBias = (_w: Work, _side: Side): Partial<Record<Action, number>> => ({})
+/** Scenario-script logit shifts for the team on the ball (see script.ts). */
+const scriptBias = (w: Work, side: Side): Partial<Record<Action, number>> => {
+  const m = w.mods(side)
+  if (m.shotLogit === 0 && m.attackLogit === 0) return {}
+  return { shot: m.shotLogit, cross: m.attackLogit, through_ball: m.attackLogit, lofted_through: m.attackLogit, cutback: m.attackLogit }
+}
 
 const ownerDecision = (w: Work, owner: PlayerState): void => {
   const poss = w.possession
@@ -940,10 +987,13 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
     if (pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
       return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
     const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
-    if (defenders[0]?.id === pl.id && dist(pl.pos, owner.pos) < 18) {
+    // The nearest defender presses; in a scripted press surge the two nearest do, from further away.
+    const surge = w.mods(pl.side).press > 1
+    const presser = surge ? defenders.slice(0, 2).some((x) => x.id === pl.id) : defenders[0]?.id === pl.id
+    if (presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
       const style = team.style
       const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, owner.pos)
-      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency, w.dt))) {
+      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press, w.dt))) {
         w.setPlayer({ ...pl, intent: { kind: "press", targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) })
         return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
       }

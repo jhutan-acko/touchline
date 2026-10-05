@@ -18,6 +18,9 @@ export interface KickIntent {
   readonly weakFoot: boolean
   /** 0 fresh .. 1 exhausted (1 - energy); widens the error by execution.executionK. */
   readonly fatigue?: number
+  /** Multiplies the mis-hit chance (scenario scripts); `forceMishit` makes this kick a mis-hit. */
+  readonly mishitScale?: number
+  readonly forceMishit?: boolean
 }
 
 export interface Executed {
@@ -46,7 +49,7 @@ export const executeKick = (k: KickIntent, p: Params, rng: Rng): Executed => {
   const pMishit = Math.min(0.35, e.mishitBase + e.mishitK * Math.pow(k.pressure, 1.6) * (1.2 - k.composure) * (k.weakFoot ? 1.6 : 1))
   const g1 = rng.normal()
   const g2 = rng.normal()
-  const mishit = rng.chance(pMishit)
+  const mishit = rng.chance(Math.min(1, pMishit * (k.mishitScale ?? 1))) || k.forceMishit === true
   const g3 = rng.normal()
   const u = rng.uniform()
   let ang: number

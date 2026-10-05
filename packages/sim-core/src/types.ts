@@ -1,6 +1,7 @@
 import type { Side, Vec2, Vec3 } from "./geometry.js"
 import type { Params } from "./params.js"
 import type { RngState } from "./rng.js"
+import type { Script, ScriptEntry } from "./script.js"
 
 export type Role = "GK" | "CB" | "FB" | "DM" | "CM" | "AM" | "W" | "ST"
 export type FormationName = "4-3-3" | "4-4-2" | "4-2-3-1" | "3-5-2"
@@ -70,6 +71,8 @@ export interface MatchConfig {
   readonly params: Params
   /** Seconds per tick; 0.1 for 10 Hz, 0.04 for 25 Hz render runs. */
   readonly dt: number
+  /** Scenario script whose nudges apply inside their windows (none when absent). */
+  readonly script?: Script
 }
 
 export type Intent =
@@ -307,6 +310,8 @@ export interface MatchState {
     readonly decision: Readonly<Record<string, AttrValue>>
   } | null
   readonly subs: Readonly<Record<Side, SubsState>>
+  /** Script entries whose outcome is forced on the team's next qualifying action (set by the scenario runner). */
+  readonly forced: ReadonlyArray<ScriptEntry>
   readonly rng: Readonly<Record<Concern, RngState>>
   readonly eventSeq: number
 }

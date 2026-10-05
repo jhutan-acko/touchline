@@ -173,6 +173,25 @@ export interface Params {
    * red-card factors for the team down to fewer players and for its opponent.
    */
   readonly gameState: { readonly minuteProfile: readonly [number, number, number, number, number, number]; readonly redCardOwn: number; readonly redCardOpponent: number }
+  /**
+   * Scenario-script nudges (see script.ts): logit shifts and multipliers applied to the scripted team inside an
+   * entry's window — goal: shot logit and scoring; momentum: attacking logits and pressing; press surge: pressing
+   * and tackling; red card: fouls and reds; keeper heroics or howler: save logit and fumbles; defensive error: mis-hits.
+   */
+  readonly script: {
+    readonly goalShotLogit: number
+    readonly goalScoring: number
+    readonly momentumLogit: number
+    readonly momentumPress: number
+    readonly pressSurge: number
+    readonly pressTackle: number
+    readonly redFoul: number
+    readonly redCard: number
+    readonly heroicsSave: number
+    readonly howlerSave: number
+    readonly howlerFumble: number
+    readonly errorMishit: number
+  }
   readonly substitutions: {
     readonly windowMinutes: readonly [number, number, number]
     readonly windowSdMin: number
@@ -280,6 +299,7 @@ export const DEFAULT_PARAMS: Params = {
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
+  script: { goalShotLogit: 1.0, goalScoring: 1.6, momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 1.5, redCard: 40, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8 },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
   substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2 },
   classifier: {
