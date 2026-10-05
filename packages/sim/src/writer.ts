@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect"
 import { runScript, type DomainEvent, type Frame, type MatchConfig, type WindowResult } from "@touchline/sim-core"
 import { cdfEventLine, cdfMeta, cdfTrackingLine, periodsFromFrames } from "./cdf.js"
 import { hasScript, matchSteps } from "./run.js"
+import { spadlCsv } from "./spadl.js"
 import { criticalErrors, mistakes, scriptTruths, tacticalTruths, type CriticalError, type Mistake, type ScriptTruth, type TeamTruth } from "./truths.js"
 
 export interface RunManifest {
@@ -75,6 +76,7 @@ export const writeMatch = (cfg: MatchConfig, dir: string) =>
     const cdfLines = ordered.map((e) => cdfEventLine(cfg, e, clock, (p) => periodStart.get(p) ?? 0, recv.get(e.id) ?? null)).filter((x): x is string => x !== null)
     writeFileSync(join(dir, "event.jsonl"), cdfLines.join("\n") + "\n")
     writeFileSync(join(dir, "domain.jsonl"), ordered.map((e) => JSON.stringify(e)).join("\n") + "\n")
+    writeFileSync(join(dir, "spadl.csv"), spadlCsv(ordered, cfg))
     writeFileSync(join(dir, "meta.json"), JSON.stringify(cdfMeta(cfg, periodsFromFrames(periods)), null, 1))
     const goals = events.filter((e) => e.type === "goal")
     const score = `${goals.filter((g) => g.team_id === cfg.home.id).length}-${goals.filter((g) => g.team_id === cfg.away.id).length}`
@@ -87,7 +89,7 @@ export const writeMatch = (cfg: MatchConfig, dir: string) =>
       fps: Math.round(1 / cfg.dt),
       params_version: cfg.params.provenance.version,
       engine: { name: "touchline-sim", version: "0.1.0" },
-      outputs: Object.fromEntries(["meta.json", "event.jsonl", "tracking.jsonl", "domain.jsonl"].map((f) => [f, sha256(join(dir, f))])),
+      outputs: Object.fromEntries(["meta.json", "event.jsonl", "tracking.jsonl", "domain.jsonl", "spadl.csv"].map((f) => [f, sha256(join(dir, f))])),
       stats: { frames, events: events.length, cdf_events: cdfLines.length, score },
       truths: {
         script: scriptTruths(windows, cfg),
