@@ -16,6 +16,8 @@ export interface KickIntent {
   /** 0..1 from nearest-opponent distance. */
   readonly pressure: number
   readonly weakFoot: boolean
+  /** 0 fresh .. 1 exhausted (1 - energy); widens the error by execution.executionK. */
+  readonly fatigue?: number
 }
 
 export interface Executed {
@@ -38,7 +40,7 @@ export const executeKick = (k: KickIntent, p: Params, rng: Rng): Executed => {
   const dy = k.to.y - k.from.y
   const intendedLen = Math.max(0.5, Math.hypot(dx, dy))
   const ang0 = Math.atan2(dy, dx)
-  const skill = 1.35 - 0.7 * k.technique
+  const skill = (1.35 - 0.7 * k.technique) * (1 + p.fatigue.executionK * (k.fatigue ?? 0))
   const foot = k.weakFoot ? e.weakFootK : 1
   const pressureScale = 1 + e.pressureK * k.pressure
   const pMishit = Math.min(0.35, e.mishitBase + e.mishitK * Math.pow(k.pressure, 1.6) * (1.2 - k.composure) * (k.weakFoot ? 1.6 : 1))

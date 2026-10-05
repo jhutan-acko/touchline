@@ -51,6 +51,16 @@ describe("CDF export", () => {
     const fromShot = { ...own, attrs: { scorer_id: base.player_id, own_goal: false } }
     expect(cdfTypeOf(fromShot)).toBeNull()
   })
+  it("meta lists substitutes as non-starters, and substitutions export as referee events", () => {
+    const m = cdfMeta(cfg, periodsFromFrames(frames))
+    const home = m.teams.home.players
+    expect(home.filter((p) => p.is_starter)).toHaveLength(11)
+    expect(home.filter((p) => !p.is_starter).map((p) => p.id)).toEqual(cfg.home.bench!.map((p) => p.id))
+    const sub = events.find((e) => e.type === "substitution")!
+    const line = JSON.parse(cdfEventLine(cfg, sub, clock, start, null)!)
+    expect(line.event).toMatchObject({ type: "referee", sub_type: "substitution", official_id: REFEREE_ID })
+    expect(line.event.player_id).toBeUndefined()
+  })
   it("event tracking frame ids are period-relative", () => {
     const pass = events.find((e) => e.type === "pass" && e.period === "second_half")!
     const line = JSON.parse(cdfEventLine(cfg, pass, clock, start, pass.frame_id_end)!)

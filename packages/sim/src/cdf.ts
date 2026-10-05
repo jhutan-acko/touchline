@@ -27,7 +27,10 @@ export const periodsFromFrames = (frames: Iterable<Frame>): PeriodInfo[] => {
 const team = (t: TeamSetup) => ({
   id: t.id,
   name: t.name,
-  players: t.starters.map((p) => ({ id: p.id, team_id: t.id, jersey_number: p.jersey, is_starter: true }))
+  players: [
+    ...t.starters.map((p) => ({ id: p.id, team_id: t.id, jersey_number: p.jersey, is_starter: true })),
+    ...(t.bench ?? []).map((p) => ({ id: p.id, team_id: t.id, jersey_number: p.jersey, is_starter: false }))
+  ]
 })
 
 export const cdfMeta = (cfg: MatchConfig, periods: ReadonlyArray<PeriodInfo>, extra: { competitionId?: string; seasonId?: string; venueId?: string } = {}) => ({
@@ -123,6 +126,9 @@ export const cdfTypeOf = (e: DomainEvent): CdfType => {
       return { type: "referee", sub_type: "caution", outcome_type: a.colour === "yellow" ? "yellow_card" : a.colour === "red" ? "red_card" : "second_yellow_card", is_successful: true }
     case "offside":
       return { type: "referee", sub_type: "offside", outcome_type: "offside", is_successful: true }
+    case "substitution":
+      // Who came on and off stays in the domain stream: CDF referee events carry no player ids.
+      return { type: "referee", sub_type: "substitution", outcome_type: "start", is_successful: true }
     default:
       return null
   }

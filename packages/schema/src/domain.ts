@@ -3,7 +3,7 @@ import { Schema } from "effect"
 export const EventType = Schema.Literals([
   "match_start", "period_start", "period_end", "match_end", "pass", "reception", "carry", "take_on", "shot", "goal",
   "keeper_save", "keeper_distribution", "aerial_duel", "pressure", "tackle", "interception", "block", "clearance",
-  "ball_recovery", "possession_change", "ball_out", "foul", "card", "offside", "set_piece", "off_ball_run"
+  "ball_recovery", "possession_change", "ball_out", "foul", "card", "offside", "set_piece", "off_ball_run", "substitution"
 ])
 export const Period = Schema.Literals(["first_half", "second_half"])
 export const OptionRecord = Schema.Struct({

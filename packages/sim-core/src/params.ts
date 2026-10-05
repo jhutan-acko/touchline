@@ -121,6 +121,13 @@ export interface Params {
   readonly movement: { readonly shapeSpeedShare: number }
   /** Team shape spread: width (fully in possession, partly without) and depth between lines. */
   readonly shape: { readonly width: number; readonly depth: number }
+  /**
+   * Energy (1 fresh .. 0 exhausted) drains per second by (drainBase + drainSpeed2 x speed^2) x (1 + staminaSlope x (0.5 - stamina));
+   * players recover halfTimeRecovery at the break; tiredness widens execution error by up to executionK.
+   */
+  readonly fatigue: { readonly drainBase: number; readonly drainSpeed2: number; readonly staminaSlope: number; readonly halfTimeRecovery: number; readonly executionK: number }
+  /** Substitution policy: planned windows (match minute, mean and SD), players per window, chance of a half-time change. */
+  readonly substitutions: { readonly windowMinutes: readonly [number, number, number]; readonly windowSdMin: number; readonly perWindow: readonly [number, number, number]; readonly halfTimeChance: number }
   readonly classifier: ClassifierThresholds
 }
 
@@ -201,6 +208,8 @@ export const DEFAULT_PARAMS: Params = {
   runs: { runInBehindRatePerS: 0.12 },
   movement: { shapeSpeedShare: 0.7 },
   shape: { width: 1, depth: 1 },
+  fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
+  substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], halfTimeChance: 0.2 },
   classifier: {
     longPassM: 32,
     switchLateralM: 25,

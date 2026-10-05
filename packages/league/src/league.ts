@@ -108,6 +108,7 @@ export const generateLeague = (seed: number, blocked: ReadonlySet<string>): Leag
       formation: c.formation,
       style: ARCHETYPES[c.archetype],
       starters: squad.slice(0, 11),
+      bench: squad.slice(11),
       squad,
       kits: { home: { primary, secondary }, away: { primary: awayPrimary, secondary } },
       crest: { shape: (["shield", "circle", "diamond"] as const)[ci % 3]!, symbol: ["anvil", "kestrel", "gate", "wave", "sun", "hammer", "flower", "anchor"][ci]! }

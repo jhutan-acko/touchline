@@ -5,6 +5,12 @@ import type { PlayerAttrs } from "./types.js"
 export const vmaxFor = (a: PlayerAttrs, energy: number, p: Params): number =>
   p.kinematics.vmaxBase * (0.86 + 0.14 * a.pace) * (0.9 + 0.1 * energy)
 
+/** Energy after `dt` seconds at `speed` m/s for a player with the given stamina attribute (never below 0). */
+export const drainEnergy = (energy: number, speed: number, stamina: number, dt: number, p: Params): number => {
+  const f = p.fatigue
+  return Math.max(0, energy - dt * (f.drainBase + f.drainSpeed2 * speed * speed) * (1 + f.staminaSlope * (0.5 - stamina)))
+}
+
 export const accelFor = (a: PlayerAttrs, p: Params): number => p.kinematics.accelMax * (0.8 + 0.2 * a.acceleration)
 
 /**

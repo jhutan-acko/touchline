@@ -19,7 +19,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { accelFor, arrive, arriveBy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
+import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
@@ -40,12 +40,18 @@ import {
   type PlayerState,
   type Possession,
   type RestartKind,
+  type PlayerSetup,
+  type Role,
   type StepResult,
+  type SubsState,
   type TeamSetup
 } from "./types.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
 const OUTCOME_IN_ATTRS: ReadonlySet<string> = new Set(["take_on", "tackle"])
+/** Laws of the game: five substitutions, made in at most three stoppages during play (half time does not count). */
+const MAX_SUBS = 5
+const MAX_SUB_WINDOWS = 3
 
 const teamOf = (cfg: MatchConfig, side: Side): TeamSetup => (side === "home" ? cfg.home : cfg.away)
 
@@ -54,12 +60,11 @@ const samplePeriodTicks = (cfg: MatchConfig, rng: Rng): number => {
   return Math.round((45 * 60 + rng.range(lo, hi)) / cfg.dt)
 }
 
-const kickoffPlayers = (cfg: MatchConfig, existing?: ReadonlyArray<PlayerState>): PlayerState[] => {
+const kickoffPlayers = (cfg: MatchConfig): PlayerState[] => {
   const out: PlayerState[] = []
   for (const side of ["home", "away"] as const) {
     const team = teamOf(cfg, side)
     team.starters.forEach((pl, slot) => {
-      const prev = existing?.find((e) => e.id === pl.id)
       out.push({
         id: pl.id,
         side,
@@ -72,13 +77,23 @@ const kickoffPlayers = (cfg: MatchConfig, existing?: ReadonlyArray<PlayerState>)
         vel: { x: 0, y: 0 },
         intent: { kind: "shape" },
         intentUntil: 0,
-        energy: prev?.energy ?? 1,
-        yellow: prev?.yellow ?? 0,
-        sentOff: prev?.sentOff ?? false
+        energy: 1,
+        yellow: 0,
+        sentOff: false
       })
     })
   }
   return out
+}
+
+/** Planned substitution windows for one team (none without a bench). */
+const planSubs = (cfg: MatchConfig, side: Side, rng: Rng): SubsState => {
+  const s = cfg.params.substitutions
+  const bench = teamOf(cfg, side).bench ?? []
+  const plan = bench.length === 0
+    ? []
+    : s.windowMinutes.map((m, i) => ({ minute: Math.max(46, m + rng.normal() * s.windowSdMin), players: s.perWindow[i]! })).sort((a, b) => a.minute - b.minute)
+  return { plan, made: 0, windows: 0, used: [] }
 }
 
 /** Initial state: tick -1, so the first step emits frame 0 of the first half. */
@@ -91,6 +106,9 @@ export const initMatch = (cfg: MatchConfig): MatchState => {
   const timing = new Rng(rng.restart)
   const periodTicks = samplePeriodTicks(cfg, timing)
   rng.restart = timing.state
+  const benchRng = new Rng(rng.bench)
+  const subs = { home: planSubs(cfg, "home", benchRng), away: planSubs(cfg, "away", benchRng) }
+  rng.bench = benchRng.state
   return {
     config: cfg,
     tick: -1,
@@ -106,6 +124,7 @@ export const initMatch = (cfg: MatchConfig): MatchState => {
     lastTouch: null,
     pressedBy: [],
     carry: null,
+    subs,
     rng,
     eventSeq: 0
   }
@@ -130,6 +149,7 @@ class Work {
   lastTouch: MatchState["lastTouch"]
   pressedBy: string[]
   carry: MatchState["carry"]
+  subs: Record<Side, SubsState>
   rng: Record<Concern, Rng>
   seq: number
   events: DomainEvent[] = []
@@ -150,6 +170,7 @@ class Work {
     this.lastTouch = s.lastTouch
     this.pressedBy = [...s.pressedBy]
     this.carry = s.carry
+    this.subs = { ...s.subs }
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
@@ -168,6 +189,11 @@ class Work {
   }
   setPlayer(next: PlayerState): void {
     const i = this.players.findIndex((x) => x.id === next.id)
+    this.players[i] = next
+  }
+  /** Put `next` in the place of player `id` (a substitution). */
+  setPlayerAt(id: string, next: PlayerState): void {
+    const i = this.players.findIndex((x) => x.id === id)
     this.players[i] = next
   }
   active(side?: Side): PlayerState[] {
@@ -223,6 +249,7 @@ class Work {
       lastTouch: this.lastTouch,
       pressedBy: this.pressedBy,
       carry: this.carry,
+      subs: this.subs,
       rng: out,
       eventSeq: this.seq
     }
@@ -248,6 +275,62 @@ const startRestart = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: r.at.x, y: r.at.y, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
   w.pressedBy = []
+  if (w.period === "second_half") for (const side of ["home", "away"] as const) subWindow(w, side)
+}
+
+// ---------------------------------------------------------------- substitutions
+
+const LINE: Readonly<Record<Role, string>> = { GK: "gk", CB: "def", FB: "def", DM: "mid", CM: "mid", AM: "mid", W: "att", ST: "att" }
+
+/** Bench player to bring on for `off`: same role, else same line, else any outfield player. */
+const pickIncoming = (bench: ReadonlyArray<PlayerSetup>, off: PlayerState): PlayerSetup | null =>
+  bench.find((b) => b.role === off.role) ?? bench.find((b) => LINE[b.role] === LINE[off.role]) ?? bench[0] ?? null
+
+/**
+ * Replace up to `n` tired (or booked) outfield players. The player coming on takes the same formation slot and role,
+ * fresh, entering at `entry` (the halfway line during play, the kickoff position at half time).
+ */
+const makeSubs = (w: Work, side: Side, n: number, halfTime: boolean): number => {
+  const st = w.subs[side]
+  const team = teamOf(w.cfg, side)
+  let bench = (team.bench ?? []).filter((b) => b.role !== "GK" && !st.used.includes(b.id))
+  const rng = w.rng.bench
+  const outgoing = w
+    .active(side)
+    .filter((pl) => pl.role !== "GK" && !st.used.includes(pl.id))
+    .map((pl) => ({ pl, score: 1 - pl.energy + 0.25 * pl.yellow + 0.05 * rng.uniform() }))
+    .sort((a, b) => b.score - a.score)
+  let made = 0
+  const used = [...st.used]
+  for (const { pl: off } of outgoing) {
+    if (made >= n || st.made + made >= MAX_SUBS) break
+    const on = pickIncoming(bench, off)
+    if (!on) break
+    bench = bench.filter((b) => b.id !== on.id)
+    used.push(on.id)
+    const entry = halfTime ? off.pos : { x: 0, y: -PITCH.halfW }
+    w.setPlayerAt(off.id, {
+      id: on.id, side, role: off.role, slot: off.slot, jersey: on.jersey, attrs: on.attrs, foot: on.preferredFoot ?? "right",
+      pos: entry, vel: { x: 0, y: 0 }, intent: { kind: "shape" }, intentUntil: 0, energy: 1, yellow: 0, sentOff: false
+    })
+    if (w.lastTouch?.playerId === off.id) w.lastTouch = { playerId: on.id, side }
+    const reason = off.yellow > 0 && 1 - off.energy < 0.5 ? "booked" : "fatigue"
+    w.emit(w.pending("substitution", off, off.pos, { player_off: off.id, player_on: on.id, reason, half_time: halfTime }))
+    made++
+  }
+  w.subs[side] = { ...st, made: st.made + made, used }
+  return made
+}
+
+/** At a stoppage in the second half, make every planned change that is due, as one window. */
+const subWindow = (w: Work, side: Side): void => {
+  const st = w.subs[side]
+  if (st.windows >= MAX_SUB_WINDOWS || st.made >= MAX_SUBS) return
+  const due = st.plan.filter((x) => x.minute <= w.minute())
+  if (due.length === 0) return
+  w.subs[side] = { ...st, plan: st.plan.slice(due.length) }
+  const made = makeSubs(w, side, due.reduce((a, x) => a + x.players, 0), false)
+  if (made > 0) w.subs[side] = { ...w.subs[side], windows: w.subs[side].windows + 1 }
 }
 
 const takerFor = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): PlayerState => {
@@ -387,7 +470,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const height = isClear ? "high" : d.candidate!.height
   const weakFoot = w.rng.execution.chance(0.2)
   const exe = executeKick(
-    { from: owner.pos, to: target, height, technique: technique(d.action, owner), composure: owner.attrs.composure, pressure: d.pressure, weakFoot },
+    { from: owner.pos, to: target, height, technique: technique(d.action, owner), composure: owner.attrs.composure, pressure: d.pressure, weakFoot, fatigue: 1 - owner.energy },
     p,
     w.rng.execution
   )
@@ -783,7 +866,7 @@ const moveAll = (w: Work): void => {
         ? arriveBy(cur.pos, cur.vel, target, Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt, timeLeft)
         : arrive(cur.pos, cur.vel, add(target, scale(sep, 2)), Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt)
     const speed = len(next.vel)
-    const energy = Math.max(0, cur.energy - w.dt * (0.00004 + 0.000012 * speed * speed))
+    const energy = drainEnergy(cur.energy, speed, cur.attrs.stamina, w.dt, w.p)
     w.setPlayer({ ...cur, pos: clampToPitch(next.pos, -2), vel: next.vel, energy })
   }
 }
@@ -835,11 +918,16 @@ const endPeriod = (w: Work): StepResult => {
   w.periodStartTick = w.tick
   w.periodStartMs += firstHalfMs + HALF_TIME_MS
   w.periodTicks = samplePeriodTicks(w.cfg, w.rng.restart)
-  w.players = kickoffPlayers(w.cfg, w.players)
+  // Same players (substitutes included) back in kickoff shape, a little recovered.
+  w.players = w.players.map((pl) => {
+    const team = teamOf(w.cfg, pl.side)
+    return { ...pl, pos: kickoffAnchor(team.formation, pl.slot, pl.side, team.style), vel: { x: 0, y: 0 }, intent: { kind: "shape" }, intentUntil: 0, energy: Math.min(1, pl.energy + w.p.fatigue.halfTimeRecovery) }
+  })
   w.phase = { kind: "restart", restart: "kickoff", side: "away", at: { x: 0, y: 0 }, resumeTick: w.tick }
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
   w.emit(w.pending("period_start", null, null, { period: "second_half" }))
+  for (const side of ["home", "away"] as const) if ((teamOf(w.cfg, side).bench ?? []).length > 0 && w.rng.bench.chance(w.p.substitutions.halfTimeChance)) makeSubs(w, side, 1, true)
   handleRestart(w)
   return { state: w.toState(), frame: frameOf(w), events: w.events }
 }

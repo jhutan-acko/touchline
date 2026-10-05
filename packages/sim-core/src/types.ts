@@ -57,6 +57,8 @@ export interface TeamSetup {
   readonly style: TeamStyle
   /** Exactly 11 starters in formation slot order; slot 0 is the goalkeeper. */
   readonly starters: ReadonlyArray<PlayerSetup>
+  /** Substitutes available to come on (none when absent). */
+  readonly bench?: ReadonlyArray<PlayerSetup>
 }
 
 export interface MatchConfig {
@@ -183,6 +185,7 @@ export type EventType =
   | "offside"
   | "set_piece"
   | "off_ball_run"
+  | "substitution"
 
 /** One alternative the player could have chosen, recorded at the moment of decision. */
 export interface OptionRecord {
@@ -264,8 +267,16 @@ export interface Frame {
   readonly possession_side: Side | null
 }
 
-export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script"] as const
+export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench"] as const
 export type Concern = (typeof CONCERNS)[number]
+
+/** One team's substitutions: planned windows (match minutes) still to come, changes made, windows used, bench players used. */
+export interface SubsState {
+  readonly plan: ReadonlyArray<{ readonly minute: number; readonly players: number }>
+  readonly made: number
+  readonly windows: number
+  readonly used: ReadonlyArray<string>
+}
 
 export interface MatchState {
   readonly config: MatchConfig
@@ -289,6 +300,7 @@ export interface MatchState {
     /** Decision record copied onto the carry event when it ends. */
     readonly decision: Readonly<Record<string, AttrValue>>
   } | null
+  readonly subs: Readonly<Record<Side, SubsState>>
   readonly rng: Readonly<Record<Concern, RngState>>
   readonly eventSeq: number
 }

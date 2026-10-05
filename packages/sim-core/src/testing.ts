@@ -21,12 +21,14 @@ export const makeTeam = (id: string, formation: FormationName, style: TeamStyle,
     pace: attr(), acceleration: attr(), shortPassing: attr(), longPassing: attr(), vision: attr(), crossing: attr(),
     dribbling: attr(), finishing: attr(), heading: attr(), tackling: attr(), composure: attr(), stamina: attr(), handling: attr(), reflexes: attr()
   })
+  const benchRoles = ["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST", "CM"] as const
   return {
     id,
     name: id,
     formation,
     style,
-    starters: FORMATIONS[formation].map((slot, i) => ({ id: `${id}-${String(i + 1).padStart(2, "0")}`, role: slot.role, jersey: i + 1, attrs: attrs() }))
+    starters: FORMATIONS[formation].map((slot, i) => ({ id: `${id}-${String(i + 1).padStart(2, "0")}`, role: slot.role, jersey: i + 1, attrs: attrs() })),
+    bench: benchRoles.map((role, i) => ({ id: `${id}-${String(i + 12).padStart(2, "0")}`, role, jersey: i + 12, attrs: attrs() }))
   }
 }
 
