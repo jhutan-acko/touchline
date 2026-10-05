@@ -104,7 +104,7 @@ export interface BallState {
   readonly vel: Vec3
 }
 
-export type ActionKind = "pass" | "shot" | "clearance"
+export type ActionKind = "pass" | "shot" | "clearance" | "deflection"
 
 /** A ball in flight whose outcome was resolved at release (see resolve.ts and shot.ts). */
 export interface Flight {
@@ -126,6 +126,8 @@ export interface Flight {
   readonly restartAfter: { readonly restart: RestartKind; readonly side: Side; readonly at: Vec2 } | null
   /** Ball state to set after resolution when the ball stays live but loose (parry, block). */
   readonly looseBall: BallState | null
+  /** After resolution the ball is deflected straight out over the goal line to this point (a corner). */
+  readonly deflectTo: Vec3 | null
 }
 
 export type FlightOutcome =
@@ -172,6 +174,8 @@ export type EventType =
   | "goal"
   | "keeper_save"
   | "keeper_distribution"
+  | "keeper_claim"
+  | "keeper_punch"
   | "aerial_duel"
   | "pressure"
   | "tackle"

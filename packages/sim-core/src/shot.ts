@@ -97,14 +97,19 @@ export const planShot = (
   const travel = (m: number) => Math.max(1, Math.ceil(m / speed / dt))
 
   if (!isPenalty) {
-    for (const o of opponents) {
-      if (o.sentOff || o.role === "GK") continue
-      const { d: off, t } = segmentDistance(shooter.pos, goal, o.pos)
-      if (off < 1.2 && t > 0.02 && t < 0.95 && rng.chance(p.shot.blockPerDefender)) {
-        const at: Vec3 = { x: o.pos.x, y: o.pos.y, z: 0.5 }
-        return { outcome: "blocked", ticks: travel(dist(shooter.pos, o.pos)), from, to: at, execution, onTarget: false, blockerId: o.id, keeperId: null, handling: null }
-      }
-    }
+    const blocked = (o: PlayerState): ShotPlan => ({
+      outcome: "blocked", ticks: travel(dist(shooter.pos, o.pos)), from, to: { x: o.pos.x, y: o.pos.y, z: 0.5 }, execution, onTarget: false, blockerId: o.id, keeperId: null, handling: null
+    })
+    // Defenders near the shot's line get in the way, the closer the likelier, nearest the shooter first...
+    const inLane = opponents
+      .filter((o) => !o.sentOff && o.role !== "GK")
+      .map((o) => ({ o, ...segmentDistance(shooter.pos, goal, o.pos) }))
+      .filter((x) => x.d < p.shot.blockWidthM && x.t > 0.02 && x.t < 0.95)
+      .sort((a, b) => a.t - b.t)
+    for (const x of inLane) if (rng.chance(p.shot.blockPerDefender * (1 - x.d / p.shot.blockWidthM))) return blocked(x.o)
+    // ...and the defender closing the shooter down can throw a body in the way.
+    const closer = opponents.filter((o) => !o.sentOff && o.role !== "GK").sort((a, b) => dist(a.pos, shooter.pos) - dist(b.pos, shooter.pos))[0]
+    if (closer && rng.chance(p.shot.blockPressure * pressure)) return blocked(closer)
   }
   const onTarget = Math.abs(y) < PITCH.goalHalfWidth && z < PITCH.goalHeight
   const keeper = opponents.find((o) => o.role === "GK" && !o.sentOff) ?? null

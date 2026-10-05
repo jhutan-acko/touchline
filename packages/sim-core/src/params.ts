@@ -93,7 +93,15 @@ export interface Params {
     readonly onTargetRate: number
     /** Multiplier on shot aiming error (calibration knob for on-target share). */
     readonly aimNoise: number
+    /**
+     * Each outfield defender within blockWidthM of the shot's line blocks it with probability blockPerDefender x (1 - distance / blockWidthM);
+     * the defender closing the shooter down blocks with probability blockPressure x pressure.
+     */
     readonly blockPerDefender: number
+    readonly blockWidthM: number
+    readonly blockPressure: number
+    /** Share of blocked shots deflected behind the goal line (corners). */
+    readonly blockBehind: number
   }
   readonly defending: {
     readonly pressRatePerS: number
@@ -113,6 +121,26 @@ export interface Params {
     readonly boxFoulFactor: number
     /** Keeper comes off the line to close down a ball carrier within this distance of goal (m). */
     readonly keeperRushM: number
+    /** Chance that a defender within crossBlockM of the crosser blocks the cross; share of blocks deflected behind. */
+    readonly crossBlock: number
+    readonly crossBlockM: number
+    readonly crossBlockBehind: number
+    /** Share of high balls won by defenders in their own third that are headed away (else controlled); share of those within 20 m of their goal line glanced behind. */
+    readonly headClearShare: number
+    readonly headBehind: number
+    /** Share of clearances from wide positions kicked into touch on purpose. */
+    readonly clearToTouch: number
+    /** Share of clearances from inside a team's own box that are sliced behind for a corner (a defensive slip). */
+    readonly clearSliceBehind: number
+  }
+  /** Keepers coming for high balls: reach (m) and depth from the goal line (m), how often they come, catch vs punch vs fumble. */
+  readonly keeper: {
+    readonly claimRangeM: number
+    readonly claimDepthM: number
+    readonly comeShare: number
+    readonly catchBase: number
+    readonly catchHandling: number
+    readonly fumbleShare: number
   }
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
   readonly carry: { readonly speed: number; readonly durationS: readonly [number, number] }
@@ -193,7 +221,10 @@ export const DEFAULT_PARAMS: Params = {
     speed: 26,
     onTargetRate: 0.38,
     aimNoise: 1.0,
-    blockPerDefender: 0.15
+    blockPerDefender: 0.35,
+    blockWidthM: 3.5,
+    blockPressure: 0.3,
+    blockBehind: 0.5
   },
   defending: {
     pressRatePerS: 0.6,
@@ -208,8 +239,16 @@ export const DEFAULT_PARAMS: Params = {
     interceptLooseShare: 0.3,
     boxIntensity: 0,
     boxFoulFactor: 0.2,
-    keeperRushM: 12
+    keeperRushM: 12,
+    crossBlock: 0.6,
+    crossBlockM: 4.0,
+    crossBlockBehind: 0.6,
+    headClearShare: 0.85,
+    headBehind: 0.35,
+    clearToTouch: 0.2,
+    clearSliceBehind: 0.2
   },
+  keeper: { claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0] },
   runs: { runInBehindRatePerS: 0.12 },

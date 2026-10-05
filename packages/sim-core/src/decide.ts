@@ -199,7 +199,8 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
       case "hold":
         return input.restart === null
       case "take_on":
-        return input.restart === null && opp !== null && oppDist < 4
+        // Keepers do not try to dribble past attackers.
+        return input.restart === null && opp !== null && oppDist < 4 && owner.role !== "GK"
       case "clear":
         return input.restart === null && ax < -10
       default:

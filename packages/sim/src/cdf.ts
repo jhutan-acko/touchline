@@ -111,6 +111,10 @@ export const cdfTypeOf = (e: DomainEvent): CdfType => {
       return { type: "defending", sub_type: "pressing", outcome_type: "pressure", is_successful: true }
     case "block":
       return { type: "defending", sub_type: "block", outcome_type: "block", is_successful: true }
+    case "keeper_claim":
+      return { type: "goalkeeping", sub_type: "claim", outcome_type: "claim", is_successful: a.handling !== "fumble" }
+    case "keeper_punch":
+      return { type: "goalkeeping", sub_type: "punch", outcome_type: "punch", is_successful: true }
     case "keeper_save":
       return { type: "goalkeeping", sub_type: a.technique === "catch" ? "claim" : "save", outcome_type: "save", is_successful: true }
     case "tackle":

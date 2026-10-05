@@ -61,6 +61,14 @@ describe("CDF export", () => {
     expect(line.event).toMatchObject({ type: "referee", sub_type: "substitution", official_id: REFEREE_ID })
     expect(line.event.player_id).toBeUndefined()
   })
+  it("maps keeper claims and punches to goalkeeping events, and headed clearances keep the head as body part", () => {
+    const base = events.find((e) => e.type === "pass")!
+    expect(cdfTypeOf({ ...base, type: "keeper_claim", attrs: { from: "cross", handling: "clean" } })).toEqual({ type: "goalkeeping", sub_type: "claim", outcome_type: "claim", is_successful: true })
+    expect(cdfTypeOf({ ...base, type: "keeper_claim", attrs: { from: "cross", handling: "fumble" } })!.is_successful).toBe(false)
+    expect(cdfTypeOf({ ...base, type: "keeper_punch", attrs: { from: "corner" } })).toEqual({ type: "goalkeeping", sub_type: "punch", outcome_type: "punch", is_successful: true })
+    const header = { ...base, type: "clearance" as const, attrs: { technique: "head", body_part: "head" } }
+    expect(JSON.parse(cdfEventLine(cfg, header, clock, start, null)!).event.body_part).toBe("head")
+  })
   it("event tracking frame ids are period-relative", () => {
     const pass = events.find((e) => e.type === "pass" && e.period === "second_half")!
     const line = JSON.parse(cdfEventLine(cfg, pass, clock, start, pass.frame_id_end)!)

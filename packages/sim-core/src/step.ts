@@ -1,6 +1,7 @@
 import { stepBall } from "./ball.js"
 import { decide, lastDefenderAttackX, nearestOpponent, type Decision } from "./decide.js"
 import { buildEvent, round2 } from "./events.js"
+import { behindPoint, clearAway, crossBlocker, DEFLECT_SPEED, deflectLoose, inOwnBox, keeperAction, keeperCanCome } from "./deflect.js"
 import { executeKick, pressureFrom } from "./execute.js"
 import {
   add,
@@ -465,9 +466,16 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const side = owner.side
   const opps = w.active(other(side))
   const isClear = d.action === "clear"
-  const target: Vec2 = isClear
-    ? { x: owner.pos.x + dirOf(side) * w.rng.decision.range(30, 60), y: owner.pos.y + w.rng.decision.range(-35, 35) }
-    : d.candidate!.target
+  // A clearance from inside the box is sometimes sliced behind; from a wide position it is often kicked into touch on purpose.
+  const sliced = isClear && inOwnBox(side, owner.pos) && w.rng.execution.chance(p.defending.clearSliceBehind)
+  const toTouch = !sliced && isClear && Math.abs(owner.pos.y) > 8 && w.rng.decision.chance(p.defending.clearToTouch)
+  const target: Vec2 = sliced
+    ? (({ x, y }) => ({ x, y }))(behindPoint(side, owner.pos, w.rng.execution))
+    : toTouch
+    ? { x: owner.pos.x + dirOf(side) * w.rng.decision.range(10, 35), y: Math.sign(owner.pos.y) * (PITCH.halfW + w.rng.decision.range(2, 8)) }
+    : isClear
+      ? { x: owner.pos.x + dirOf(side) * w.rng.decision.range(30, 60), y: owner.pos.y + w.rng.decision.range(-35, 35) }
+      : d.candidate!.target
   const height = isClear ? "high" : d.candidate!.height
   const weakFoot = w.rng.execution.chance(0.2)
   const exe = executeKick(
@@ -487,6 +495,19 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
         winner.id !== owner.id &&
         attackX(side, winner.pos.x) > Math.max(lastDef, attackX(side, owner.pos.x), 0) + 0.5
       : false
+  // What the defending side does about it: block the cross at the source, the keeper comes for a high ball,
+  // or a defender heads it away. Each is drawn only when it is possible.
+  const defSide = other(side)
+  const keeper = opps.find((o) => o.role === "GK") ?? null
+  const blocker = d.candidate?.kind === "cross" && restart === null ? crossBlocker(owner, opps, p) : null
+  const blocked = blocker !== null && w.rng.duel.chance(p.defending.crossBlock)
+  const contact = res.ball.pos
+  const keeperComes =
+    !blocked && height !== "ground" && keeper !== null && (res.result === "reached" || res.result === "stopped") && winner?.id !== keeper.id &&
+    keeperCanCome(keeper, contact, res.ticks * w.dt, p) && w.rng.duel.chance(p.keeper.comeShare)
+  const headsAway =
+    !blocked && !keeperComes && res.result === "reached" && winner !== null && winner.side === defSide && winner.role !== "GK" &&
+    contact.z > p.kinematics.controlHeightM && attackX(defSide, contact.x) < -17.5 && w.rng.duel.chance(p.defending.headClearShare)
   const kind = restart && restart !== "kickoff" ? "set_piece" : isClear ? null : d.candidate!.kind
   const attrs: Record<string, AttrValue> = {
     kind,
@@ -497,7 +518,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     intended_receiver_id: intended,
     intended_end_x: round2(target.x),
     intended_end_y: round2(target.y),
-    execution: exe.execution,
+    execution: sliced ? "sliced" : exe.execution,
     error_m: round2(exe.errorM),
     decision_quality: d.decisionQuality === null ? null : round2(d.decisionQuality),
     ...decisionAttrs(d),
@@ -506,15 +527,42 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     ball_speed_kmh: round2(len({ x: exe.vel.x, y: exe.vel.y }) * 3.6),
     xpass: d.candidate ? round2(d.candidate.xpass) : null
   }
-  const endAt = { x: res.ball.pos.x, y: res.ball.pos.y }
+  const endAt = blocked ? blocker!.pos : { x: res.ball.pos.x, y: res.ball.pos.y }
   const main = w.pending(isClear ? "clearance" : "pass", owner, owner.pos, attrs, endAt)
   const extra: PendingEvent[] = []
   let outcome: Flight["outcome"]
   let restartAfter: Flight["restartAfter"] = null
   let looseAfter: BallState | null = null
-  const tickAt = w.tick + res.ticks
+  const tickAt = blocked ? w.tick + Math.max(1, Math.round(dist(owner.pos, blocker!.pos) / 15 / w.dt)) : w.tick + res.ticks
   const at = (pe: PendingEvent): PendingEvent => ({ ...pe, frame_id: tickAt })
-  if (res.result === "goal") {
+  let keeperClaims = false
+  let deflectTo: Vec3 | null = null
+  if (blocked) {
+    outcome = "blocked"
+    extra.push(at(w.pending("block", blocker, blocker!.pos, { blocked: "cross" })))
+    if (w.rng.duel.chance(p.defending.crossBlockBehind)) deflectTo = behindPoint(defSide, blocker!.pos, w.rng.duel)
+    else looseAfter = deflectLoose(defSide, blocker!.pos, w.rng.duel, [3, 8], [0.5, 3])
+  } else if (keeperComes) {
+    outcome = "intercepted"
+    const act = keeperAction(keeper!, p, w.rng.duel)
+    const from = restart === "corner" ? "corner" : restart === "free_kick" ? "free_kick" : "cross"
+    const point = { x: contact.x, y: contact.y }
+    if (act === "punch") {
+      extra.push(at(w.pending("keeper_punch", keeper, point, { from })))
+      looseAfter = clearAway(defSide, contact, w.rng.duel, 0.8)
+    } else {
+      extra.push(at(w.pending("keeper_claim", keeper, point, { from, handling: act === "claim" ? "clean" : "fumble" })))
+      if (act === "fumble") looseAfter = { pos: contact, vel: { x: w.rng.duel.range(-3, 3), y: w.rng.duel.range(-3, 3), z: 0.3 } }
+      else keeperClaims = true
+    }
+  } else if (headsAway) {
+    outcome = "intercepted"
+    if (res.aerial) extra.push(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
+    extra.push(at(w.pending("clearance", winner, endAt, { technique: "head", body_part: "head" })))
+    const nearOwnLine = attackX(defSide, contact.x) < -(PITCH.halfL - 20)
+    if (nearOwnLine && w.rng.duel.chance(p.defending.headBehind)) deflectTo = behindPoint(defSide, contact, w.rng.duel)
+    else looseAfter = clearAway(defSide, contact, w.rng.duel)
+  } else if (res.result === "goal") {
     // Into the net from a pass or clearance: a goal for whoever attacks that end (an own goal if it is not the passer's side).
     const scoringSide: Side = res.ball.pos.x > 0 ? "home" : "away"
     outcome = "goal"
@@ -536,11 +584,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     outcome = "intercepted"
     const deflect = !res.aerial && w.rng.duel.chance(w.p.defending.interceptLooseShare)
     extra.push(at(w.pending(res.aerial ? "aerial_duel" : "interception", winner, endAt, res.aerial ? { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId } : { ball: deflect ? "deflected" : "won" })))
-    if (deflect) {
-      const ang = w.rng.duel.range(0, 2 * Math.PI)
-      const sp = w.rng.duel.range(4, 10)
-      looseAfter = { pos: { x: endAt.x, y: endAt.y, z: 0 }, vel: { x: Math.cos(ang) * sp, y: Math.sin(ang) * sp, z: w.rng.duel.range(0, 1.5) } }
-    }
+    if (deflect) looseAfter = deflectLoose(winner.side, endAt, w.rng.duel)
   }
   const finalMain: PendingEvent = { ...main, attrs: { ...main.attrs, receiver_id: outcome === "successful" && winner ? winner.id : null } }
   if (res.aerial && outcome === "successful") extra.unshift(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
@@ -553,17 +597,19 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
       side,
       releaseTick: w.tick,
       resolveTick: tickAt,
-      winnerId: offside || looseAfter ? null : (winner?.id ?? null),
+      winnerId: keeperClaims ? keeper!.id : offside || looseAfter || deflectTo ? null : (winner?.id ?? null),
       outcome,
       pending: finalMain,
       extra,
       path: null,
       restartAfter,
-      looseBall: looseAfter
+      looseBall: looseAfter,
+      deflectTo
     }
   }
   w.lastTouch = { playerId: owner.id, side }
-  if (winner && !offside) w.setPlayer({ ...w.player(winner.id), intent: { kind: "chase", target: endAt }, intentUntil: tickAt })
+  const chaser = keeperComes ? keeper : blocked ? null : winner
+  if (chaser && !offside) w.setPlayer({ ...w.player(chaser.id), intent: { kind: "chase", target: endAt }, intentUntil: tickAt })
 }
 
 const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null): void => {
@@ -588,6 +634,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const extra: PendingEvent[] = []
   let restartAfter: Flight["restartAfter"] = null
   let looseBall: BallState | null = null
+  let deflectTo: Vec3 | null = null
   let winnerId: string | null = null
   if (plan.outcome === "goal") {
     extra.push(at(w.pending("goal", owner, end, { scorer_id: owner.id, own_goal: false })))
@@ -599,7 +646,8 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   } else if (plan.outcome === "blocked") {
     const blocker = w.player(plan.blockerId!)
     extra.push(at(w.pending("block", blocker, blocker.pos, { blocked: "shot" })))
-    looseBall = { pos: plan.to, vel: { x: -dirOf(side) * w.rng.duel.range(2, 8), y: w.rng.duel.range(-6, 6), z: w.rng.duel.range(0, 3) } }
+    if (w.rng.duel.chance(w.p.shot.blockBehind)) deflectTo = behindPoint(other(side), { x: plan.to.x, y: plan.to.y }, w.rng.duel)
+    else looseBall = { pos: plan.to, vel: { x: -dirOf(side) * w.rng.duel.range(2, 8), y: w.rng.duel.range(-6, 6), z: w.rng.duel.range(0, 3) } }
   } else {
     const keeper = w.player(plan.keeperId!)
     extra.push(at(w.pending("keeper_save", keeper, end, { technique: plan.handling === "clean" ? "catch" : "parry", handling: plan.handling })))
@@ -623,7 +671,8 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
       extra,
       path: { from: plan.from, to: plan.to },
       restartAfter,
-      looseBall
+      looseBall,
+      deflectTo
     }
   }
   w.lastTouch = { playerId: owner.id, side }
@@ -698,14 +747,17 @@ const ownedTick = (w: Work): void => {
     w.possession = { kind: "loose" }
     return
   }
-  if (w.possession.restart === null && duels(w, owner)) return
+  // A keeper with the ball in their own box has it in their hands: they can be pressed, not challenged.
+  const inHands = owner.role === "GK" && inOwnBox(owner.side, owner.pos)
+  if (w.possession.restart === null && !inHands && duels(w, owner)) return
   if (w.tick >= owner.intentUntil) ownerDecision(w, w.player(owner.id))
 }
 
 // ---------------------------------------------------------------- flights and loose ball
 
 const resolveFlightNow = (w: Work, f: Flight): void => {
-  w.emit(f.pending, { frame_id_end: f.resolveTick, outcome: f.outcome })
+  // A deflection's "main event" is the ball going out; it has no outcome or end frame of its own.
+  w.emit(f.pending, f.kind === "deflection" ? {} : { frame_id_end: f.resolveTick, outcome: f.outcome })
   // The receiver's first touch is decided now, at contact, from the ball as it arrives and the pressure on them.
   let touch: FirstTouch | null = null
   for (const e of f.extra) {
@@ -726,11 +778,29 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     startRestart(w, f.restartAfter)
     return
   }
+  if (f.deflectTo) {
+    // Deflected straight out over the goal line: a short direct flight, then the restart (a corner).
+    const toucher = w.player(f.extra[0]!.player_id!)
+    const from = w.ball.pos
+    const ticks = Math.max(1, Math.ceil(Math.hypot(f.deflectTo.x - from.x, f.deflectTo.y - from.y) / DEFLECT_SPEED / w.dt))
+    const out = { x: f.deflectTo.x, y: f.deflectTo.y }
+    w.lastTouch = { playerId: toucher.id, side: toucher.side }
+    w.possession = {
+      kind: "in_flight",
+      flight: {
+        kind: "deflection", fromId: toucher.id, side: toucher.side, releaseTick: w.tick, resolveTick: w.tick + ticks, winnerId: null, outcome: "out_of_play",
+        pending: { ...w.pending("ball_out", null, out, { side: "byline", last_touch_team: w.teamId(toucher.side) }), frame_id: w.tick + ticks },
+        extra: [], path: { from, to: f.deflectTo }, restartAfter: restartFromOut(toucher.side, f.deflectTo), looseBall: null, deflectTo: null
+      }
+    }
+    return
+  }
   if (f.looseBall) {
+    // Whoever deflected it (block, header, punch, parry) cannot play it again straight away.
     const toucher = f.extra[0]?.player_id
     if (toucher) w.lastTouch = { playerId: toucher, side: w.player(toucher).side }
     w.ball = f.looseBall
-    w.possession = { kind: "loose" }
+    w.possession = toucher ? { kind: "loose", noTouchId: toucher, noTouchUntil: w.tick + Math.round(0.4 / w.dt) } : { kind: "loose" }
     return
   }
   if (f.winnerId && touch !== null && touch !== "controlled") {
