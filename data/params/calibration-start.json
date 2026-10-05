@@ -1,5 +1,5 @@
 {
- "_comment": "Starting knob values for `pnpm calibrate --from data/params/calibration-start.json`. They come from two earlier exploratory tuning rounds (Plan 2a, 2026-10-04); tuning from here is deterministic and reproduces data/params/touchline-params.json.",
+ "_comment": "Starting knob values for `pnpm calibrate --from data/params/calibration-start.json`. They come from two earlier exploratory tuning rounds (Plan 2a, 2026-10-04); tuning from here is deterministic and reproduces the knobs, loss and statistics in data/params/touchline-params.json (its fitted_at and version carry the date of the run).",
  "calibration": {
   "knobs": {
    "decision_scale": 1,

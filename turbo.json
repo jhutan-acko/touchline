@@ -3,6 +3,16 @@
   "agentGuidance": false,
   "tasks": {
     "typecheck": {},
-    "test": { "outputs": [] }
+    "test": {
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/data/params/*.json",
+        "$TURBO_ROOT$/data/league/*.json",
+        "$TURBO_ROOT$/python/analytics/touchline_analytics/*.py",
+        "$TURBO_ROOT$/python/analytics/pyproject.toml",
+        "$TURBO_ROOT$/python/analytics/uv.lock"
+      ]
+    }
   }
 }

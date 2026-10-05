@@ -22,7 +22,7 @@ describe("metric parity", () => {
     const dir = mkdtempSync(join(tmpdir(), "touchline-parity-"))
     await Effect.runPromise(writeMatch(cfg, dir))
     const py = JSON.parse(
-      execFileSync("uv", ["run", "--project", join(root, "python/analytics"), "python", "-m", "touchline_analytics.metrics", dir], { encoding: "utf8", maxBuffer: 1 << 26 })
+      execFileSync("uv", ["run", "--locked", "--project", join(root, "python/analytics"), "python", "-m", "touchline_analytics.metrics", dir], { encoding: "utf8", maxBuffer: 1 << 26 })
     ) as Record<string, number | number[]>
     const { events, frames } = runMatch(cfg)
     const ts = matchMetrics(events, frames, cfg.dt)
