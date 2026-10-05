@@ -57,3 +57,14 @@ def test_touchline_events_reads_details_from_attrs(tmp_path):
     ev = touchline_events(f)
     assert ev[0]["set_piece"] == "corner" and ev[0]["length"] == 20.0
     assert ev[1]["set_piece"] == "penalty" and ev[1]["on_target"]
+
+
+def test_shot_outcome_shares():
+    def s(goal=False, on=False, blocked=False):
+        return {"type": "shot", "set_piece": None, "complete": False, "length": None, "goal": goal, "on_target": on or goal, "blocked": blocked}
+
+    m = event_metrics([s(goal=True), s(on=True), s(on=True), s(on=True), s(blocked=True), s(), s(), s()])
+    assert math.isclose(m["blocked_share"], 1 / 8)
+    assert math.isclose(m["save_rate"], 3 / 4)
+    empty = event_metrics([])
+    assert empty["blocked_share"] == 0.0 and empty["save_rate"] == 0.0

@@ -17,6 +17,8 @@ export interface MatchMetrics {
   readonly pass_len_median: number
   readonly shots: number
   readonly on_target_share: number
+  readonly blocked_share: number
+  readonly save_rate: number
   readonly goals: number
   readonly penalties: number
   readonly corners: number
@@ -33,7 +35,7 @@ export interface MatchMetrics {
 }
 
 export const SCALAR_KEYS = [
-  "passes", "completion", "long_share", "pass_len_median", "shots", "on_target_share", "goals", "penalties", "corners", "throw_ins",
+  "passes", "completion", "long_share", "pass_len_median", "shots", "on_target_share", "blocked_share", "save_rate", "goals", "penalties", "corners", "throw_ins",
   "goal_kicks", "free_kicks", "fouls", "cards", "in_play_share", "distance_km_median", "peak_speed_kmh_median"
 ] as const
 export type ScalarKey = (typeof SCALAR_KEYS)[number]
@@ -64,6 +66,7 @@ export const eventMetrics = (events: ReadonlyArray<DomainEvent>) => {
   const complete = passes.filter((e) => e.outcome === "successful")
   const lengths = complete.filter((e) => e.x_end !== null).map((e) => Math.hypot(e.x_end! - e.x!, e.y_end! - e.y!))
   const shots = events.filter((e) => e.type === "shot")
+  const onTarget = shots.filter((e) => e.outcome === "goal" || e.outcome === "saved").length
   const sp = (k: string) => passes.filter((e) => SET_PIECE[String(e.attrs.restart ?? "")] === k).length
   return {
     passes: passes.length,
@@ -71,7 +74,9 @@ export const eventMetrics = (events: ReadonlyArray<DomainEvent>) => {
     long_share: lengths.length ? lengths.filter((v) => v >= LONG_PASS_M).length / lengths.length : 0,
     pass_len_median: median(lengths),
     shots: shots.length,
-    on_target_share: shots.length ? shots.filter((e) => e.outcome === "goal" || e.outcome === "saved").length / shots.length : 0,
+    on_target_share: shots.length ? onTarget / shots.length : 0,
+    blocked_share: shots.length ? shots.filter((e) => e.outcome === "blocked").length / shots.length : 0,
+    save_rate: onTarget ? shots.filter((e) => e.outcome === "saved").length / onTarget : 0,
     goals: shots.filter((e) => e.outcome === "goal").length,
     penalties: shots.filter((e) => e.attrs.technique === "penalty").length,
     corners: sp("corner"),

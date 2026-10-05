@@ -21,6 +21,8 @@ LABELS = {
     "pass_len_median": ("Median completed pass length (m)", "{:.1f}"),
     "shots": ("Shots per match", "{:.1f}"),
     "on_target_share": ("Shots on target, share", "{:.1%}"),
+    "blocked_share": ("Shots blocked, share", "{:.1%}"),
+    "save_rate": ("Saves, share of shots on target", "{:.1%}"),
     "goals": ("Goals per match", "{:.2f}"),
     "penalties": ("Penalties per match", "{:.2f}"),
     "corners": ("Corners", "{:.1f}"),

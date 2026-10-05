@@ -58,7 +58,7 @@ export const meanMetrics = (ms: ReadonlyArray<MatchMetrics>): Record<ScalarKey, 
 
 /** Relative weights: noisy, low-count statistics count less. */
 export const WEIGHTS: Readonly<Record<ScalarKey, number>> = {
-  passes: 1, completion: 1, long_share: 1, pass_len_median: 1, shots: 1, on_target_share: 0.7, goals: 1, penalties: 0.5, corners: 0.7,
+  passes: 1, completion: 1, long_share: 1, pass_len_median: 1, shots: 1, on_target_share: 0.7, blocked_share: 0.7, save_rate: 0.7, goals: 1, penalties: 0.5, corners: 0.7,
   throw_ins: 1, goal_kicks: 0.7, free_kicks: 0.7, fouls: 1, cards: 0.5, in_play_share: 1, distance_km_median: 0.7, peak_speed_kmh_median: 0.7
 }
 

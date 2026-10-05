@@ -20,7 +20,7 @@ from .idsse import MATCHES, PROVENANCE, filenames
 from .metrics import PASS_LEN_EDGES, SPEED_EDGES, event_metrics, tracking_metrics
 
 _SET_PIECE = {"THROW_IN": "throw_in", "CORNER_KICK": "corner", "GOAL_KICK": "goal_kick", "FREE_KICK": "free_kick", "KICK_OFF": "kick_off", "PENALTY": "penalty"}
-EVENT_KEYS = ["passes", "completion", "long_share", "pass_len_median", "shots", "on_target_share", "goals", "penalties", "corners", "throw_ins", "goal_kicks", "free_kicks", "fouls", "cards"]
+EVENT_KEYS = ["passes", "completion", "long_share", "pass_len_median", "shots", "on_target_share", "blocked_share", "save_rate", "goals", "penalties", "corners", "throw_ins", "goal_kicks", "free_kicks", "fouls", "cards"]
 TRACKING_KEYS = ["in_play_share", "distance_km_median", "peak_speed_kmh_median"]
 
 
@@ -45,7 +45,7 @@ def idsse_events(root: Path, match_id: str) -> list[dict]:
             for q in e.qualifiers or []:
                 if type(q).__name__ == "SetPieceQualifier":
                     sp = _SET_PIECE.get(q.value.name)
-            out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": r == "GOAL", "on_target": r in ("GOAL", "SAVED")})
+            out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": r == "GOAL", "on_target": r in ("GOAL", "SAVED"), "blocked": r == "BLOCKED"})
         elif name == "FOUL_COMMITTED":
             out.append({"type": "foul", "set_piece": None, "complete": False, "length": None, "goal": False, "on_target": False})
         elif name == "CARD":

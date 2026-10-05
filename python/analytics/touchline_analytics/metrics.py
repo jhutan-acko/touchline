@@ -2,7 +2,7 @@
 
 Both sources are first converted to the same plain records, then measured by the same functions:
 - events: dicts {type: pass|shot|foul|card, set_piece: None|corner|throw_in|goal_kick|free_kick|kick_off|penalty,
-  complete: bool, length: float|None, goal: bool, on_target: bool}
+  complete: bool, length: float|None, goal: bool, on_target: bool, blocked: bool (shots; optional, default False)}
 - frames: iterables of (period, t_seconds, ball_in_play, {player_id: (x, y)})
 
 The TypeScript port (packages/calibrate/src/metrics.ts) must produce identical numbers; a parity
@@ -47,6 +47,7 @@ def event_metrics(events: list[dict]) -> dict:
     complete = [e for e in passes if e["complete"]]
     lengths = [e["length"] for e in complete if e["length"] is not None]
     shots = [e for e in events if e["type"] == "shot"]
+    on_target = sum(1 for e in shots if e["on_target"])
     sp = lambda k: sum(1 for e in passes if e["set_piece"] == k)  # noqa: E731
     return {
         "passes": len(passes),
@@ -54,7 +55,9 @@ def event_metrics(events: list[dict]) -> dict:
         "long_share": sum(1 for v in lengths if v >= LONG_PASS_M) / len(lengths) if lengths else 0.0,
         "pass_len_median": _median(lengths),
         "shots": len(shots),
-        "on_target_share": sum(1 for e in shots if e["on_target"]) / len(shots) if shots else 0.0,
+        "on_target_share": on_target / len(shots) if shots else 0.0,
+        "blocked_share": sum(1 for e in shots if e.get("blocked", False)) / len(shots) if shots else 0.0,
+        "save_rate": sum(1 for e in shots if e["on_target"] and not e["goal"]) / on_target if on_target else 0.0,
         "goals": sum(1 for e in shots if e["goal"]),
         "penalties": sum(1 for e in shots if e["set_piece"] == "penalty"),
         "corners": sp("corner"),
@@ -142,7 +145,7 @@ def touchline_events(domain_jsonl: Path) -> list[dict]:
                 out.append({"type": "pass", "set_piece": _SET_PIECE.get(a.get("restart") or "", None), "complete": ok, "length": length, "goal": False, "on_target": False})
             elif t == "shot":
                 sp = "penalty" if a.get("technique") == "penalty" else None
-                out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": e["outcome"] == "goal", "on_target": e["outcome"] in ("goal", "saved")})
+                out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": e["outcome"] == "goal", "on_target": e["outcome"] in ("goal", "saved"), "blocked": e["outcome"] == "blocked"})
             elif t in ("foul", "card"):
                 out.append({"type": t, "set_piece": None, "complete": False, "length": None, "goal": False, "on_target": False})
     return out

@@ -3,8 +3,8 @@
   "dataset": "IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
   "licence": "CC-BY-4.0",
   "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
-  "fitted_at": "2026-10-04",
-  "version": "targets-2026-10-04",
+  "fitted_at": "2026-10-05",
+  "version": "targets-2026-10-05",
   "scope": "events: 7 matches; tracking: 1 match(es) (J03WPY)"
  },
  "metrics": {
@@ -36,6 +36,16 @@
   "on_target_share": {
    "mean": 0.3536,
    "sd": 0.0721,
+   "n": 7
+  },
+  "blocked_share": {
+   "mean": 0.2267,
+   "sd": 0.061,
+   "n": 7
+  },
+  "save_rate": {
+   "mean": 0.6693,
+   "sd": 0.1682,
    "n": 7
   },
   "goals": {
