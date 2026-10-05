@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { League } from "@touchline/league"
-import { cliOptions, positiveInteger } from "@touchline/sim"
+import { CliError, cliOptions, exitOnUserError, positiveInteger } from "@touchline/sim"
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import type { Targets } from "./evaluate.js"
 import { applyKnobs, KNOBS } from "./knobs.js"
@@ -20,14 +20,22 @@ const o = cliOptions("calibrate: tune engine knobs to real-match targets (method
   // --from <file>: continue from that file's calibration knobs instead of the defaults.
   from: { default: "", help: "start from the calibration.knobs of this file" }
 })
-const targetsPath = here(o.targets)
 const outPath = here(o.out)
 const matches = Number(o.matches)
 const rounds = Number(o.rounds)
-const start = o.from ? (JSON.parse(readFileSync(here(o.from), "utf8")) as { calibration?: { knobs?: Record<string, number> } }).calibration?.knobs ?? {} : {}
+/** Read a JSON input file; a missing or malformed file is a one-line error (exit 2). */
+const readJson = (what: string, path: string): unknown =>
+  exitOnUserError(() => {
+    try {
+      return JSON.parse(readFileSync(here(path), "utf8"))
+    } catch (e) {
+      throw new CliError(`Cannot read ${what} file ${path}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  })
+const start = o.from ? (readJson("start", o.from) as { calibration?: { knobs?: Record<string, number> } }).calibration?.knobs ?? {} : {}
 
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
-const targets = JSON.parse(readFileSync(targetsPath, "utf8")) as Targets
+const targets = readJson("targets", o.targets) as Targets
 const t0 = Date.now()
 const res = tune(league, DEFAULT_PARAMS, targets, {
   matches,

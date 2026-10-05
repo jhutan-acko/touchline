@@ -32,4 +32,13 @@ describe("calibration command lines", () => {
     const realism = run("src/realism.ts", ["--help"]).stdout
     expect(realism).toMatch(/--out\s.*\(default: [^)]*out\/realism-report\.md\)/)
   })
+  it("the tuner reports a missing targets or start file in one line", () => {
+    const out = join(mkdtempSync(join(tmpdir(), "touchline-cli-")), "params.json")
+    for (const args of [["--targets", "no-such-targets.json"], ["--from", "no-such-start.json"]]) {
+      const r = run("src/cli.ts", [...args, "--out", out])
+      expect(r.status, args.join(" ")).toBe(2)
+      expect(r.stderr.trim()).toMatch(/^Cannot read (targets|start) file no-such-/)
+      expect(r.stderr).not.toMatch(/at .*\.ts:\d+/)
+    }
+  })
 })

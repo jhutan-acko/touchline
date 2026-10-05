@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { ACTIONS, assertProvenance, DEFAULT_PARAMS, ParamsError, paramsFromJson } from "../src/params.js"
 import { ACTION_ZONES } from "../src/geometry.js"
@@ -55,5 +58,23 @@ describe("params from JSON: review fixes", () => {
     const p = paramsFromJson(JSON.parse(`{"provenance":${JSON.stringify(cc)},"kinematics":{"toString":"boom","__proto__":{"x":1}}}`)) as unknown as { kinematics: object }
     expect(Object.hasOwn(p.kinematics, "toString")).toBe(false)
     expect(String(p.kinematics)).toBe("[object Object]")
+  })
+})
+
+describe("params from JSON: value ranges", () => {
+  const prov = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-06", version: "v1" }
+  it("accepts the defaults and the committed calibrated parameters", () => {
+    expect(() => paramsFromJson({ provenance: prov })).not.toThrow()
+    const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
+    expect(() => paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))).not.toThrow()
+  })
+  it("refuses probabilities outside 0..1", () => {
+    for (const bad of [{ keeper: { letRunShare: 5 } }, { defending: { foulPerTackle: -0.1 } }, { substitutions: { windowChance: [1, 1.2, 0.5] } }, { kinematics: { reachMargin: 1.5 } }])
+      expect(() => paramsFromJson({ provenance: prov, ...bad }), JSON.stringify(bad)).toThrow(/must be between 0 and 1/)
+  })
+  it("refuses negative values where only magnitudes make sense, but allows signed model coefficients", () => {
+    for (const bad of [{ substitutions: { windowSdMin: -1 } }, { kinematics: { vmaxBase: -9 } }, { timing: { restartDelayS: { corner: -5 } } }])
+      expect(() => paramsFromJson({ provenance: prov, ...bad }), JSON.stringify(bad)).toThrow(/must not be negative/)
+    expect(() => paramsFromJson({ provenance: prov, shot: { xg: { b0: -2 } }, firstTouch: { bSkill: -4 }, defending: { tackleBase: -0.5 } })).not.toThrow()
   })
 })

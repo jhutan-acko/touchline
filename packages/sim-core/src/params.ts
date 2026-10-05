@@ -331,8 +331,32 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * Parameters from a JSON file: the provenance gate first, then a deep merge onto DEFAULT_PARAMS
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
+/** Model coefficients and logits, which may take any sign. */
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
+/** Probabilities and shares, which must lie in 0..1. */
+const PROBABILITIES = new Set([
+  "kinematics.reachMargin", "ball.bounce", "execution.mishitBase", "movement.shapeSpeedShare",
+  "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
+  "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
+  "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
+  "keeper.letRunShare", "keeper.comeShare", "keeper.catchBase", "keeper.catchHandling", "keeper.fumbleShare",
+  "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance"
+])
+
+/** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
+const checkRanges = (v: unknown, path: string): void => {
+  if (Array.isArray(v)) return v.forEach((x) => checkRanges(x, path))
+  if (isObject(v)) return Object.entries(v).forEach(([k, x]) => checkRanges(x, path ? `${path}.${k}` : k))
+  if (typeof v !== "number" || SIGNED.some((r) => r.test(path))) return
+  if (PROBABILITIES.has(path) && (v < 0 || v > 1)) throw new ParamsError(`params field ${path} must be between 0 and 1 (got ${v})`)
+  if (v < 0) throw new ParamsError(`params field ${path} must not be negative (got ${v})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
-  return mergeInto(DEFAULT_PARAMS, json, "params") as Params
+  const merged = mergeInto(DEFAULT_PARAMS, json, "params") as Params
+  const { provenance: _, ...values } = merged
+  checkRanges(values, "")
+  return merged
 }
