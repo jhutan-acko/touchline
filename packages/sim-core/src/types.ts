@@ -312,6 +312,8 @@ export interface MatchState {
   readonly subs: Readonly<Record<Side, SubsState>>
   /** Script entries whose outcome is forced on the team's next qualifying action (set by the scenario runner). */
   readonly forced: ReadonlyArray<ScriptEntry>
+  /** Goals scored so far inside each script entry's window (index-aligned with config.script.entries). */
+  readonly scriptGoals: ReadonlyArray<number>
   readonly rng: Readonly<Record<Concern, RngState>>
   readonly eventSeq: number
 }

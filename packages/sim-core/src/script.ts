@@ -41,21 +41,38 @@ export interface Mods {
   readonly fumble: number
   /** Multiplies the mis-hit chance of the team's defenders (CB, FB, DM) in their own half. */
   readonly mishit: number
+  /** Multiplies the team's shooting error (below 1: sharper finishing). */
+  readonly aim: number
 }
 
-export const NO_MODS: Mods = { shotLogit: 0, attackLogit: 0, scoring: 1, press: 1, tackle: 1, foul: 1, red: 1, saveLogit: 0, fumble: 0, mishit: 1 }
+export const NO_MODS: Mods = { shotLogit: 0, attackLogit: 0, scoring: 1, press: 1, tackle: 1, foul: 1, red: 1, saveLogit: 0, fumble: 0, mishit: 1, aim: 1 }
 
-/** The modifiers for `side` at `minute`: neutral without a script, outside every window, or for the other team. */
-export const modsFor = (script: Script | undefined, side: Side, minute: number, p: Params): Mods => {
+/**
+ * The modifiers for `side` at `minute`: neutral without a script, outside every window, or for the other team.
+ * `goals[i]` counts the goals scored so far in entry i's window; a goal entry stops nudging once its count is reached.
+ */
+export const modsFor = (script: Script | undefined, side: Side, minute: number, p: Params, goals: ReadonlyArray<number> = []): Mods => {
   if (!script) return NO_MODS
   const s = p.script
   let m = NO_MODS
-  for (const e of script.entries) {
-    if (e.team !== side || minute < e.window[0] || minute >= e.window[1]) continue
+  script.entries.forEach((e, i) => {
+    if (e.team !== side || minute < e.window[0] || minute >= e.window[1]) return
     switch (e.effect) {
-      case "goal":
-        m = { ...m, shotLogit: m.shotLogit + s.goalShotLogit, scoring: m.scoring * s.goalScoring }
+      case "goal": {
+        if ((goals[i] ?? 0) >= (e.count ?? 1)) return
+        // The nudge grows with the scoring rate the window asks for (r = 1 for about a normal rate); a team
+        // chasing goals also plays forward more (half the shot shift on crosses and through balls).
+        const r = Math.max(1, (e.count ?? 1) / Math.max(1, e.window[1] - e.window[0]) / s.goalRatePerMin)
+        const shift = s.goalShotLogit * Math.log2(1 + r)
+        m = {
+          ...m,
+          shotLogit: m.shotLogit + shift,
+          attackLogit: m.attackLogit + shift / 2,
+          scoring: m.scoring * Math.min(s.goalScoringMax, s.goalScoring * Math.pow(r, 0.75)),
+          aim: m.aim * Math.max(s.goalAimMin, 1 / Math.sqrt(r))
+        }
         break
+      }
       case "momentum_swing":
         m = { ...m, shotLogit: m.shotLogit + s.momentumLogit, attackLogit: m.attackLogit + s.momentumLogit, press: m.press * s.momentumPress }
         break
@@ -75,6 +92,10 @@ export const modsFor = (script: Script | undefined, side: Side, minute: number, 
         m = { ...m, mishit: m.mishit * s.errorMishit }
         break
     }
-  }
+  })
   return m
 }
+
+/** Count a goal for `side` at `minute` against every goal entry for that side whose window contains it. */
+export const countGoal = (script: Script | undefined, goals: ReadonlyArray<number>, side: Side, minute: number): number[] =>
+  (script?.entries ?? []).map((e, i) => (goals[i] ?? 0) + (e.effect === "goal" && e.team === side && minute >= e.window[0] && minute < e.window[1] ? 1 : 0))

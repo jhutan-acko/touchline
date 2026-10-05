@@ -26,7 +26,7 @@ import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
-import { modsFor, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
+import { countGoal, modsFor, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
 import { parryBall, planShot, type ShotMods } from "./shot.js"
 import { ballAfterTouch, drawFirstTouch, firstTouchError, type FirstTouch } from "./touch.js"
 import {
@@ -134,6 +134,7 @@ export const initMatch = (cfg: MatchConfig): MatchState => {
     carry: null,
     subs,
     forced: [],
+    scriptGoals: (cfg.script?.entries ?? []).map(() => 0),
     rng,
     eventSeq: 0
   }
@@ -160,6 +161,7 @@ class Work {
   carry: MatchState["carry"]
   subs: Record<Side, SubsState>
   forced: ScriptEntry[]
+  scriptGoals: number[]
   rng: Record<Concern, Rng>
   seq: number
   events: DomainEvent[] = []
@@ -182,6 +184,7 @@ class Work {
     this.carry = s.carry
     this.subs = { ...s.subs }
     this.forced = [...s.forced]
+    this.scriptGoals = [...s.scriptGoals]
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
@@ -240,7 +243,12 @@ class Work {
   }
   /** Scenario-script modifiers for `side` now. */
   mods(side: Side): Mods {
-    return modsFor(this.cfg.script, side, this.minute(), this.p)
+    return modsFor(this.cfg.script, side, this.minute(), this.p, this.scriptGoals)
+  }
+  /** A goal for `side`: the score, and the script's goal progress. */
+  addGoal(side: Side): void {
+    this.score[side] += 1
+    if (this.cfg.script) this.scriptGoals = countGoal(this.cfg.script, this.scriptGoals, side, this.minute())
   }
   /** Whether an outcome of `effect` is forced for `side`'s next qualifying action. */
   hasForced(side: Side, effect: ScenarioEffect): boolean {
@@ -277,6 +285,7 @@ class Work {
       carry: this.carry,
       subs: this.subs,
       forced: this.forced,
+      scriptGoals: this.scriptGoals,
       rng: out,
       eventSeq: this.seq
     }
@@ -664,7 +673,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
       : w.hasForced(other(side), "keeper_howler")
         ? "keeper_error"
         : undefined
-  const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, ...(force ? { force } : {}) }
+  const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, aim: isPenalty ? 1 : own.aim, ...(force ? { force } : {}) }
   const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
   // A forced save or keeper error is used up only by a shot that reached the target.
   if (plan.forced && force === "save") w.takeForced(other(side), "keeper_heroics")
@@ -732,8 +741,12 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
 /** Scenario-script logit shifts for the team on the ball (see script.ts). */
 const scriptBias = (w: Work, side: Side): Partial<Record<Action, number>> => {
   const m = w.mods(side)
-  if (m.shotLogit === 0 && m.attackLogit === 0) return {}
-  return { shot: m.shotLogit, cross: m.attackLogit, through_ball: m.attackLogit, lofted_through: m.attackLogit, cutback: m.attackLogit }
+  // While a goal is forced, the team pushes forward and looks for the shot that will carry it.
+  const forcing = w.hasForced(side, "goal") ? w.p.script.forcedShotLogit : 0
+  const shot = m.shotLogit + forcing
+  const attack = m.attackLogit + forcing / 2
+  if (shot === 0 && attack === 0) return {}
+  return { shot, cross: attack, through_ball: attack, lofted_through: attack, cutback: attack }
 }
 
 const ownerDecision = (w: Work, owner: PlayerState): void => {
@@ -829,7 +842,7 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     w.emit({ ...e, attrs: { ...e.attrs, first_touch: touch, under_pressure: pressure > 0.3, lost_possession: touch !== "controlled" } })
   }
   const goal = f.extra.find((e) => e.type === "goal")
-  if (goal) w.score[goal.team_id === w.teamId("home") ? "home" : "away"] += 1
+  if (goal) w.addGoal(goal.team_id === w.teamId("home") ? "home" : "away")
   if (f.restartAfter) {
     startRestart(w, f.restartAfter)
     return
@@ -915,7 +928,7 @@ const ballTick = (w: Work): void => {
     const own = toucher !== null && toucher.side !== scoringSide
     const at = { x: cross.x, y: cross.y }
     w.emit({ ...w.pending("goal", toucher, at, { scorer_id: toucher?.id ?? null, own_goal: own, from: "loose_ball" }), team_id: w.teamId(scoringSide) })
-    w.score[scoringSide] += 1
+    w.addGoal(scoringSide)
     startRestart(w, { restart: "kickoff", side: other(scoringSide), at: { x: 0, y: 0 } })
     return
   }

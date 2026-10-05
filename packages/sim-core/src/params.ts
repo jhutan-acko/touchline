@@ -181,6 +181,13 @@ export interface Params {
   readonly script: {
     readonly goalShotLogit: number
     readonly goalScoring: number
+    /** A team's normal goals per minute, and the cap on the scoring multiplier, for scaling goal nudges. */
+    readonly goalRatePerMin: number
+    readonly goalScoringMax: number
+    /** Lowest multiplier a goal nudge applies to the team's shooting error. */
+    readonly goalAimMin: number
+    /** A press surge counts as achieved at this many pressures per 100 opponent passes in its window. */
+    readonly pressTarget: number
     readonly momentumLogit: number
     readonly momentumPress: number
     readonly pressSurge: number
@@ -191,6 +198,8 @@ export interface Params {
     readonly howlerSave: number
     readonly howlerFumble: number
     readonly errorMishit: number
+    /** Added to the shot logit (half of it to attacking passes) while a forced goal is pending, so the forced outcome gets its qualifying action. */
+    readonly forcedShotLogit: number
   }
   readonly substitutions: {
     readonly windowMinutes: readonly [number, number, number]
@@ -299,7 +308,10 @@ export const DEFAULT_PARAMS: Params = {
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
-  script: { goalShotLogit: 1.0, goalScoring: 1.6, momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 1.5, redCard: 40, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8 },
+  script: {
+    goalShotLogit: 1.0, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 65,
+    momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 3
+  },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
   substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2 },
   classifier: {

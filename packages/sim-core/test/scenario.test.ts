@@ -29,6 +29,11 @@ describe("scenario modifiers", () => {
     expect(modsFor(s, "away", 65, params)).toEqual(neutral)
     expect(modsFor(s, "home", 65, params).press).toBeGreaterThan(1)
   })
+  it("a goal entry stops nudging once its count is reached", () => {
+    const s: Script = { name: "g", entries: [{ window: [0, 95], team: "home", effect: "goal", count: 2 }] }
+    expect(modsFor(s, "home", 30, params, [1]).shotLogit).toBeGreaterThan(0)
+    expect(modsFor(s, "home", 30, params, [2])).toEqual(modsFor(undefined, "home", 30, params))
+  })
   it("change nothing before the first window opens", () => {
     const plain = play(cfgFor(3)).filter((e) => minuteOf(e) < 60)
     const scripted = play(cfgFor(3, one("goal", [60, 90]))).filter((e) => minuteOf(e) < 60)
@@ -44,7 +49,8 @@ describe("nudges raise the scripted outcome's rate", () => {
   })
   it("goal: the team scores more", () => {
     const f = (e: DomainEvent) => e.type === "goal" && e.team_id === HOME
-    expect(count(one("goal"), f)).toBeGreaterThan(count(undefined, f) + 4)
+    const three: Script = { name: "goal", entries: [{ window: [0, 95], team: "home", effect: "goal", count: 3 }] }
+    expect(count(three, f)).toBeGreaterThan(count(undefined, f) + 4)
   })
   it("momentum swing: the team shoots more", () => {
     const f = (e: DomainEvent) => e.type === "shot" && e.team_id === HOME
