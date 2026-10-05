@@ -32,3 +32,32 @@ describe("match files", () => {
     for (const e of duels) expect(e.outcome).toBe((e.attrs as Record<string, unknown>).outcome)
   })
 })
+
+const scripted = mkdtempSync(join(tmpdir(), "touchline-scripted-"))
+const script = { name: "test_goal", entries: [{ window: [10, 30] as const, team: "home" as const, effect: "goal" as const }] }
+const m = await Effect.runPromise(writeMatch(makeConfig(5, { script }), scripted))
+
+describe("run manifest ground truth", () => {
+  it("records the scenario and a truth per scripted entry", () => {
+    expect(m.scenario).toBe("test_goal")
+    expect(m.truths.script).toHaveLength(1)
+    expect(m.truths.script[0]).toMatchObject({ effect: "goal", minutes: [10, 30], expected_metrics: ["shot.xg", "team.mom"] })
+    expect(typeof m.truths.script[0]!.achieved).toBe("boolean")
+  })
+  it("lists every scripted event, mistake and critical error, and per-team tactical numbers", () => {
+    const events = readFileSync(join(scripted, "domain.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; type: string; attrs: Record<string, unknown> })
+    expect(m.truths.scripted_events.map((e) => e.id)).toEqual(events.filter((e) => e.attrs.scripted === true).map((e) => e.id))
+    const bad = events.filter((e) => ((e.type === "pass" || e.type === "clearance") && e.attrs.execution === "mishit") || (e.type === "reception" && e.attrs.first_touch !== "controlled"))
+    expect(m.truths.mistakes).toHaveLength(bad.length)
+    expect(Array.isArray(m.truths.critical_errors)).toBe(true)
+    expect(Object.keys(m.truths.tactical).sort()).toEqual(["away-fc", "home-fc"])
+  })
+  it("keeps the scripted flag out of CDF", () => {
+    expect(readFileSync(join(scripted, "event.jsonl"), "utf8")).not.toMatch(/scripted/)
+  })
+  it("a match without a script has no scenario and no script truths", () => {
+    const plain = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"))
+    expect(plain.scenario).toBeNull()
+    expect(plain.truths.script).toEqual([])
+  })
+})

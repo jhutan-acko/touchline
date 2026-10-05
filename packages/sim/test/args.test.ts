@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -61,6 +61,16 @@ describe("sim CLI", () => {
     const r = spawnSync(tsx, ["src/cli.ts", "--match-id", "a/b", "--out", out], { cwd: pkg, encoding: "utf8" })
     expect(r.status).toBe(2)
     expect(r.stderr.trim()).toMatch(/^--match-id must be a plain name/)
+  })
+  it("plays a built-in scenario with its own fixture, and refuses unknown ones", () => {
+    const bad = spawnSync(tsx, ["src/cli.ts", "--scenario", "nope"], { cwd: pkg, encoding: "utf8" })
+    expect(bad.status).toBe(2)
+    expect(bad.stderr.trim()).toMatch(/^--scenario must be one of/)
+    const out = mkdtempSync(join(tmpdir(), "touchline-scenario-"))
+    const ok = spawnSync(tsx, ["src/cli.ts", "--scenario", "costly_error", "--seed", "3", "--out", out], { cwd: pkg, encoding: "utf8" })
+    expect(ok.status, ok.stderr).toBe(0)
+    const m = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8"))
+    expect(m).toMatchObject({ scenario: "costly_error", home: "northwick", away: "larkspur" })
   })
   it("prints the options on --help", () => {
     const out = execFileSync(tsx, ["src/cli.ts", "--help"], { cwd: pkg, encoding: "utf8" })

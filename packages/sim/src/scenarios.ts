@@ -17,7 +17,7 @@ export const SCENARIOS: Readonly<Record<string, Scenario>> = {
     script: { name: "even_contest", entries: [] }
   },
   late_comeback: {
-    description: "The away side lead 2-0 by 70', then the home side score three times",
+    description: "The away side score at least twice by 70', then the home side score at least three times",
     home: "eastvale",
     away: "ironmoor",
     script: {
@@ -29,7 +29,7 @@ export const SCENARIOS: Readonly<Record<string, Scenario>> = {
     }
   },
   red_card_collapse: {
-    description: "A home player is sent off between 50' and 60'; the away side then score twice",
+    description: "A home player is sent off between 50' and 60'; the away side then score at least twice",
     home: "harrowmere",
     away: "corrin-forge",
     script: {

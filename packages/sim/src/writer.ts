@@ -2,21 +2,31 @@ import { createHash } from "node:crypto"
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs"
 import { join } from "node:path"
 import { Effect, Stream } from "effect"
-import type { DomainEvent, Frame, MatchConfig } from "@touchline/sim-core"
+import { runScript, type DomainEvent, type Frame, type MatchConfig, type WindowResult } from "@touchline/sim-core"
 import { cdfEventLine, cdfMeta, cdfTrackingLine, periodsFromFrames } from "./cdf.js"
-import { matchSteps } from "./run.js"
+import { hasScript, matchSteps } from "./run.js"
+import { criticalErrors, mistakes, scriptTruths, tacticalTruths, type CriticalError, type Mistake, type ScriptTruth, type TeamTruth } from "./truths.js"
 
 export interface RunManifest {
   readonly match_id: string
   readonly seed: number
   readonly home: string
   readonly away: string
-  readonly script: string | null
+  /** The scenario script's name, or null for a plain match. */
+  readonly scenario: string | null
   readonly fps: number
   readonly params_version: string
   readonly engine: { readonly name: string; readonly version: string }
   readonly outputs: Readonly<Record<string, string>>
   readonly stats: { readonly frames: number; readonly events: number; readonly cdf_events: number; readonly score: string }
+  /** Ground truth for the evaluation harness (spec §5.1.12, §5.3.1); kept out of CDF. */
+  readonly truths: {
+    readonly script: ReadonlyArray<ScriptTruth>
+    readonly scripted_events: ReadonlyArray<{ readonly id: string; readonly type: string; readonly frame_id: number; readonly team_id: string | null; readonly player_id: string | null }>
+    readonly mistakes: ReadonlyArray<Mistake>
+    readonly critical_errors: ReadonlyArray<CriticalError>
+    readonly tactical: Readonly<Record<string, TeamTruth>>
+  }
 }
 
 const sha256 = (path: string) => "sha256:" + createHash("sha256").update(readFileSync(path)).digest("hex")
@@ -25,8 +35,11 @@ const sha256 = (path: string) => "sha256:" + createHash("sha256").update(readFil
  * Run one match and write meta.json, event.jsonl, tracking.jsonl, domain.jsonl and manifest.json to `dir`.
  * Tracking is streamed to disk; events are kept in memory (a few thousand) to resolve CDF receiver times.
  */
-export const writeMatch = (cfg: MatchConfig, dir: string, script: string | null = null) =>
+export const writeMatch = (cfg: MatchConfig, dir: string) =>
   Effect.gen(function* () {
+    // A scripted match is resolved first so its window results are known; a plain match streams step by step.
+    const run = hasScript(cfg) ? runScript(cfg) : null
+    const windows: ReadonlyArray<WindowResult> = run?.windows ?? []
     mkdirSync(dir, { recursive: true })
     const trackingFd = openSync(join(dir, "tracking.jsonl"), "w")
     const periods: Frame[] = []
@@ -35,7 +48,7 @@ export const writeMatch = (cfg: MatchConfig, dir: string, script: string | null 
     const events: DomainEvent[] = []
     let frames = 0
     let last: Frame | null = null
-    yield* Stream.runForEach(matchSteps(cfg), (r) =>
+    yield* Stream.runForEach(run ? Stream.fromIterable(run.steps) : matchSteps(cfg), (r) =>
       Effect.sync(() => {
         events.push(...r.events)
         const f = r.frame
@@ -70,12 +83,19 @@ export const writeMatch = (cfg: MatchConfig, dir: string, script: string | null 
       seed: cfg.seed,
       home: cfg.home.id,
       away: cfg.away.id,
-      script,
+      scenario: cfg.script?.name ?? null,
       fps: Math.round(1 / cfg.dt),
       params_version: cfg.params.provenance.version,
       engine: { name: "touchline-sim", version: "0.1.0" },
       outputs: Object.fromEntries(["meta.json", "event.jsonl", "tracking.jsonl", "domain.jsonl"].map((f) => [f, sha256(join(dir, f))])),
-      stats: { frames, events: events.length, cdf_events: cdfLines.length, score }
+      stats: { frames, events: events.length, cdf_events: cdfLines.length, score },
+      truths: {
+        script: scriptTruths(windows, cfg),
+        scripted_events: ordered.filter((e) => e.attrs.scripted === true).map((e) => ({ id: e.id, type: e.type, frame_id: e.frame_id, team_id: e.team_id, player_id: e.player_id })),
+        mistakes: mistakes(ordered),
+        critical_errors: criticalErrors(ordered, cfg),
+        tactical: tacticalTruths(ordered, cfg)
+      }
     }
     writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 1))
     return manifest
