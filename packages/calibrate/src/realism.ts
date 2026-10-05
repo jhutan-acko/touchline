@@ -10,7 +10,9 @@ import { FIXTURES } from "./evaluate.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
-const o = cliOptions("realism: simulate held-out matches and write docs/realism/realism-report.md", {
+const o = cliOptions("realism: simulate held-out matches and write a realism report", {
+  // Pass --out docs/realism/realism-report.md to update the committed report.
+  out: { default: join(root, "out/realism-report.md"), help: "where to write the report" },
   matches: { default: "10", check: positiveInteger, help: "held-out matches to simulate (seeds 2000+)" },
   params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" }
 })
@@ -39,4 +41,4 @@ for (let i = 0; i < matches; i++) {
 }
 const note = `${params.provenance.version}; held-out seeds 2000–${2000 + matches - 1}`
 execFileSync("uv", ["run", "--project", join(root, "python/analytics"), "python", "-m", "touchline_analytics.report", ...dirs,
-  "--targets", join(root, "data/params/targets-idsse.json"), "--note", note, "--out", join(root, "docs/realism/realism-report.md")], { stdio: "inherit" })
+  "--targets", join(root, "data/params/targets-idsse.json"), "--note", note, "--out", here(o.out)], { stdio: "inherit" })

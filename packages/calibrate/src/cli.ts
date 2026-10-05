@@ -13,7 +13,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
 const o = cliOptions("calibrate: tune engine knobs to real-match targets (method of simulated moments)", {
   targets: { default: join(root, "data/params/targets-idsse.json"), help: "real-match targets file" },
-  out: { default: join(root, "data/params/touchline-params.json"), help: "where to write the tuned parameters" },
+  // Experiments never overwrite the committed parameters by accident: pass --out data/params/touchline-params.json to update them.
+  out: { default: join(root, "out/touchline-params.json"), help: "where to write the tuned parameters" },
   matches: { default: "8", check: positiveInteger, help: "simulated matches per evaluation" },
   rounds: { default: "3", check: positiveInteger, help: "coordinate-search rounds" },
   // --from <file>: continue from that file's calibration knobs instead of the defaults.

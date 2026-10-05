@@ -24,6 +24,10 @@ export const oneOf =
   (name, v) =>
     allowed.includes(v) ? { value: v } : { error: `--${name} must be one of ${allowed.join(", ")}` }
 
+/** A plain name usable as a file or folder name: letters, digits, dot, dash and underscore; no leading dot (so no "..", no paths). */
+export const safeName: Check = (name, v) =>
+  /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(v) ? { value: v } : { error: `--${name} must be a plain name (letters, digits, ".", "-", "_"; got "${v}")` }
+
 /** ISO 8601 UTC date-time ("2026-10-18T14:00:00Z"); normalised to milliseconds ("…:00.000Z"). */
 export const isoTime: Check = (name, v) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?Z$/.exec(v)

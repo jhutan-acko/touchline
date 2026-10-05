@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 import { Effect } from "effect"
 import type { League } from "@touchline/league"
 import { DEFAULT_PARAMS, ParamsError, paramsFromJson, type Params } from "@touchline/sim-core"
-import { CliError, cliOptions, exitOnUserError, integer, isoTime, oneOf } from "./args.js"
+import { CliError, cliOptions, exitOnUserError, integer, isoTime, oneOf, safeName } from "./args.js"
 import { writeMatch } from "./writer.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -20,7 +20,7 @@ const o = cliOptions("touchline-sim: simulate one match and write CDF, domain ev
   away: { default: "kestrel-bay", check: oneOf(clubIds), help: "away club id" },
   fps: { default: "10", check: oneOf(["10", "25"]), help: "tracking frames per second" },
   kickoff: { default: "2026-10-18T14:00:00.000Z", check: isoTime, help: "kickoff time, ISO 8601 UTC" },
-  "match-id": { default: "", help: "match id (default m-<seed>)" },
+  "match-id": { default: "", check: safeName, help: "match id (default m-<seed>); also the output folder name" },
   // Calibrated parameters (Plan 2a) load by default; "default" uses the hand-set priors.
   params: { default: existsSync(defaultParams) ? defaultParams : "default", help: "parameter file, or \"default\" for hand-set priors" },
   out: { default: "", help: "output folder (default out/<match-id>)" }

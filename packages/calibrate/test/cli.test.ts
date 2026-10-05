@@ -26,4 +26,10 @@ describe("calibration command lines", () => {
     expect(r.stderr).toMatch(/^Cannot use params file no-such-file\.json/)
     expect(r.stderr).not.toMatch(/at .*\.ts:\d+/)
   })
+  it("write to out/ unless a committed path is given explicitly", () => {
+    const tune = run("src/cli.ts", ["--help"]).stdout
+    expect(tune).toMatch(/--out\s.*\(default: [^)]*out\/touchline-params\.json\)/)
+    const realism = run("src/realism.ts", ["--help"]).stdout
+    expect(realism).toMatch(/--out\s.*\(default: [^)]*out\/realism-report\.md\)/)
+  })
 })

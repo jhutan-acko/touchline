@@ -1,8 +1,10 @@
 import { execFileSync, spawnSync } from "node:child_process"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { CliError, integer, isoTime, oneOf, parseCli, positiveInteger } from "../src/args.js"
+import { CliError, integer, isoTime, oneOf, parseCli, positiveInteger, safeName } from "../src/args.js"
 
 const spec = {
   seed: { default: "1", check: integer(0, 4294967295), help: "match seed" },
@@ -35,6 +37,11 @@ describe("command-line options", () => {
     expect(() => parseCli(["--matches", "0"], spec)).toThrow(/--matches must be a positive integer/)
     expect(() => parseCli(["--matches", "abc"], spec)).toThrow(/--matches/)
   })
+  it("accepts only plain names for identifiers used in file paths", () => {
+    const ids = { id: { default: "m-1", check: safeName, help: "match id" } }
+    expect(parseCli(["--id", "m-42_b.v2"], ids).id).toBe("m-42_b.v2")
+    for (const bad of ["../../tmp-evil", "a/b", "..", ".hidden", "a b"]) expect(() => parseCli(["--id", bad], ids), bad).toThrow(/--id must be a plain name/)
+  })
   it("rejects stray positional arguments", () => {
     expect(() => parseCli(["ironmoor"], spec)).toThrow(/ironmoor/)
   })
@@ -48,6 +55,12 @@ describe("sim CLI", () => {
     expect(r.status).toBe(2)
     expect(r.stderr.trim()).toMatch(/^--kickoff must be an ISO 8601 UTC time/)
     expect(r.stderr).not.toMatch(/at .*\.ts:\d+/)
+  })
+  it("refuses a match id that is a path, even with an explicit --out", () => {
+    const out = mkdtempSync(join(tmpdir(), "touchline-sim-"))
+    const r = spawnSync(tsx, ["src/cli.ts", "--match-id", "a/b", "--out", out], { cwd: pkg, encoding: "utf8" })
+    expect(r.status).toBe(2)
+    expect(r.stderr.trim()).toMatch(/^--match-id must be a plain name/)
   })
   it("prints the options on --help", () => {
     const out = execFileSync(tsx, ["src/cli.ts", "--help"], { cwd: pkg, encoding: "utf8" })

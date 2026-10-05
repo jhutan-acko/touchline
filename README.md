@@ -20,11 +20,11 @@ The engine is tuned so that simulated matches reproduce real-match statistics me
 ```bash
 uv run --project python/analytics python -m touchline_analytics.idsse      # download into git-ignored data/raw/idsse
 uv run --project python/analytics python -m touchline_analytics.targets    # data/params/targets-idsse.json (aggregates only)
-# tune in one-round chunks (~45 min each, 12 matches per evaluation); the last one writes data/params/touchline-params.json
+# tune in one-round chunks (~45 min each, 12 matches per evaluation); outputs go to out/ unless --out names a committed file
 pnpm calibrate --from data/params/calibration-start.json --matches 12 --rounds 1 --out out/calib-1.json
 pnpm calibrate --from out/calib-1.json --matches 12 --rounds 1 --out out/calib-2.json
-pnpm calibrate --from out/calib-2.json --matches 12 --rounds 1
-pnpm realism --matches 16                                                  # held-out matches -> docs/realism/realism-report.md
+pnpm calibrate --from out/calib-2.json --matches 12 --rounds 1 --out data/params/touchline-params.json
+pnpm realism --matches 16 --out docs/realism/realism-report.md            # held-out matches (default output: out/)
 UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-gate  # refresh data/params/realism-baseline.json
 ```
 
