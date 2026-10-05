@@ -32,7 +32,8 @@ export const emittedAt = (e: Pick<DomainEvent, "frame_id" | "frame_id_end">): nu
 export interface PlayerInfo {
   readonly id: string
   readonly name: string
-  readonly role: Role
+  /** Null when unknown (a replay read without the league file). */
+  readonly role: Role | null
   readonly jersey: number
 }
 export interface TeamInfo {

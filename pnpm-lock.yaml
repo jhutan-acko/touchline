@@ -78,6 +78,9 @@ importers:
       '@touchline/schema':
         specifier: workspace:*
         version: link:../schema
+      '@touchline/sim':
+        specifier: workspace:*
+        version: link:../sim
       '@touchline/sim-core':
         specifier: workspace:*
         version: link:../sim-core
@@ -88,9 +91,6 @@ importers:
       '@touchline/league':
         specifier: workspace:*
         version: link:../league
-      '@touchline/sim':
-        specifier: workspace:*
-        version: link:../sim
 
 packages:
 

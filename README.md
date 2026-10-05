@@ -41,14 +41,25 @@ uv run --project python/analytics python -m touchline_analytics.stats_models   #
 
 Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids in `data/league/league.json`), `--fps` (10, or 25 for video render runs), `--match-id`, `--kickoff` (ISO time), `--out`.
 
+## Stats engine
+
+`packages/stats` turns the domain stream into the metrics of spec §5.2 (pass distance, accuracy and xPass, shot xG and speed, top speed and distance, possession, pressure index, PPDA, field tilt, momentum, control vs chaos) and raises signals when thresholds are crossed (goals, big chances, pressure shifts, momentum swings, chaos spikes, speed and distance alerts, difficult passes, milestones, cards, substitution impact). It is incremental and deterministic: every value is kept as of every tick, so a question about minute 60 gets the same answer during the match and afterwards, and a live run and a replay of its files agree exactly.
+
+```bash
+pnpm sim --seed 7                      # writes out/m-7
+pnpm stats --run out/m-7               # replay it through the stats engine: team metrics, signal counts, top signals
+pnpm stats --run out/m-7 --signals out/m-7/signals.jsonl
+```
+
 ## Packages
 
 | Package | What it does |
 |---|---|
 | `packages/sim-core` | The match engine: one pure, deterministic `step(state)` per 0.1 s tick |
 | `packages/league` | Fictional league generator: 8 clubs, kits, styles, 160 players |
-| `packages/schema` | Effect Schema for the live domain stream (events and frames) |
+| `packages/schema` | Effect Schema for the live domain stream (events and frames) and for signals and metric ids |
 | `packages/sim` | Effect streams, CDF v0.3.2 writers, run manifest, CLI |
+| `packages/stats` | Stats engine: metrics and signals on the domain stream, replay of run folders, `pnpm stats` |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
 | `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report, stats-model fitting |
 
