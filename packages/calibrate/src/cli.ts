@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { League } from "@touchline/league"
+import { cliOptions, positiveInteger } from "@touchline/sim"
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import type { Targets } from "./evaluate.js"
 import { applyKnobs, KNOBS } from "./knobs.js"
@@ -9,18 +10,20 @@ import { SCALAR_KEYS } from "./metrics.js"
 import { tune } from "./tune.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
-const arg = (k: string, d: string): string => {
-  const i = process.argv.indexOf(`--${k}`)
-  return i > 0 && process.argv[i + 1] ? process.argv[i + 1]! : d
-}
 const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
-const targetsPath = here(arg("targets", join(root, "data/params/targets-idsse.json")))
-const outPath = here(arg("out", join(root, "data/params/touchline-params.json")))
-const matches = Number(arg("matches", "8"))
-const rounds = Number(arg("rounds", "3"))
-// --from <params.json>: continue from that file's calibration knobs instead of the defaults.
-const fromPath = arg("from", "")
-const start = fromPath ? (JSON.parse(readFileSync(here(fromPath), "utf8")) as { calibration?: { knobs?: Record<string, number> } }).calibration?.knobs ?? {} : {}
+const o = cliOptions("calibrate: tune engine knobs to real-match targets (method of simulated moments)", {
+  targets: { default: join(root, "data/params/targets-idsse.json"), help: "real-match targets file" },
+  out: { default: join(root, "data/params/touchline-params.json"), help: "where to write the tuned parameters" },
+  matches: { default: "8", check: positiveInteger, help: "simulated matches per evaluation" },
+  rounds: { default: "3", check: positiveInteger, help: "coordinate-search rounds" },
+  // --from <file>: continue from that file's calibration knobs instead of the defaults.
+  from: { default: "", help: "start from the calibration.knobs of this file" }
+})
+const targetsPath = here(o.targets)
+const outPath = here(o.out)
+const matches = Number(o.matches)
+const rounds = Number(o.rounds)
+const start = o.from ? (JSON.parse(readFileSync(here(o.from), "utf8")) as { calibration?: { knobs?: Record<string, number> } }).calibration?.knobs ?? {} : {}
 
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const targets = JSON.parse(readFileSync(targetsPath, "utf8")) as Targets

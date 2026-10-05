@@ -30,6 +30,9 @@ describe("loss", () => {
   it("is zero when every statistic hits its target", () => {
     expect(loss(Object.fromEntries(SCALAR_KEYS.map((k) => [k, 10])) as never, targets)).toBe(0)
   })
+  it("refuses to score when no statistic could be measured (e.g. zero matches)", () => {
+    expect(() => loss(Object.fromEntries(SCALAR_KEYS.map((k) => [k, Number.NaN])) as never, targets)).toThrow(/no statistic/)
+  })
   it("floors the scale at 5 % of the mean", () => {
     expect(scaleOf({ mean: 100, sd: 0, n: 1 })).toBe(5)
   })

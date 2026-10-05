@@ -65,10 +65,17 @@ export const WEIGHTS: Readonly<Record<ScalarKey, number>> = {
 /** Scale for a z-score: the real between-match SD, but never below 5 % of the mean (tracking targets come from one match). */
 export const scaleOf = (t: Target): number => Math.max(t.sd, 0.05 * Math.abs(t.mean), 1e-6)
 
-export const loss = (sim: Readonly<Record<ScalarKey, number>>, targets: Targets): number =>
-  SCALAR_KEYS.reduce((acc, k) => {
+/** Weighted sum of squared z-scores over the statistics that have a target and a finite simulated value. */
+export const loss = (sim: Readonly<Record<ScalarKey, number>>, targets: Targets): number => {
+  let acc = 0
+  let used = 0
+  for (const k of SCALAR_KEYS) {
     const t = targets.metrics[k]
-    if (!t || !Number.isFinite(sim[k])) return acc
+    if (!t || !Number.isFinite(sim[k])) continue
     const z = (sim[k] - t.mean) / scaleOf(t)
-    return acc + WEIGHTS[k] * z * z
-  }, 0)
+    acc += WEIGHTS[k] * z * z
+    used++
+  }
+  if (used === 0) throw new Error("loss: no statistic could be measured (no matches simulated, or no targets)")
+  return acc
+}

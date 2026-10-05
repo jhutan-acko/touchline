@@ -4,57 +4,42 @@ import { fileURLToPath } from "node:url"
 import { Effect } from "effect"
 import type { League } from "@touchline/league"
 import { DEFAULT_PARAMS, ParamsError, paramsFromJson, type Params } from "@touchline/sim-core"
+import { CliError, cliOptions, exitOnUserError, integer, isoTime, oneOf } from "./args.js"
 import { writeMatch } from "./writer.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
-const arg = (k: string, d: string): string => {
-  const i = process.argv.indexOf(`--${k}`)
-  return i > 0 && process.argv[i + 1] ? process.argv[i + 1]! : d
-}
-const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
-const club = (id: string) => {
-  const c = league.clubs.find((x) => x.id === id)
-  if (!c) {
-    console.error(`Unknown club "${id}". Known clubs: ${league.clubs.map((x) => x.id).join(", ")}`)
-    process.exit(2)
-  }
-  return c
-}
-const seed = Number(arg("seed", "1"))
-const fps = Number(arg("fps", "10"))
-if (!Number.isInteger(seed) || seed < 0 || seed > 4294967295) {
-  console.error("--seed must be an integer between 0 and 4294967295")
-  process.exit(2)
-}
-if (fps !== 10 && fps !== 25) {
-  console.error("--fps must be 10 or 25")
-  process.exit(2)
-}
-if (arg("home", "ironmoor") === arg("away", "kestrel-bay")) {
-  console.error("--home and --away must be different clubs")
-  process.exit(2)
-}
-// Calibrated parameters (Plan 2) load by default; --params overrides; hand-set priors if neither exists.
-const defaultParams = join(root, "data/params/touchline-params.json")
-const paramsPath = arg("params", existsSync(defaultParams) ? defaultParams : "")
-let params: Params = DEFAULT_PARAMS
-if (paramsPath) {
-  try {
-    params = paramsFromJson(JSON.parse(readFileSync(resolve(process.env.INIT_CWD ?? process.cwd(), paramsPath), "utf8")))
-  } catch (e) {
-    console.error(`Cannot use params file ${paramsPath}: ${e instanceof ParamsError ? e.message : String(e)}`)
-    process.exit(2)
-  }
-}
-const cfg = {
-  matchId: arg("match-id", `m-${seed}`),
-  seed,
-  kickoffTime: arg("kickoff", "2026-10-18T14:00:00.000Z"),
-  home: club(arg("home", "ironmoor")),
-  away: club(arg("away", "kestrel-bay")),
-  params,
-  dt: 1 / fps
-}
 // pnpm runs package scripts from the package folder; INIT_CWD is where the user typed the command.
-const out = resolve(process.env.INIT_CWD ?? process.cwd(), arg("out", join(root, "out", cfg.matchId)))
+const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
+const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
+const clubIds = league.clubs.map((c) => c.id)
+const defaultParams = join(root, "data/params/touchline-params.json")
+
+const o = cliOptions("touchline-sim: simulate one match and write CDF, domain events and a run manifest", {
+  seed: { default: "1", check: integer(0, 4294967295), help: "match seed" },
+  home: { default: "ironmoor", check: oneOf(clubIds), help: "home club id" },
+  away: { default: "kestrel-bay", check: oneOf(clubIds), help: "away club id" },
+  fps: { default: "10", check: oneOf(["10", "25"]), help: "tracking frames per second" },
+  kickoff: { default: "2026-10-18T14:00:00.000Z", check: isoTime, help: "kickoff time, ISO 8601 UTC" },
+  "match-id": { default: "", help: "match id (default m-<seed>)" },
+  // Calibrated parameters (Plan 2a) load by default; "default" uses the hand-set priors.
+  params: { default: existsSync(defaultParams) ? defaultParams : "default", help: "parameter file, or \"default\" for hand-set priors" },
+  out: { default: "", help: "output folder (default out/<match-id>)" }
+})
+
+const params: Params = exitOnUserError(() => {
+  if (o.params === "default") return DEFAULT_PARAMS
+  try {
+    return paramsFromJson(JSON.parse(readFileSync(here(o.params), "utf8")))
+  } catch (e) {
+    throw new CliError(`Cannot use params file ${o.params}: ${e instanceof ParamsError ? e.message : String(e)}`)
+  }
+})
+exitOnUserError(() => {
+  if (o.home === o.away) throw new CliError("--home and --away must be different clubs")
+})
+const seed = Number(o.seed)
+const matchId = o["match-id"] || `m-${seed}`
+const club = (id: string) => league.clubs.find((c) => c.id === id)!
+const cfg = { matchId, seed, kickoffTime: o.kickoff, home: club(o.home), away: club(o.away), params, dt: 1 / Number(o.fps) }
+const out = here(o.out || join(root, "out", matchId))
 Effect.runPromise(writeMatch(cfg, out)).then((m) => console.log(`${out}: ${JSON.stringify(m.stats)}`))

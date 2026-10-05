@@ -1,21 +1,28 @@
 import { execFileSync } from "node:child_process"
 import { readFileSync, rmSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect } from "effect"
 import type { League } from "@touchline/league"
-import { writeMatch } from "@touchline/sim"
-import { DEFAULT_PARAMS, paramsFromJson } from "@touchline/sim-core"
+import { CliError, cliOptions, exitOnUserError, positiveInteger, writeMatch } from "@touchline/sim"
+import { DEFAULT_PARAMS, ParamsError, paramsFromJson, type Params } from "@touchline/sim-core"
 import { FIXTURES } from "./evaluate.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
-const arg = (k: string, d: string): string => {
-  const i = process.argv.indexOf(`--${k}`)
-  return i > 0 && process.argv[i + 1] ? process.argv[i + 1]! : d
-}
-const matches = Number(arg("matches", "10"))
-const paramsFile = arg("params", join(root, "data/params/touchline-params.json"))
-const params = paramsFile === "default" ? DEFAULT_PARAMS : paramsFromJson(JSON.parse(readFileSync(paramsFile, "utf8")))
+const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
+const o = cliOptions("realism: simulate held-out matches and write docs/realism/realism-report.md", {
+  matches: { default: "10", check: positiveInteger, help: "held-out matches to simulate (seeds 2000+)" },
+  params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" }
+})
+const matches = Number(o.matches)
+const params: Params = exitOnUserError(() => {
+  if (o.params === "default") return DEFAULT_PARAMS
+  try {
+    return paramsFromJson(JSON.parse(readFileSync(here(o.params), "utf8")))
+  } catch (e) {
+    throw new CliError(`Cannot use params file ${o.params}: ${e instanceof ParamsError ? e.message : String(e)}`)
+  }
+})
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const outRoot = join(root, "out/realism")
 rmSync(outRoot, { recursive: true, force: true })
