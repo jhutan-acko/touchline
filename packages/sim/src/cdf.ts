@@ -144,7 +144,15 @@ const BODY = new Set(["left_foot", "right_foot", "feet", "head", "hands", "upper
 /** Timestamp (ms) of a global tick, using the period table built from frames. */
 export type TickClock = (tick: number) => string
 
-export const cdfEventLine = (cfg: MatchConfig, e: DomainEvent, clock: TickClock, periodStartTick: (period: string) => number, receiverTick: number | null): string | null => {
+export const cdfEventLine = (
+  cfg: MatchConfig,
+  e: DomainEvent,
+  clock: TickClock,
+  periodStartTick: (period: string) => number,
+  receiverTick: number | null,
+  /** False when the events carry realism noise (see noise.ts). */
+  synced = true
+): string | null => {
   const t = cdfTypeOf(e)
   if (!t) return null
   const isRef = t.type === "referee"
@@ -182,5 +190,5 @@ export const cdfEventLine = (cfg: MatchConfig, e: DomainEvent, clock: TickClock,
   if (Object.keys(metrics).length) event.metrics = metrics
   const tracking: Record<string, number> = { frame_id: e.frame_id - start }
   if (e.frame_id_end !== null) tracking.frame_id_end = e.frame_id_end - start
-  return JSON.stringify({ match: { id: e.match_id }, meta: { is_synced: true }, event, tracking })
+  return JSON.stringify({ match: { id: e.match_id }, meta: { is_synced: synced }, event, tracking })
 }

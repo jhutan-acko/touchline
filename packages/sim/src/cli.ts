@@ -22,6 +22,7 @@ const o = cliOptions("touchline-sim: simulate one match and write CDF, domain ev
   away: { default: "", check: oneOf(clubIds), help: "away club id (default: the scenario's, else kestrel-bay)" },
   fps: { default: "10", check: oneOf(["10", "25"]), help: "tracking frames per second" },
   kickoff: { default: "2026-10-18T14:00:00.000Z", check: isoTime, help: "kickoff time, ISO 8601 UTC" },
+  noise: { default: "off", check: oneOf(["off", "on"]), help: "realism noise on the CDF events (time jitter and location noise)" },
   "match-id": { default: "", check: safeName, help: "match id (default m-<seed>); also the output folder name" },
   // Calibrated parameters (Plan 2a) load by default; "default" uses the hand-set priors.
   params: { default: existsSync(defaultParams) ? defaultParams : "default", help: "parameter file, or \"default\" for hand-set priors" },
@@ -47,4 +48,4 @@ const matchId = o["match-id"] || `m-${seed}`
 const club = (id: string) => league.clubs.find((c) => c.id === id)!
 const cfg = { matchId, seed, kickoffTime: o.kickoff, home: club(home), away: club(away), params, dt: 1 / Number(o.fps), ...(scenario ? { script: scenario.script } : {}) }
 const out = here(o.out || join(root, "out", matchId))
-Effect.runPromise(writeMatch(cfg, out)).then((m) => console.log(`${out}: ${JSON.stringify(m.stats)}`))
+Effect.runPromise(writeMatch(cfg, out, { noise: o.noise === "on" })).then((m) => console.log(`${out}: ${JSON.stringify(m.stats)}`))

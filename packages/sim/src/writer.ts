@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect"
 import { runScript, type DomainEvent, type Frame, type MatchConfig, type WindowResult } from "@touchline/sim-core"
 import { cdfEventLine, cdfMeta, cdfTrackingLine, periodsFromFrames } from "./cdf.js"
 import { hasScript, matchSteps } from "./run.js"
+import { addRealismNoise, REALISM_NOISE } from "./noise.js"
 import { spadlCsv } from "./spadl.js"
 import { criticalErrors, mistakes, scriptTruths, tacticalTruths, type CriticalError, type Mistake, type ScriptTruth, type TeamTruth } from "./truths.js"
 
@@ -20,6 +21,8 @@ export interface RunManifest {
   readonly engine: { readonly name: string; readonly version: string }
   readonly outputs: Readonly<Record<string, string>>
   readonly stats: { readonly frames: number; readonly events: number; readonly cdf_events: number; readonly score: string }
+  /** The noise added to the CDF events (see noise.ts), or null when they are exact. */
+  readonly realism_noise: typeof REALISM_NOISE | null
   /** Ground truth for the evaluation harness (spec §5.1.12, §5.3.1); kept out of CDF. */
   readonly truths: {
     readonly script: ReadonlyArray<ScriptTruth>
@@ -36,7 +39,12 @@ const sha256 = (path: string) => "sha256:" + createHash("sha256").update(readFil
  * Run one match and write meta.json, event.jsonl, tracking.jsonl, domain.jsonl and manifest.json to `dir`.
  * Tracking is streamed to disk; events are kept in memory (a few thousand) to resolve CDF receiver times.
  */
-export const writeMatch = (cfg: MatchConfig, dir: string) =>
+export interface WriteOptions {
+  /** Add realism noise to the CDF events (default off). */
+  readonly noise?: boolean
+}
+
+export const writeMatch = (cfg: MatchConfig, dir: string, opts: WriteOptions = {}) =>
   Effect.gen(function* () {
     // A scripted match is resolved first so its window results are known; a plain match streams step by step.
     const run = hasScript(cfg) ? runScript(cfg) : null
@@ -72,8 +80,13 @@ export const writeMatch = (cfg: MatchConfig, dir: string) =>
     // Flights are emitted when they resolve and carries when they end; files list events in frame order
     // (stable, so events of the same frame keep their emission order).
     const ordered = [...events].sort((a, b) => a.frame_id - b.frame_id)
-    const recv = new Map(events.filter((e) => e.type === "pass" && e.frame_id_end !== null).map((e) => [e.id, e.frame_id_end!]))
-    const cdfLines = ordered.map((e) => cdfEventLine(cfg, e, clock, (p) => periodStart.get(p) ?? 0, recv.get(e.id) ?? null)).filter((x): x is string => x !== null)
+    // CDF events are exact, or carry realism noise when asked (the domain stream and SPADL view stay exact).
+    const periodEnd = new Map(periodsFromFrames(periods).map((p) => [p.period, p.frameIdEnd]))
+    const exported = opts.noise ? addRealismNoise(ordered, cfg, (p) => periodEnd.get(p) ?? 0).sort((a, b) => a.frame_id - b.frame_id) : ordered
+    const recv = new Map(exported.filter((e) => e.type === "pass" && e.frame_id_end !== null).map((e) => [e.id, e.frame_id_end!]))
+    const cdfLines = exported
+      .map((e) => cdfEventLine(cfg, e, clock, (p) => periodStart.get(p) ?? 0, recv.get(e.id) ?? null, !opts.noise))
+      .filter((x): x is string => x !== null)
     writeFileSync(join(dir, "event.jsonl"), cdfLines.join("\n") + "\n")
     writeFileSync(join(dir, "domain.jsonl"), ordered.map((e) => JSON.stringify(e)).join("\n") + "\n")
     writeFileSync(join(dir, "spadl.csv"), spadlCsv(ordered, cfg))
@@ -91,6 +104,7 @@ export const writeMatch = (cfg: MatchConfig, dir: string) =>
       engine: { name: "touchline-sim", version: "0.1.0" },
       outputs: Object.fromEntries(["meta.json", "event.jsonl", "tracking.jsonl", "domain.jsonl", "spadl.csv"].map((f) => [f, sha256(join(dir, f))])),
       stats: { frames, events: events.length, cdf_events: cdfLines.length, score },
+      realism_noise: opts.noise ? REALISM_NOISE : null,
       truths: {
         script: scriptTruths(windows, cfg),
         scripted_events: ordered.filter((e) => e.attrs.scripted === true).map((e) => ({ id: e.id, type: e.type, frame_id: e.frame_id, team_id: e.team_id, player_id: e.player_id })),
