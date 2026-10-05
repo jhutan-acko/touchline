@@ -1,0 +1,14 @@
+{
+ "source": "Wikidata (CC0 1.0): English labels of association football players (P106 Q937857) who played for (P54) a club in each league (P118)",
+ "leagues": {
+  "Premier League": "Q9448",
+  "EFL Championship": "Q19510"
+ },
+ "names_per_league": {
+  "Premier League": 13948,
+  "EFL Championship": 15194
+ },
+ "hashes": 22671,
+ "hash": "sha256 of the normalised name (NFKD, accents removed, lower case, a-z only), first 16 hex digits",
+ "fetched_at": "2026-10-05"
+}

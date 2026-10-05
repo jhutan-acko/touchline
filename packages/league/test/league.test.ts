@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { contrast, generateLeague, nameHash } from "../src/league.js"
+import { contrast, generateLeague, nameHash, type League } from "../src/league.js"
 
 describe("league", () => {
   const L = generateLeague(2026, new Set())
@@ -27,5 +30,14 @@ describe("league", () => {
   it("player names are unique across the league", () => {
     const names = L.clubs.flatMap((c) => c.squad.map((p) => p.name))
     expect(new Set(names).size).toBe(names.length)
+  })
+  it("the committed league uses no name on the committed real-player blocklist", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
+    const file = join(root, "data/blocklist/real-player-name-hashes.txt")
+    expect(existsSync(file)).toBe(true)
+    const blocked = new Set(readFileSync(file, "utf8").split("\n").filter(Boolean))
+    expect(blocked.size).toBeGreaterThan(10_000)
+    const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
+    for (const c of league.clubs) for (const p of c.squad) expect(blocked.has(nameHash(p.name)), p.name).toBe(false)
   })
 })
