@@ -73,6 +73,25 @@ importers:
 
   packages/sim-core: {}
 
+  packages/stats:
+    dependencies:
+      '@touchline/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@touchline/sim-core':
+        specifier: workspace:*
+        version: link:../sim-core
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+    devDependencies:
+      '@touchline/league':
+        specifier: workspace:*
+        version: link:../league
+      '@touchline/sim':
+        specifier: workspace:*
+        version: link:../sim
+
 packages:
 
   '@effect/vitest@4.0.0':
