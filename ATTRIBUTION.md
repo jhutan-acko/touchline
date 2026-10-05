@@ -16,6 +16,6 @@ Touchline's simulator is original code. These projects and papers shaped its des
 
 | Dataset | Licence | How it is used |
 |---|---|---|
-| IDSSE / Sportec Open DFL dataset — © Deutsche Fussball Liga (DFL); Bassek et al., *Scientific Data* (2025), https://doi.org/10.1038/s41597-025-04505-y | CC-BY 4.0 | Downloaded locally into git-ignored `data/raw/`; only aggregate match statistics (`data/params/targets-idsse.json`) are committed. These are the targets the engine is tuned to and validated against (`docs/realism/realism-report.md`). |
+| IDSSE / Sportec Open DFL dataset — © Deutsche Fussball Liga (DFL); Bassek et al., *Scientific Data* (2025), https://doi.org/10.1038/s41597-025-04505-y | CC-BY 4.0 | Downloaded locally into git-ignored `data/raw/`; only aggregate match statistics (`data/params/targets-idsse.json`) and fitted model coefficients (`data/params/stats-models.json`) are committed. These are the targets the engine is tuned to and validated against (`docs/realism/realism-report.md`). |
 
 The default xG prior (`packages/sim-core/src/params.ts`) is fitted to an approximate public reference xG curve by distance and angle, not to any dataset.

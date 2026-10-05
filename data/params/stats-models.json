@@ -1,0 +1,61 @@
+{
+ "_provenance": {
+  "dataset": "IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
+  "licence": "CC-BY-4.0",
+  "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
+  "matches": [
+   "J03WMX",
+   "J03WN1",
+   "J03WOH",
+   "J03WOY",
+   "J03WPY",
+   "J03WQQ",
+   "J03WR9"
+  ],
+  "fitted_at": "2026-10-06",
+  "method": "logistic regression (Newton, L2 penalty on coefficients); features from event locations and the nearest 5 Hz tracking frame",
+  "note": "Coefficients and fit summaries only; no real event or tracking rows."
+ },
+ "version": "stats-models-1",
+ "xpass": {
+  "features": [
+   "length_10m",
+   "forward_10m",
+   "lane_defenders",
+   "pressure"
+  ],
+  "intercept": 2.111722,
+  "coefficients": {
+   "length_10m": -0.075895,
+   "forward_10m": -0.256056,
+   "lane_defenders": -0.545615,
+   "pressure": -0.842339
+  },
+  "l2": 1.0,
+  "n": 6061,
+  "positives": 4750,
+  "held_out_log_loss": 0.4733,
+  "base_rate_log_loss": 0.5234
+ },
+ "xg": {
+  "features": [
+   "distance_10m",
+   "angle_rad",
+   "header",
+   "cone_defenders"
+  ],
+  "penalty": 0.76,
+  "intercept": -0.946439,
+  "coefficients": {
+   "distance_10m": -1.030085,
+   "angle_rad": 1.255561,
+   "header": -1.449105,
+   "cone_defenders": -0.161441
+  },
+  "l2": 0.1,
+  "n": 168,
+  "positives": 16,
+  "held_out_log_loss": 0.3156,
+  "base_rate_log_loss": 0.3196
+ }
+}

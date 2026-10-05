@@ -39,8 +39,8 @@ def test_download_rejects_a_payload_that_does_not_match_its_checksum(tmp_path, m
     assert not (tmp_path / "m.part").exists()
 
 
-def test_every_default_file_has_a_checksum():
+def test_every_file_has_a_checksum():
+    # The stats models (stats_models.py) are fitted on every match's tracking.
     for match_id in idsse.MATCHES:
-        for kind, name in idsse.filenames(match_id).items():
-            if kind != "tracking" or match_id == "J03WPY":
-                assert name in idsse.SHA256, name
+        for name in idsse.filenames(match_id).values():
+            assert name in idsse.SHA256, name

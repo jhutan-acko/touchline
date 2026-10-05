@@ -28,6 +28,15 @@ pnpm realism --matches 16 --out docs/realism/realism-report.md            # held
 UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-gate  # refresh data/params/realism-baseline.json
 ```
 
+## Stats models
+
+The stats engine's pass-difficulty (xPass) and expected-goals (xG) models are logistic regressions fitted on the seven IDSSE matches, with features taken from event locations and the tracking frame at that moment (all seven tracking files, ~370 MB each):
+
+```bash
+uv run --project python/analytics python -m touchline_analytics.idsse --tracking J03WMX J03WN1 J03WOH J03WOY J03WPY J03WQQ J03WR9
+uv run --project python/analytics python -m touchline_analytics.stats_models   # data/params/stats-models.json (coefficients only)
+```
+
 `pnpm sim` loads `data/params/touchline-params.json` by default (`--params <file>` to override). Every parameter file must carry provenance with an allowed licence; StatsBomb-derived parameters are refused.
 
 Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids in `data/league/league.json`), `--fps` (10, or 25 for video render runs), `--match-id`, `--kickoff` (ISO time), `--out`.
@@ -41,7 +50,7 @@ Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids
 | `packages/schema` | Effect Schema for the live domain stream (events and frames) |
 | `packages/sim` | Effect streams, CDF v0.3.2 writers, run manifest, CLI |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
-| `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report |
+| `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report, stats-model fitting |
 
 ## Status
 
