@@ -20,25 +20,29 @@ export interface ScriptTruth {
   readonly effect: ScenarioEffect
   readonly team_id: string
   readonly minutes: readonly [number, number]
+  /** The window's first and last frame as global ticks (as in domain.jsonl), not CDF frame ids, which restart each period. */
   readonly frames: readonly [number, number]
   readonly count: number
+  /** Whether this entry's target was met in the accepted play. */
   readonly achieved: boolean
+  /** Plays of the window (shared by the entries of one window). */
   readonly attempts: number
+  /** Whether this entry's outcome was forced (its forced events carry `scripted: true`). */
   readonly forced: boolean
   readonly expected_metrics: ReadonlyArray<string>
 }
 
 export const scriptTruths = (windows: ReadonlyArray<WindowResult>, cfg: MatchConfig): ScriptTruth[] =>
   windows.flatMap((w) =>
-    w.entries.map((e) => ({
+    w.entries.map((e, i) => ({
       effect: e.effect,
       team_id: e.team === "home" ? cfg.home.id : cfg.away.id,
       minutes: e.window,
       frames: [w.fromFrame, w.toFrame] as const,
       count: e.count ?? 1,
-      achieved: w.achieved,
+      achieved: w.results[i]!.achieved,
       attempts: w.attempts,
-      forced: w.forced,
+      forced: w.results[i]!.forced,
       expected_metrics: EXPECTED_METRICS[e.effect]
     }))
   )

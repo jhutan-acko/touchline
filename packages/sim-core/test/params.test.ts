@@ -69,7 +69,7 @@ describe("params from JSON: value ranges", () => {
     expect(() => paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))).not.toThrow()
   })
   it("refuses probabilities outside 0..1", () => {
-    for (const bad of [{ keeper: { letRunShare: 5 } }, { defending: { foulPerTackle: -0.1 } }, { substitutions: { windowChance: [1, 1.2, 0.5] } }, { kinematics: { reachMargin: 1.5 } }])
+    for (const bad of [{ keeper: { letRunShare: 5 } }, { defending: { foulPerTackle: -0.1 } }, { substitutions: { windowChance: [1, 1.2, 0.5] } }, { kinematics: { reachMargin: 1.5 } }, { fatigue: { halfTimeRecovery: 1.5 } }, { script: { howlerFumble: 2 } }])
       expect(() => paramsFromJson({ provenance: prov, ...bad }), JSON.stringify(bad)).toThrow(/must be between 0 and 1/)
   })
   it("refuses negative values where only magnitudes make sense, but allows signed model coefficients", () => {

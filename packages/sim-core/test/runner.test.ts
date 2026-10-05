@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { initMatch, isFinished, paramsFromJson, runScript, ScriptError, step, type MatchConfig, type Script } from "../src/index.js"
+import { entryAchieved, initMatch, isFinished, outstandingForces, paramsFromJson, runScript, ScriptError, step, type MatchConfig, type Script, type ScriptEntry } from "../src/index.js"
 import { makeConfig } from "../src/testing.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -53,6 +53,26 @@ describe("scenario runner", () => {
     expect(typeof w.achieved).toBe("boolean")
     const reds = run.steps.flatMap((r) => r.events).filter((e) => e.type === "card" && e.attrs.colour !== "yellow" && e.team_id === "away-fc")
     expect(w.achieved).toBe(reds.some((e) => e.frame_id >= w.fromFrame && e.frame_id <= w.toFrame))
+  })
+  it("refuses more retries than its sub-seeds allow", () => {
+    const script: Script = { name: "t", entries: [{ window: [20, 30], team: "home", effect: "goal" }] }
+    expect(() => runScript(makeConfig(1, { params, script }), { retries: 63 })).toThrow(/retries must be an integer from 0 to 62/)
+    expect(() => runScript(makeConfig(1, { params, script }), { retries: -1 })).toThrow(ScriptError)
+  })
+  it("reports each entry's own result, and marks forced only the entries whose outcome was forced", () => {
+    const script: Script = { name: "t", entries: [{ window: [30, 45], team: "home", effect: "goal", count: 5 }, { window: [30, 45], team: "away", effect: "press_surge" }] }
+    const run = runScript(makeConfig(8, { params, script }), { retries: 0 })
+    const w = run.windows[0]!
+    const events = run.steps.flatMap((r) => r.events).filter((e) => e.frame_id >= w.fromFrame && e.frame_id <= w.toFrame)
+    expect(w.forced).toBe(true)
+    expect(w.results).toEqual(script.entries.map((e) => ({ achieved: entryAchieved(e, events, makeConfig(8, { params, script })), forced: e.effect === "goal" })))
+  })
+  it("forces only the goals still missing: natural goals in the forced play count towards the target", () => {
+    const script: Script = { name: "t", entries: [{ window: [30, 45], team: "home", effect: "goal", count: 2 }, { window: [30, 45], team: "away", effect: "red_card" }] }
+    const [goal, red] = script.entries as [ScriptEntry, ScriptEntry]
+    expect(outstandingForces(script, [goal, goal, red], [0, 0])).toEqual([goal, goal, red])
+    expect(outstandingForces(script, [goal, goal, red], [1, 0])).toEqual([goal, red])
+    expect(outstandingForces(script, [goal, red], [2, 0])).toEqual([red])
   })
   it("refuses overlapping windows", () => {
     const script: Script = { name: "t", entries: [{ window: [20, 40], team: "home", effect: "goal" }, { window: [30, 50], team: "away", effect: "goal" }] }

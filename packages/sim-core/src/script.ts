@@ -44,9 +44,11 @@ export interface Mods {
   readonly mishit: number
   /** Multiplies the team's shooting error (below 1: sharper finishing). */
   readonly aim: number
+  /** A press surge is on: the two nearest defenders press, from further away (not just any rise in pressing). */
+  readonly surge: boolean
 }
 
-export const NO_MODS: Mods = { shotLogit: 0, attackLogit: 0, scoring: 1, press: 1, tackle: 1, foul: 1, red: 1, saveLogit: 0, fumble: 0, mishit: 1, aim: 1 }
+export const NO_MODS: Mods = { shotLogit: 0, attackLogit: 0, scoring: 1, press: 1, tackle: 1, foul: 1, red: 1, saveLogit: 0, fumble: 0, mishit: 1, aim: 1, surge: false }
 
 /**
  * Whether match minute `minute` of `period` is inside a window. Minutes 45+ happen in both halves (first-half added
@@ -86,7 +88,7 @@ export const modsFor = (script: Script | undefined, side: Side, minute: number, 
         m = { ...m, shotLogit: m.shotLogit + s.momentumLogit, attackLogit: m.attackLogit + s.momentumLogit, press: m.press * s.momentumPress }
         break
       case "press_surge":
-        m = { ...m, press: m.press * s.pressSurge, tackle: m.tackle * s.pressTackle }
+        m = { ...m, press: m.press * s.pressSurge, tackle: m.tackle * s.pressTackle, surge: true }
         break
       case "red_card":
         m = { ...m, foul: m.foul * s.redFoul, red: m.red * s.redCard }
@@ -103,6 +105,22 @@ export const modsFor = (script: Script | undefined, side: Side, minute: number, 
     }
   })
   return m
+}
+
+/**
+ * The forced outcomes still needed: a goal entry keeps at most as many forced goals as it is short of its count
+ * (goals scored naturally meanwhile count towards it); other forced outcomes are kept.
+ */
+export const outstandingForces = (script: Script | undefined, forced: ReadonlyArray<ScriptEntry>, goals: ReadonlyArray<number>): ScriptEntry[] => {
+  const entries = script?.entries ?? []
+  const left = entries.map((e, i) => (e.effect === "goal" ? Math.max(0, (e.count ?? 1) - (goals[i] ?? 0)) : Infinity))
+  return forced.filter((f) => {
+    const i = entries.indexOf(f)
+    if (i < 0 || f.effect !== "goal") return true
+    if (left[i]! <= 0) return false
+    left[i]!--
+    return true
+  })
 }
 
 /** Count a goal for `side` at `minute` against every goal entry for that side whose window contains it. */

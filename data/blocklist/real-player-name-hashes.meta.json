@@ -10,5 +10,8 @@
  },
  "hashes": 22671,
  "hash": "sha256 of the normalised name (NFKD, accents removed, lower case, a-z only), first 16 hex digits",
- "fetched_at": "2026-10-05"
+ "fetched_at": {
+  "Premier League": "2026-10-05",
+  "EFL Championship": "2026-10-05"
+ }
 }

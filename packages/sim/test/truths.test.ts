@@ -74,9 +74,18 @@ describe("tactical truths", () => {
 
 describe("script truths", () => {
   it("describe each window: what was injected, by which team, when, whether it happened, and which metrics should move", () => {
-    const w: WindowResult = { entries: [{ window: [60, 75], team: "home", effect: "press_surge" }], achieved: true, attempts: 2, forced: false, fromFrame: 36000, toFrame: 45000 }
+    const w: WindowResult = { entries: [{ window: [60, 75], team: "home", effect: "press_surge" }], achieved: true, attempts: 2, forced: false, fromFrame: 36000, toFrame: 45000, results: [{ achieved: true, forced: false }] }
     expect(scriptTruths([w], cfg)).toEqual([
       { effect: "press_surge", team_id: H, minutes: [60, 75], frames: [36000, 45000], count: 1, achieved: true, attempts: 2, forced: false, expected_metrics: ["team.press", "ppda", "tilt"] }
     ])
+  })
+
+  it("report each entry of a shared window on its own (a met error target is not marked forced when only the goal was)", () => {
+    const w: WindowResult = {
+      entries: [{ window: [60, 75], team: "home", effect: "defensive_error" }, { window: [60, 75], team: "away", effect: "goal" }],
+      achieved: true, attempts: 7, forced: true, fromFrame: 36000, toFrame: 45000,
+      results: [{ achieved: true, forced: false }, { achieved: true, forced: true }]
+    }
+    expect(scriptTruths([w], cfg).map((t) => [t.effect, t.achieved, t.forced])).toEqual([["defensive_error", true, false], ["goal", true, true]])
   })
 })

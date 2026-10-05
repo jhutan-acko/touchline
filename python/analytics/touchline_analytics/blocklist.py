@@ -4,7 +4,8 @@ Names of footballers who played for clubs in major leagues come from Wikidata (C
 hashes in data/blocklist/real-player-name-hashes.txt; the league generator (packages/league) never uses a
 generated name whose hash is on the list. Normalisation and hashing match `normaliseName` / `nameHash` there.
 
-Usage: uv run --project python/analytics python -m touchline_analytics.blocklist
+Usage: uv run --project python/analytics python -m touchline_analytics.blocklist [--contact URL-or-email]
+(a contact is needed only when a league in LEAGUES has not been fetched yet; Wikimedia asks every client for one)
 """
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ import urllib.request
 from pathlib import Path
 
 ENDPOINT = "https://query.wikidata.org/sparql"
-USER_AGENT = "touchline-hackathon/0.1 (synthetic football data; real-player name blocklist)"
+# Wikimedia's User-Agent policy asks for contact details; whoever fetches gives them (--contact).
+USER_AGENT = "touchline-hackathon/0.1 ({contact}; synthetic football data; real-player name blocklist)"
 FOOTBALLER = "Q937857"  # occupation: association football player
 # Wikidata ids of the leagues whose clubs' players are blocked (checked 2026-10-05). The English leagues come
 # first: this is a Premier League product. More can be added later (each run fetches only leagues not saved yet),
@@ -71,35 +73,47 @@ def hashes_from_sparql(result: dict) -> set[str]:
     return out
 
 
-def fetch(query: str, attempts: int = 5) -> dict:
+def _retry_after(e: urllib.error.HTTPError) -> float:
+    """Seconds the server asked us to wait (a Retry-After header in seconds), else 0."""
+    v = (e.headers.get("Retry-After") if e.headers else None) or ""
+    return float(v) if v.strip().isdigit() else 0.0
+
+
+def fetch(query: str, contact: str, attempts: int = 5) -> dict:
     """Run a SPARQL query. A response cut off by the endpoint's time limit (invalid JSON), a dropped connection
-    a truncated body or a 429/5xx answer is retried after 10, 20, 40, 80 s."""
+    a truncated body or a 429/5xx answer is retried after 10, 20, 40, 80 s, or later if the server says so."""
     url = ENDPOINT + "?" + urllib.parse.urlencode({"query": query, "format": "json"})
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/sparql-results+json"})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT.format(contact=contact), "Accept": "application/sparql-results+json"})
     for i in range(attempts):
+        wait = 10.0 * 2**i
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
                 return json.load(resp)
         except urllib.error.HTTPError as e:
             if e.code != 429 and e.code < 500 or i == attempts - 1:
                 raise
+            wait = max(wait, _retry_after(e))
         except (json.JSONDecodeError, urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError):
             if i == attempts - 1:
                 raise
-        time.sleep(10 * 2**i)
+        time.sleep(wait)
     raise AssertionError("unreachable")
 
 
-def build(out: Path) -> dict:
+def build(out: Path, contact: str | None = None) -> dict:
     """Fetch every league not fetched yet (each saved as soon as it is done, in a `leagues/` folder next to
-    `out`, so an interrupted run resumes where it stopped), then write the combined, sorted hash list."""
+    `out`, with the date it was fetched, so an interrupted run resumes where it stopped), then write the combined,
+    sorted hash list. Fetching needs `contact` (a URL or e-mail for the User-Agent)."""
     per_league = out.parent / "leagues"
     per_league.mkdir(parents=True, exist_ok=True)
     counts = {}
+    fetched_at: dict[str, str | None] = {}
     hashes: set[str] = set()
     for name, qid in LEAGUES.items():
         path = per_league / f"{name}.txt"
         if not path.exists():
+            if not contact:
+                raise ValueError(f"{name} is not fetched yet: give --contact (a URL or e-mail; Wikimedia asks every client for one)")
             # Progress is kept per club ("club<TAB>hash" lines), so an interrupted league resumes at its next club.
             partial = per_league / f"{name}.partial"
             done: dict[str, set[str]] = {}
@@ -109,20 +123,23 @@ def build(out: Path) -> dict:
                         club, _, h = line.partition("\t")
                         done.setdefault(club, set()).update([h] if h else [])
             with partial.open("a") as fh:
-                for club in club_ids(fetch(clubs_query(qid))):
+                for club in club_ids(fetch(clubs_query(qid), contact)):
                     if club in done:
                         continue
-                    found = hashes_from_sparql(fetch(players_query(club)))
+                    found = hashes_from_sparql(fetch(players_query(club), contact))
                     fh.write("".join(f"{club}\t{h}\n" for h in sorted(found)) or f"{club}\t\n")
                     fh.flush()
                     done[club] = found
                     time.sleep(0.5)  # be polite to the public endpoint
             league = set().union(*done.values()) if done else set()
             path.write_text("".join(f"{h}\n" for h in sorted(league)))
+            path.with_suffix(".fetched").write_text(dt.date.today().isoformat() + "\n")
             partial.unlink()
             print(f"{name}: {len(league)} names", flush=True)
         league_hashes = {line for line in path.read_text().split("\n") if line}
         counts[name] = len(league_hashes)
+        stamp = path.with_suffix(".fetched")
+        fetched_at[name] = stamp.read_text().strip() if stamp.exists() else None
         hashes |= league_hashes
     out.write_text("".join(f"{h}\n" for h in sorted(hashes)))
     meta = {
@@ -131,11 +148,16 @@ def build(out: Path) -> dict:
         "names_per_league": counts,
         "hashes": len(hashes),
         "hash": "sha256 of the normalised name (NFKD, accents removed, lower case, a-z only), first 16 hex digits",
-        "fetched_at": dt.date.today().isoformat(),
+        "fetched_at": fetched_at,
     }
     out.with_suffix(".meta.json").write_text(json.dumps(meta, indent=1) + "\n")
     return meta
 
 
 if __name__ == "__main__":
-    print(json.dumps(build(Path("data/blocklist/real-player-name-hashes.txt")), indent=1))
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Build the real-player name blocklist from Wikidata (hashes only)")
+    ap.add_argument("--contact", default=None, help="URL or e-mail sent in the User-Agent (needed only to fetch a league not saved yet)")
+    args = ap.parse_args()
+    print(json.dumps(build(Path("data/blocklist/real-player-name-hashes.txt"), args.contact), indent=1))

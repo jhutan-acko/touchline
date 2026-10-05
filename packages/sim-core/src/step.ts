@@ -26,7 +26,7 @@ import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
-import { countGoal, modsFor, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
+import { countGoal, modsFor, outstandingForces, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
 import { parryBall, planShot, type ShotMods } from "./shot.js"
 import { ballAfterTouch, drawFirstTouch, firstTouchError, type FirstTouch } from "./touch.js"
 import {
@@ -248,7 +248,11 @@ class Work {
   /** A goal for `side`: the score, and the script's goal progress. */
   addGoal(side: Side): void {
     this.score[side] += 1
-    if (this.cfg.script) this.scriptGoals = countGoal(this.cfg.script, this.scriptGoals, side, this.minute(), this.period)
+    if (this.cfg.script) {
+      this.scriptGoals = countGoal(this.cfg.script, this.scriptGoals, side, this.minute(), this.period)
+      // A natural goal counts towards a forced target: only the shortfall stays forced.
+      this.forced = outstandingForces(this.cfg.script, this.forced, this.scriptGoals)
+    }
   }
   /** Whether an outcome of `effect` is forced for `side`'s next qualifying action. */
   hasForced(side: Side, effect: ScenarioEffect): boolean {
@@ -1002,7 +1006,7 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
       return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
     const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
     // The nearest defender presses; in a scripted press surge the two nearest do, from further away.
-    const surge = w.mods(pl.side).press > 1
+    const surge = w.mods(pl.side).surge
     const presser = surge ? defenders.slice(0, 2).some((x) => x.id === pl.id) : defenders[0]?.id === pl.id
     if (presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
       const style = team.style

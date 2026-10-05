@@ -19,6 +19,8 @@ export interface WindowResult {
   /** Global ticks of the window's first and last frame. */
   readonly fromFrame: number
   readonly toFrame: number
+  /** Per entry (index-aligned with `entries`): whether its target was met, and whether the accepted play forced it. */
+  readonly results: ReadonlyArray<{ readonly achieved: boolean; readonly forced: boolean }>
 }
 
 /** What a step produced: its frame and events (without the match state, which would cost ~25 kB per step). */
@@ -31,9 +33,12 @@ export interface ScriptedRun {
 }
 
 export interface RunOptions {
-  /** Re-plays of a window with fresh random sub-streams before forcing (default 5). */
+  /** Re-plays of a window with fresh random sub-streams before forcing (default 5; at most MAX_RETRIES). */
   readonly retries?: number
 }
+
+/** Each window's retries draw sub-seeds window * 64 + attempt, so more than 62 would reuse the next window's. */
+export const MAX_RETRIES = 62
 
 const minuteOf = (s: MatchState): number => (s.period === "first_half" ? 0 : 45) + (Math.max(0, s.periodTick) * s.config.dt) / 60
 
@@ -83,6 +88,28 @@ export const entryAchieved = (entry: ScriptEntry, events: ReadonlyArray<DomainEv
   }
 }
 
+/** Whether the accepted play forced an entry's outcome: it holds a `scripted` event of the entry's kind. */
+export const entryForced = (entry: ScriptEntry, events: ReadonlyArray<DomainEvent>, cfg: MatchConfig): boolean => {
+  const team = entry.team === "home" ? cfg.home.id : cfg.away.id
+  const opp = entry.team === "home" ? cfg.away.id : cfg.home.id
+  const scripted = events.filter((e) => e.attrs.scripted === true)
+  switch (entry.effect) {
+    case "goal":
+      return scripted.some((e) => e.type === "shot" && e.team_id === team && e.outcome === "goal")
+    case "red_card":
+      return scripted.some((e) => e.type === "card" && e.team_id === team)
+    case "keeper_heroics":
+      return scripted.some((e) => e.type === "shot" && e.team_id === opp && e.outcome === "saved")
+    case "keeper_howler":
+      return scripted.some((e) => e.type === "shot" && e.team_id === opp && e.outcome === "goal")
+    case "defensive_error":
+      return scripted.some((e) => (e.type === "pass" || e.type === "clearance") && e.team_id === team)
+    case "press_surge":
+    case "momentum_swing":
+      return false
+  }
+}
+
 /** Entries grouped by identical window, in window order; overlapping windows are refused. */
 const groups = (entries: ReadonlyArray<ScriptEntry>): ScriptEntry[][] => {
   const byWindow = new Map<string, ScriptEntry[]>()
@@ -114,6 +141,7 @@ const forcesFor = (block: ReadonlyArray<ScriptEntry>): ScriptEntry[] => block.fl
  */
 export const runScript = (cfg: MatchConfig, opts: RunOptions = {}): ScriptedRun => {
   const retries = opts.retries ?? 5
+  if (!Number.isInteger(retries) || retries < 0 || retries > MAX_RETRIES) throw new ScriptError(`retries must be an integer from 0 to ${MAX_RETRIES} (got ${retries})`)
   const blocks = groups(cfg.script?.entries ?? [])
   const steps: StepOutput[] = []
   const windows: WindowResult[] = []
@@ -147,7 +175,8 @@ export const runScript = (cfg: MatchConfig, opts: RunOptions = {}): ScriptedRun 
         steps.push(...buffer)
         s = { ...t, forced: [] }
         const frames = buffer.filter((r) => r.frame)
-        windows.push({ entries: block, achieved, attempts: attempt + 1, forced: forcing, fromFrame: frames[0]?.frame!.tick ?? checkpoint.tick, toFrame: frames.at(-1)?.frame!.tick ?? checkpoint.tick })
+        const results = block.map((e) => ({ achieved: entryAchieved(e, events, cfg), forced: forcing && entryForced(e, events, cfg) }))
+        windows.push({ entries: block, achieved, attempts: attempt + 1, forced: forcing, fromFrame: frames[0]?.frame!.tick ?? checkpoint.tick, toFrame: frames.at(-1)?.frame!.tick ?? checkpoint.tick, results })
         return
       }
     }

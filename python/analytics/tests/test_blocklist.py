@@ -33,7 +33,8 @@ def test_build_saves_each_league_and_resumes_without_fetching_it_again(tmp_path,
 
     calls = []
 
-    def fake_fetch(query):
+    def fake_fetch(query, contact):
+        assert contact == "https://example.org/touchline"
         calls.append(query)
         if "P118" in query:
             return {"results": {"bindings": [{"club": {"value": "http://www.wikidata.org/entity/Q1"}}]}}
@@ -45,11 +46,13 @@ def test_build_saves_each_league_and_resumes_without_fetching_it_again(tmp_path,
     out = tmp_path / "hashes.txt"
     (tmp_path / "leagues").mkdir()
     (tmp_path / "leagues" / "A.txt").write_text("2171085eadaef891\n")  # league A already fetched
-    meta = blocklist.build(out)
+    meta = blocklist.build(out, "https://example.org/touchline")
     assert all("Q10" not in q for q in calls)  # A was not fetched again
     assert (tmp_path / "leagues" / "B.txt").read_text() == "2b26ea3743238a83\n"
     assert out.read_text() == "2171085eadaef891\n2b26ea3743238a83\n"
     assert meta["names_per_league"] == {"A": 1, "B": 1}
+    # B's fetch date is recorded beside it; A was fetched before dates were kept.
+    assert meta["fetched_at"]["A"] is None and len(meta["fetched_at"]["B"]) == 10
 
 
 def test_an_interrupted_league_resumes_at_its_next_club(tmp_path, monkeypatch):
@@ -57,7 +60,7 @@ def test_an_interrupted_league_resumes_at_its_next_club(tmp_path, monkeypatch):
 
     fetched = []
 
-    def fake_fetch(query):
+    def fake_fetch(query, contact):
         if "P118" in query:
             return {"results": {"bindings": [{"club": {"value": f"http://www.wikidata.org/entity/Q{i}"}} for i in (1, 2)]}}
         fetched.append(query)
@@ -68,7 +71,42 @@ def test_an_interrupted_league_resumes_at_its_next_club(tmp_path, monkeypatch):
     monkeypatch.setattr(blocklist.time, "sleep", lambda s: None)
     (tmp_path / "leagues").mkdir()
     (tmp_path / "leagues" / "A.partial").write_text("Q1\t2b26ea3743238a83\n")  # club Q1 done before the interruption
-    blocklist.build(tmp_path / "hashes.txt")
+    blocklist.build(tmp_path / "hashes.txt", "ops@example.org")
     assert len(fetched) == 1 and "wd:Q2" in fetched[0]
     assert (tmp_path / "leagues" / "A.txt").read_text() == "1ebf48ca8571b5e0\n2b26ea3743238a83\n"
     assert not (tmp_path / "leagues" / "A.partial").exists()
+
+
+def test_build_refuses_to_fetch_without_contact_details(tmp_path, monkeypatch):
+    import pytest
+
+    from touchline_analytics import blocklist
+
+    def no_fetch(*args, **kwargs):
+        raise AssertionError("fetched without contact details")
+
+    monkeypatch.setattr(blocklist, "fetch", no_fetch)
+    monkeypatch.setattr(blocklist, "LEAGUES", {"A": "Q10"})
+    with pytest.raises(ValueError, match="--contact"):
+        blocklist.build(tmp_path / "hashes.txt")
+
+
+def test_fetch_names_the_contact_and_waits_as_long_as_a_429_asks(monkeypatch):
+    import io
+    import urllib.error
+
+    from touchline_analytics import blocklist
+
+    seen, slept = [], []
+
+    def fake_urlopen(req, timeout):
+        seen.append(req.get_header("User-agent"))
+        if len(seen) == 1:
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {"Retry-After": "45"}, None)
+        return io.BytesIO(b'{"results": {"bindings": []}}')
+
+    monkeypatch.setattr(blocklist.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(blocklist.time, "sleep", slept.append)
+    assert blocklist.fetch("SELECT", "ops@example.org") == {"results": {"bindings": []}}
+    assert "ops@example.org" in seen[0]
+    assert slept == [45.0]

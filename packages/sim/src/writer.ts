@@ -23,7 +23,10 @@ export interface RunManifest {
   readonly stats: { readonly frames: number; readonly events: number; readonly cdf_events: number; readonly score: string }
   /** The noise added to the CDF events (see noise.ts), or null when they are exact. */
   readonly realism_noise: typeof REALISM_NOISE | null
-  /** Ground truth for the evaluation harness (spec §5.1.12, §5.3.1); kept out of CDF. */
+  /**
+   * Ground truth for the evaluation harness (spec §5.1.12, §5.3.1); kept out of CDF. Its frame ids (`frames`,
+   * `frame_id`) are global ticks, as in domain.jsonl and the stats engine; CDF frame ids restart at 0 each period.
+   */
   readonly truths: {
     readonly script: ReadonlyArray<ScriptTruth>
     readonly scripted_events: ReadonlyArray<{ readonly id: string; readonly type: string; readonly frame_id: number; readonly team_id: string | null; readonly player_id: string | null }>

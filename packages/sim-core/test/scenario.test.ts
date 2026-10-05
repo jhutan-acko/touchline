@@ -36,6 +36,13 @@ describe("scenario modifiers", () => {
     const first = one("press_surge", [30, 45])
     expect(modsFor(first, "home", 44, params, [], "second_half")).toEqual(NO_MODS)
   })
+  it("only a press surge makes two defenders press; a momentum swing's extra pressing does not", () => {
+    expect(modsFor(one("press_surge"), "home", 10, params)).toMatchObject({ surge: true })
+    const momentum = modsFor(one("momentum_swing"), "home", 10, params)
+    expect(momentum.press).toBeGreaterThan(1)
+    expect(momentum.surge).toBe(false)
+    expect(NO_MODS.surge).toBe(false)
+  })
   it("a goal entry stops nudging once its count is reached", () => {
     const s: Script = { name: "g", entries: [{ window: [0, 95], team: "home", effect: "goal", count: 2 }] }
     expect(modsFor(s, "home", 30, params, [1]).shotLogit).toBeGreaterThan(0)
