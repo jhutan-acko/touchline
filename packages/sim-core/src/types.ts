@@ -39,11 +39,15 @@ export interface TeamStyle {
   readonly riskTolerance: number
 }
 
+export type Foot = "left" | "right"
+
 export interface PlayerSetup {
   readonly id: string
   readonly role: Role
   readonly jersey: number
   readonly attrs: PlayerAttrs
+  /** Stronger foot; right when not given. */
+  readonly preferredFoot?: Foot
 }
 
 export interface TeamSetup {
@@ -81,6 +85,7 @@ export interface PlayerState {
   readonly slot: number
   readonly jersey: number
   readonly attrs: PlayerAttrs
+  readonly foot: Foot
   readonly pos: Vec2
   readonly vel: Vec2
   readonly intent: Intent

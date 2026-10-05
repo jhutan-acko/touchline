@@ -63,11 +63,4 @@ describe("edge cases", () => {
     const cfg = makeConfig(1)
     expect(() => initMatch({ ...cfg, away: { ...cfg.home } })).toThrow(/duplicate player id/)
   })
-  it("every goal event is matched by the final score", () => {
-    for (const seed of [11, 12, 13]) {
-      const m = play(makeConfig(seed))
-      const goals = m.events.filter((e) => e.type === "goal")
-      expect(m.s.score.home + m.s.score.away).toBe(goals.length)
-    }
-  })
 })

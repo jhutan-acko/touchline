@@ -52,6 +52,8 @@ export interface Decision {
   readonly options: ReadonlyArray<OptionRecord>
   /** 1 when the chosen pass was the best available option, 2 for the second best, ...; null when no pass was chosen. */
   readonly chosenRank: number | null
+  /** True when no option of the chosen action existed (a forced restart) and the best pass of any kind was played. */
+  readonly fallback: boolean
 }
 
 export const OPTIONS_RECORDED = 5
@@ -238,7 +240,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (Number.isFinite(logits[i]!)) actionProbs[a] = r3(Math.exp(logits[i]! - lmax) / z)
   })
   const options = [...candidates].sort((a, b) => b.value - a.value).slice(0, OPTIONS_RECORDED).map(toOption)
-  const record = { actionProbs, options, chosenRank: null as number | null }
+  const record = { actionProbs, options, chosenRank: null as number | null, fallback: false }
 
   let idx = softmaxPick(logits, rng)
   if (idx < 0) idx = ACTIONS.indexOf(allowed ? [...allowed][0]! : "hold")
@@ -247,11 +249,13 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const NON_PASS: ReadonlyArray<Action> = ["shot", "carry", "hold", "take_on", "clear"]
   let passOptions = candidates.filter((c) => c.action === action)
   if (NON_PASS.includes(action)) return { action, candidate: null, decisionQuality: null, xg: action === "shot" ? xg : null, pressure, ...record }
+  let fallback = false
   if (passOptions.length === 0) {
     // Forced restart with no option of the allowed kinds: play the best available pass, or clear it.
-    if (candidates.length === 0) return { action: "clear", candidate: null, decisionQuality: null, xg: null, pressure, ...record }
+    if (candidates.length === 0) return { action: "clear", candidate: null, decisionQuality: null, xg: null, pressure, ...record, fallback: true }
     const bestAny = candidates.reduce((a, b) => (b.value > a.value ? b : a))
     passOptions = [bestAny]
+    fallback = true
   }
   const temp = p.pass.choiceTemperature * (1.4 - owner.attrs.vision)
   const pick = softmaxPick(passOptions.map((c) => c.value / Math.max(0.05, temp)), rng)
@@ -259,5 +263,9 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const best = Math.max(...candidates.map((c) => c.value))
   const quality = best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1
   const chosenRank = 1 + candidates.filter((c) => c.value > chosen.value).length
-  return { action: chosen.action, candidate: chosen, decisionQuality: quality, xg: null, pressure, ...record, chosenRank }
+  // The chosen option is always recorded, even when it ranks below the top OPTIONS_RECORDED.
+  const chosenOption = toOption(chosen)
+  const same = (o: OptionRecord) => o.receiver_id === chosenOption.receiver_id && o.target_x === chosenOption.target_x && o.target_y === chosenOption.target_y
+  const recorded = options.some(same) ? options : [...options, chosenOption]
+  return { action: chosen.action, candidate: chosen, decisionQuality: quality, xg: null, pressure, ...record, options: recorded, chosenRank, fallback }
 }

@@ -62,12 +62,14 @@ export const planShot = (
   isPenalty: boolean,
   p: Params,
   dt: number,
-  rng: Rng
+  rng: Rng,
+  /** Shooting with the weaker foot widens the aiming error by execution.weakFootK. */
+  weakFoot = false
 ): ShotPlan => {
   const goal = goalOf(side)
   const from: Vec3 = { x: shooter.pos.x, y: shooter.pos.y, z: 0.2 }
   const d = dist(shooter.pos, goal)
-  const skill = 1.35 - 0.7 * shooter.attrs.finishing
+  const skill = (1.35 - 0.7 * shooter.attrs.finishing) * (weakFoot ? p.execution.weakFootK : 1)
   const aimY = rng.range(-2.9, 2.9)
   const aimZ = rng.range(0.3, 1.8)
   const sdY = (isPenalty ? 1.0 : 1.6 + 0.12 * d) * (1 + 0.8 * pressure) * skill * p.shot.aimNoise

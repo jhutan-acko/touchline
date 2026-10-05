@@ -46,7 +46,7 @@ export const kickoffPlayersFor = (cfg: MatchConfig): PlayerState[] =>
   (["home", "away"] as const).flatMap((side) => {
     const team = side === "home" ? cfg.home : cfg.away
     return team.starters.map((pl, slot) => ({
-      id: pl.id, side, role: pl.role, slot, jersey: pl.jersey, attrs: pl.attrs,
+      id: pl.id, side, role: pl.role, slot, jersey: pl.jersey, attrs: pl.attrs, foot: pl.preferredFoot ?? "right",
       pos: kickoffAnchor(team.formation, slot, side, team.style), vel: { x: 0, y: 0 },
       intent: { kind: "shape" as const }, intentUntil: 0, energy: 1, yellow: 0, sentOff: false
     }))

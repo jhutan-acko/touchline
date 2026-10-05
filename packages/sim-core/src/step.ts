@@ -67,6 +67,7 @@ const kickoffPlayers = (cfg: MatchConfig, existing?: ReadonlyArray<PlayerState>)
         slot,
         jersey: pl.jersey,
         attrs: pl.attrs,
+        foot: pl.preferredFoot ?? "right",
         pos: kickoffAnchor(team.formation, slot, side, team.style),
         vel: { x: 0, y: 0 },
         intent: { kind: "shape" },
@@ -365,8 +366,12 @@ const decisionAttrs = (d: Decision): Record<string, AttrValue> => ({
   best_receiver_id: d.options[0]?.receiver_id ?? null,
   best_value: d.options[0]?.value ?? null,
   chosen_value: d.candidate ? Math.round(d.candidate.value * 1000) / 1000 : null,
-  chosen_rank: d.chosenRank
+  chosen_rank: d.chosenRank,
+  fallback: d.fallback
 })
+
+const otherFoot = (f: PlayerState["foot"]): PlayerState["foot"] => (f === "left" ? "right" : "left")
+const footPart = (pl: PlayerState, weakFoot: boolean): string => `${weakFoot ? otherFoot(pl.foot) : pl.foot}_foot`
 
 const technique = (a: Action, pl: PlayerState): number =>
   a === "cross" ? pl.attrs.crossing : a === "long_pass" || a === "switch" || a === "lofted_through" || a === "clear" ? pl.attrs.longPassing : pl.attrs.shortPassing
@@ -404,7 +409,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     restart,
     height,
     technique: restart === "throw_in" ? "throw" : "foot",
-    body_part: weakFoot ? "left_foot" : "right_foot",
+    body_part: restart === "throw_in" ? "hands" : footPart(owner, weakFoot),
     intended_receiver_id: intended,
     intended_end_x: round2(target.x),
     intended_end_y: round2(target.y),
@@ -482,14 +487,15 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const opps = w.active(other(side))
   const isPenalty = restart === "penalty"
   const xg = isPenalty ? 0.76 : (d.xg ?? 0.02)
-  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution)
+  const weakFoot = !isPenalty && w.rng.execution.chance(0.2)
+  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot)
   const tickAt = w.tick + plan.ticks
   const at = (pe: PendingEvent): PendingEvent => ({ ...pe, frame_id: tickAt })
   const end = { x: plan.to.x, y: plan.to.y }
   const main = w.pending("shot", owner, owner.pos, {
     ...decisionAttrs(d),
     technique: isPenalty ? "penalty" : restart === "free_kick" ? "free_kick" : "normal",
-    body_part: "right_foot",
+    body_part: footPart(owner, weakFoot),
     execution: plan.execution,
     on_target: plan.onTarget,
     xg: Math.round(xg * 1000) / 1000,
@@ -583,7 +589,8 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
       w.emit(w.pending("take_on", owner, owner.pos, { ...decisionAttrs(decision), outcome: won ? "won" : "lost", defender_id: def.id }))
       if (won) {
         const dir = norm(sub({ x: dirOf(side) * PITCH.halfL, y: 0 }, owner.pos))
-        w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick, decision: {} }
+        // The carry that follows a won take-on carries the take-on's decision record.
+        w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick, decision: decisionAttrs(decision) }
         w.setPlayer({ ...owner, intent: { kind: "carry", dir, speed: w.p.carry.speed * 1.2 }, intentUntil: until(1.2) })
         w.setPlayer({ ...w.player(def.id), vel: { x: 0, y: 0 }, intent: { kind: "hold" }, intentUntil: until(1.0) })
       } else changePossession(w, def, w.pending("tackle", def, def.pos, { outcome: "won", opponent_id: owner.id }))
@@ -593,7 +600,9 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
       releaseShot(w, owner, decision, restart)
       return
     default:
-      if (owner.role === "GK" && !restart) w.emit(w.pending("keeper_distribution", owner, owner.pos, { method: decision.action === "short_pass" ? "throw" : "kick" }))
+      // A keeper's distribution is always followed by the keeper's pass (a clearance is not a distribution).
+      if (owner.role === "GK" && !restart && decision.action !== "clear")
+        w.emit(w.pending("keeper_distribution", owner, owner.pos, { method: decision.action === "short_pass" ? "throw" : "kick" }))
       releaseKick(w, owner, decision, restart)
   }
 }
@@ -810,6 +819,9 @@ const frameOf = (w: Work): Frame => {
 const endPeriod = (w: Work): StepResult => {
   w.tick -= 1
   w.periodTick -= 1
+  // A carry under way ends at the whistle.
+  if (w.possession.kind === "owned") finishCarry(w, w.player(w.possession.playerId))
+  w.carry = null
   w.emit(w.pending("period_end", null, null, { period: w.period }))
   if (w.period === "second_half") {
     w.emit(w.pending("match_end", null, null, { home: w.score.home, away: w.score.away }))
@@ -841,7 +853,9 @@ export const step = (s: MatchState): StepResult => {
     w.emit(w.pending("match_start", null, null, { home: w.cfg.home.id, away: w.cfg.away.id }))
     w.emit(w.pending("period_start", null, null, { period: "first_half" }))
   }
-  if (w.periodTick >= w.periodTicks && w.phase.kind !== "restart") return endPeriod(w)
+  // The half ends when it is due, except while a set piece is being set up or the ball is in the air
+  // (a flight lasts at most MAX_FLIGHT_S); the hard stop one minute later always applies.
+  if (w.periodTick >= w.periodTicks && w.phase.kind !== "restart" && w.possession.kind !== "in_flight") return endPeriod(w)
   if (w.periodTick >= w.periodTicks + Math.round(60 / w.dt)) return endPeriod(w)
   if (w.phase.kind === "restart") handleRestart(w)
   if (w.phase.kind === "open_play") ownedTick(w)
