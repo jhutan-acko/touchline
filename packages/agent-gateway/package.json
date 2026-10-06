@@ -1,0 +1,25 @@
+{
+  "name": "@touchline/agent-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "agents": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "1.3.0",
+    "@touchline/schema": "workspace:*",
+    "@touchline/sim": "workspace:*",
+    "@touchline/stats": "workspace:*",
+    "effect": "4.0.0"
+  },
+  "devDependencies": {
+    "@touchline/league": "workspace:*",
+    "@touchline/sim-core": "workspace:*"
+  }
+}

@@ -12,7 +12,8 @@
     "calibrate": "pnpm --filter @touchline/calibrate run calibrate",
     "realism": "pnpm --filter @touchline/calibrate run realism",
     "stats": "pnpm --filter @touchline/stats run stats",
-    "mcp-stats": "pnpm --filter @touchline/mcp-stats run serve"
+    "mcp-stats": "pnpm --filter @touchline/mcp-stats run serve",
+    "agents": "pnpm --filter @touchline/agent-gateway run agents"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
