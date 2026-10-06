@@ -12,6 +12,7 @@ from agent_framework import Agent, BaseChatClient
 from .config import Settings
 from .contracts import Analysis, Draft, Moment
 from .llm import agent_options, run_structured, stub_responder
+from .templates import LABELS, headline
 
 INSTRUCTIONS = """You are the Narrator for a live football broadcast overlay, writing in English.
 INPUT has the moment, the Analyst's cause, explanation and claims, the names of teams and players, and possibly
@@ -23,41 +24,18 @@ wrote it (e.g. "27%", "0.24", "2-1"). Keep the claim's other fields as the Analy
 write the minute in words or leave it out. `lang` is "en"; `moment_id` comes from INPUT."""
 
 MAX_HEADLINE_WORDS = 8
-LABELS: dict[str, str] = {
-    "shot.xg": "Expected goals for the chance", "team.press": "Pressure index", "ppda": "Opponent passes per defensive action",
-    "tilt": "Field tilt", "team.mom": "Momentum share", "game.chaos": "Control-versus-chaos index", "plyr.vmax": "Top speed in km/h",
-    "plyr.dist": "Metres covered", "pass.xp": "Completion probability of the pass", "pass.acc": "Pass accuracy",
-    "team.poss": "Possession", "act.xt": "Expected threat added", "pitch.ctrl": "Pitch control", "pass.dist": "Average pass length in metres",
-    "shot.speed": "Shot speed in km/h", "ball.speed": "Ball speed in km/h",
-}
-
-
-def headline(moment: dict, analysis: Analysis, names: dict[str, str]) -> str:
-    team = names.get(moment["team_id"] or "", "")
-    player = names.get(moment["player_id"] or "", team or "One player")
-    t = moment["type"]
-    if t == "pressure_shift":
-        return f"{team} turn up the pressure" if analysis.cause != "press dropping off" else f"{team} ease off the press"
-    if t == "card":
-        return f"Red card for {player}" if analysis.cause == "red card" else f"Booking for {player}"
-    return {
-        "goal": f"Goal for {team}!", "costly_error": f"Costly error by {player}", "big_chance": f"Big chance for {team}",
-        "momentum_swing": f"Momentum swings to {team}", "chaos_spike": "End-to-end football", "speed_alert": f"{player} at full speed",
-        "distance_milestone": f"{player} keeps running", "player_milestone": f"Milestone for {player}",
-        "difficult_pass_completed": f"Superb pass from {player}", "substitution_impact": f"{team}'s changes make an impact",
-    }[t]
 
 
 def template_draft(payload: dict) -> Draft:
     """The fallback: headline, the explanation, and up to two templated claim sentences."""
     analysis = Analysis.model_validate(payload["analysis"])
-    sentences = [headline(payload["moment"], analysis, payload["names"]), analysis.explanation]
+    sentences = [headline(payload["moment"], analysis.cause, payload["names"]), analysis.explanation]
     claims = []
     for c in analysis.claims:
         if len(sentences) == 4:
             break
-        if c.kind == "metric" and c.metric_id in LABELS and c.quote:
-            sentences.append(f"{LABELS[c.metric_id]}: {c.quote}.")
+        if c.kind == "metric" and c.metric_id in LABELS["en"] and c.quote:
+            sentences.append(f"{LABELS['en'][c.metric_id]}: {c.quote}.")
         elif c.kind == "score" and c.quote:
             sentences.append(f"The score is now {c.quote}.")
         else:
