@@ -19,3 +19,7 @@ Notes:
 - Wyscout's figshare host is blocked on the current network (corporate proxy); Plan 2 starts with IDSSE (Hugging Face, reachable) and adds Wyscout when downloaded from another network.
 - Plans 3–5 can overlap once Plan 1's domain schema (Task 10) exists.
 - Agent design input (research, 2026-10-05: `reports/Player agents and simulator references.md`): agents act as managers or unit leads choosing intents at stoppages (clock paused, typed and validated, fallback to the previous plan), every decision logged by tick so matches replay without model calls; learned player control (multi-agent RL) is research-scale and out of scope.
+
+## Open decisions
+
+- **Live model latency (raised 2026-10-07, Plan 4a; decide before Plan 5):** `gpt-6.1-sol` takes about 5 s per call, even at the lowest reasoning effort it accepts, so a moment takes about 30 s end to end. Real-model output therefore has to be recorded ahead and replayed from the cue cache for the demo. A live run under the 4 s budget falls back to template cues; it does not go silent. For live real-model cues, the config can point the small tier at a faster model (`TOUCHLINE_MODEL_SMALL`; `gpt-5.4-mini` took 2–3 s per call).
