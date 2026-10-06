@@ -63,6 +63,10 @@ describe("params from JSON: review fixes", () => {
 
 describe("params from JSON: value ranges", () => {
   const prov = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-06", version: "v1" }
+  it("labels the hand-set priors with the version that changed their scenario settings", () => {
+    // Runs record the version; a run made with older priors must not be rebuilt with these.
+    expect(DEFAULT_PARAMS.provenance.version).toBe("prior-1")
+  })
   it("accepts the defaults and the committed calibrated parameters", () => {
     expect(() => paramsFromJson({ provenance: prov })).not.toThrow()
     const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")

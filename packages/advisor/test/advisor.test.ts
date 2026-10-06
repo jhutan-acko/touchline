@@ -8,7 +8,7 @@ import type { League } from "@touchline/league"
 import { SCENARIOS, writeMatch } from "@touchline/sim"
 import { DEFAULT_PARAMS, type MatchState } from "@touchline/sim-core"
 import { xtGridFromJson } from "@touchline/stats"
-import { AdvisorError, explainPass, Session, SESSION_CACHE_STATES, suggestPosition } from "../src/index.js"
+import { AdvisorError, clearlyBetter, explainPass, Session, SESSION_CACHE_STATES, suggestPosition } from "../src/index.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
@@ -49,7 +49,7 @@ describe("session", () => {
   })
 
   it("refuses parameters of another version, a missing folder, and a folder that does not match its manifest", () => {
-    expect(() => Session.fromRun(dir, league, [{ ...DEFAULT_PARAMS, provenance: { ...DEFAULT_PARAMS.provenance, version: "other" } }])).toThrow(/the run used parameters "prior-0"; available: other/)
+    expect(() => Session.fromRun(dir, league, [{ ...DEFAULT_PARAMS, provenance: { ...DEFAULT_PARAMS.provenance, version: "other" } }])).toThrow(/the run used parameters "prior-1"; available: other/)
     expect(() => Session.fromRun(join(dir, "nope"), league, [DEFAULT_PARAMS])).toThrow(AdvisorError)
     const bad = mkdtempSync(join(tmpdir(), "touchline-advisor-bad-"))
     cpSync(dir, bad, { recursive: true })
@@ -98,6 +98,32 @@ describe("better option explainer", () => {
     expect(() => explainPass(session, reception.id, xt)).toThrow(/not a pass/)
     expect(() => explainPass(session, "nope", xt)).toThrow(/no event/)
   })
+})
+
+describe("review fixes", () => {
+  it("gives no verdict on fewer than 10 seeds", () => {
+    const pass = session.events.find((e) => e.type === "pass" && Array.isArray(e.attrs.options) && (e.attrs.options as unknown[]).length >= 3 && e.frame_id > 600)!
+    const x = explainPass(session, pass.id, xt, { seeds: 3 })
+    expect(x).toMatchObject({ verdict: "not_verified", better: null })
+    expect(x.note).toMatch(/at least 10 seeds/)
+  })
+
+  it("calls an option clearly better only with enough seeds, a corrected margin and a minimum gain", () => {
+    expect(clearlyBetter({ mean: 0.1, se: 0.02 }, 20, 4)).toBe(true)
+    // 2.5 standard errors: enough for one comparison at 2 SE, not for four with a correction.
+    expect(clearlyBetter({ mean: 0.05, se: 0.02 }, 20, 4)).toBe(false)
+    expect(clearlyBetter({ mean: 0.005, se: 0.0001 }, 20, 1)).toBe(false)
+    expect(clearlyBetter({ mean: 1, se: 0.01 }, 5, 1)).toBe(false)
+  })
+
+  it("refuses a run whose manifest names another scenario than the one played", async () => {
+    const sc = SCENARIOS.red_card_collapse!
+    const sdir = mkdtempSync(join(tmpdir(), "touchline-advisor-tamper-"))
+    await Effect.runPromise(writeMatch({ ...cfg, matchId: "adv-t", home: league.clubs.find((c) => c.id === sc.home)!, away: league.clubs.find((c) => c.id === sc.away)!, script: sc.script }, sdir))
+    const m = JSON.parse(readFileSync(join(sdir, "manifest.json"), "utf8"))
+    writeFileSync(join(sdir, "manifest.json"), JSON.stringify({ ...m, scenario: null }))
+    expect(() => Session.fromRun(sdir, league, [DEFAULT_PARAMS])).toThrow(/does not match/)
+  }, 120_000)
 })
 
 describe("positioning advisor", () => {

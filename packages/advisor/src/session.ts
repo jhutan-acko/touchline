@@ -100,11 +100,25 @@ export class Session {
       .filter((l) => l.trim() !== "")
       .map((l) => decodeDomainEvent(JSON.parse(l)))
     const session = new Session(cfg, events)
-    // The rebuilt match must emit the run's events: the first minute's last event id must match.
-    const probe = 600
-    const s = session.stateAt(probe)
-    const last = events.filter((e) => Math.max(e.frame_id, e.frame_id_end ?? e.frame_id) <= probe).reduce((m, e) => Math.max(m, Number(e.id.split("-e").at(-1))), 0)
-    if (s.eventSeq !== last) throw new AdvisorError(`${dir} does not match the match rebuilt from its manifest (events differ by minute 1)`)
+    // The rebuilt match must emit the run's events: compare the event count after the first minute, at half the
+    // match and just before the end (a script that starts late, or a wrong scenario, shows up in the later probes).
+    const emitted = (e: DomainEvent) => Math.max(e.frame_id, e.frame_id_end ?? e.frame_id)
+    const end = events.reduce((m, e) => Math.max(m, emitted(e)), 0)
+    const probes = [...new Set([Math.round(60 / cfg.dt), Math.round(end / 2), end - 1])].filter((t) => t >= 0 && t < end).sort((a, b) => a - b)
+    if ((cfg.script?.entries.length ?? 0) > 0) for (const [t, st] of statesAt(cfg, probes)) session.cache.set(t, st)
+    const mismatch = (t: number) => new AdvisorError(`${dir} does not match the match rebuilt from its manifest (events differ by tick ${t})`)
+    for (const t of probes) {
+      const last = events.filter((e) => emitted(e) <= t).reduce((m, e) => Math.max(m, Number(e.id.split("-e").at(-1))), 0)
+      let seq: number
+      try {
+        seq = session.stateAt(t).eventSeq
+      } catch (e) {
+        // The rebuilt match ended before the run did: not the same match.
+        if (e instanceof AdvisorError) throw mismatch(t)
+        throw e
+      }
+      if (seq !== last) throw mismatch(t)
+    }
     return session
   }
 }

@@ -293,6 +293,8 @@ export interface PassOverride {
   readonly receiverId: string
   /** The kind of pass (short, through, ...); the best-valued kind to that receiver when absent. */
   readonly kind?: string
+  /** The last tick the override may be used at; after it the override is dropped, played or not. */
+  readonly untilTick: number
 }
 
 export interface MatchState {

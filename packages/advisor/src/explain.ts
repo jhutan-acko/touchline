@@ -2,6 +2,7 @@ import { whatIf, WhatIfError, type Estimate, type OptionRecord } from "@touchlin
 import type { XtGrid } from "@touchline/stats"
 import { AdvisorError, type Session } from "./session.js"
 import { passValue, xtEndValue } from "./value.js"
+import { clearlyBetter, MIN_VERDICT_SEEDS } from "./verdict.js"
 
 export interface ScoredOption {
   readonly receiver_id: string
@@ -31,7 +32,7 @@ export interface PassExplanation {
   /** Rank of the pass played on paper (1 = best). */
   readonly chosen_rank: number
   readonly best_on_paper: ScoredOption
-  /** The option that played out clearly better than the pass played (mean above twice its standard error), if any. */
+  /** The option that played out clearly better than the pass played (see clearlyBetter), if any. */
   readonly better: ScoredOption | null
   readonly verdict: "played_pass_was_best" | "better_option_found" | "not_verified"
   readonly seeds: number
@@ -51,7 +52,9 @@ export interface ExplainOptions {
  * Was there a better pass? Every option the player weighed (the decision record on the pass event) is scored on
  * paper (pitch control x expected threat at the moment of the pass) and then played out: each is re-simulated
  * against the pass played from the same state over paired seeds, valued by the xG it creates plus the expected
- * threat it leaves the team with. A better option is reported only when it is clearly better in play.
+ * threat it leaves the team with. A better option is reported only when it is clearly better in play (clearlyBetter:
+ * at least 10 seeds, a minimum gain and a margin corrected for the number of alternatives), and only options whose
+ * forced pass was actually played in every seed, with the pass played forced in every seed too, are compared.
  */
 export const explainPass = (session: Session, eventId: string, xt: XtGrid, opts: ExplainOptions = {}): PassExplanation => {
   const e = session.event(eventId)
@@ -75,26 +78,30 @@ export const explainPass = (session: Session, eventId: string, xt: XtGrid, opts:
   const played = paper.find((o) => o.chosen)
   let note: string | null = played ? null : "the pass played is not among the recorded options"
   if (played && seeds === 0) note = "re-simulation skipped"
+  if (played && seeds > 0 && seeds < MIN_VERDICT_SEEDS) note = `a verdict needs at least ${MIN_VERDICT_SEEDS} seeds`
   const simulate = (o: (typeof paper)[number]): Estimate | null => {
-    if (!played || seeds === 0 || o.chosen) return null
+    if (!played || seeds < MIN_VERDICT_SEEDS || o.chosen) return null
     try {
-      return whatIf(state, { kind: "pass_to", playerId: owner.id, receiverId: o.receiver_id, passKind: o.kind }, {
+      const r = whatIf(state, { kind: "pass_to", playerId: owner.id, receiverId: o.receiver_id, passKind: o.kind }, {
         side: owner.side,
         seeds,
         horizonS,
         endValue: xtEndValue(xt),
         baseline: { kind: "pass_to", playerId: owner.id, receiverId: played.receiver_id, passKind: played.kind }
-      }).difference.total
+      })
+      // Compare only plays where both passes were really made.
+      return r.forced_applied.baseline === seeds && r.forced_applied.variant === seeds ? r.difference.total : null
     } catch (err) {
       if (err instanceof WhatIfError) return null
       throw err
     }
   }
   const options: ScoredOption[] = paper.map((o) => ({ ...o, simulated: simulate(o) })).sort((a, b) => b.value - a.value)
-  const clearly = options.filter((o) => o.simulated && o.simulated.mean > 0 && o.simulated.mean > 2 * o.simulated.se).sort((a, b) => b.simulated!.mean - a.simulated!.mean)
+  const compared = options.filter((o) => o.simulated !== null)
+  const clearly = compared.filter((o) => clearlyBetter(o.simulated!, seeds, compared.length)).sort((a, b) => b.simulated!.mean - a.simulated!.mean)
   const better = clearly[0] ?? null
-  const verified = played !== undefined && seeds > 0 && options.some((o) => o.simulated !== null)
-  if (played && seeds > 0 && !verified) note = "no alternative could be re-simulated"
+  const verified = played !== undefined && seeds >= MIN_VERDICT_SEEDS && compared.length > 0
+  if (played && seeds >= MIN_VERDICT_SEEDS && !verified) note = "no alternative could be re-simulated with both passes played"
   return {
     event_id: e.id,
     player_id: e.player_id,

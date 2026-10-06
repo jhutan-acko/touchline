@@ -238,7 +238,7 @@ export const DEFAULT_PARAMS: Params = {
     licence: "hand-set-prior",
     attribution: "Touchline authors",
     fitted_at: "2026-10-03",
-    version: "prior-0"
+    version: "prior-1"
   },
   kinematics: { vmaxBase: 9.2, accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   ball: { drag: 0.013, rollDecel: 1.2, bounce: 0.55, gravity: 9.81, substeps: 4 },

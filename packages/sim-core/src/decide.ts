@@ -55,6 +55,8 @@ export interface Decision {
   readonly chosenRank: number | null
   /** True when no option of the chosen action existed (a forced restart) and the best pass of any kind was played. */
   readonly fallback: boolean
+  /** True when a what-if override chose the pass (recorded as `forced_pass` on the event). */
+  readonly forced?: boolean
 }
 
 export const OPTIONS_RECORDED = 5
@@ -307,6 +309,7 @@ export const overridePass = (d: Decision, input: DecisionInput, o: { readonly re
     xg: null,
     chosenRank: 1 + candidates.filter((c) => c.value > chosen.value).length,
     options: d.options.some(same) ? d.options : [...d.options, option],
-    fallback: false
+    fallback: false,
+    forced: true
   }
 }

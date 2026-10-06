@@ -187,7 +187,8 @@ class Work {
     this.subs = { ...s.subs }
     this.forced = [...s.forced]
     this.scriptGoals = [...s.scriptGoals]
-    this.override = s.override ?? null
+    // A what-if override lives for its tick only: if the player has no decision to make then, it lapses.
+    this.override = s.override && this.tick <= s.override.untilTick ? s.override : null
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
@@ -495,7 +496,8 @@ const decisionAttrs = (d: Decision): Record<string, AttrValue> => ({
   best_value: d.options[0]?.value ?? null,
   chosen_value: d.candidate ? Math.round(d.candidate.value * 1000) / 1000 : null,
   chosen_rank: d.chosenRank,
-  fallback: d.fallback
+  fallback: d.fallback,
+  ...(d.forced ? { forced_pass: true } : {})
 })
 
 const otherFoot = (f: PlayerState["foot"]): PlayerState["foot"] => (f === "left" ? "right" : "left")

@@ -32,11 +32,14 @@ const STYLE_RANGES: Readonly<Record<keyof Omit<TeamStyle, "archetype">, readonly
   riskTolerance: [0, 1]
 }
 
-/** The k-th fork of a state: fresh random sub-streams for every concern, distinct from the match's and from scenario retries. */
+/**
+ * The k-th fork of a state: fresh random sub-streams for every concern, distinct from the match's and from scenario
+ * retries. Outcomes the scenario runner was forcing are dropped: a fork must not know what the match went on to do.
+ */
 export const forkState = (s: MatchState, k: number): MatchState => {
   const rng = {} as Record<(typeof CONCERNS)[number], MatchState["rng"][(typeof CONCERNS)[number]]>
   for (const c of CONCERNS) rng[c] = substream(s.config.seed, `${c}:whatif`, k)
-  return { ...s, rng }
+  return { ...s, rng, forced: [] }
 }
 
 /** The pass options open to the player on the ball now (receiver, kind, value), best first. */
@@ -72,7 +75,7 @@ export const applyIntervention = (s: MatchState, iv: Intervention): MatchState =
         throw new WhatIfError(`no ${iv.passKind ?? ""} pass from ${owner.id} to ${receiver.id} is open at tick ${s.tick}`.replace("  ", " "))
       // The player decides at the next tick, and plays the forced pass.
       const players = s.players.map((p) => (p.id === owner.id ? { ...p, intentUntil: s.tick + 1 } : p))
-      return { ...s, players, override: { playerId: owner.id, receiverId: receiver.id, ...(iv.passKind ? { kind: iv.passKind } : {}) } }
+      return { ...s, players, override: { playerId: owner.id, receiverId: receiver.id, untilTick: s.tick + 1, ...(iv.passKind ? { kind: iv.passKind } : {}) } }
     }
     case "move_player": {
       const pl = find(iv.playerId)
@@ -177,6 +180,8 @@ export interface WhatIfResult {
   readonly variant: Readonly<Record<(typeof OUTCOME_KEYS)[number], Estimate>>
   /** Variant minus baseline, seed by seed (paired). */
   readonly difference: Readonly<Record<(typeof OUTCOME_KEYS)[number], Estimate>>
+  /** For a forced pass, in how many seeds the pass was actually played (null when the arm forces none). */
+  readonly forced_applied: { readonly baseline: number | null; readonly variant: number | null }
 }
 
 const estimate = (xs: ReadonlyArray<number>): Estimate => {
@@ -200,14 +205,18 @@ export const whatIf = (s: MatchState, variant: Intervention, opts: WhatIfOptions
   const side = opts.side ?? owner?.side ?? "home"
   const ticks = Math.round(horizonS / s.config.dt)
   const runs = { baseline: [] as Outcome[], variant: [] as Outcome[] }
+  const applied = { baseline: 0, variant: 0 }
+  const arms = [["baseline", opts.baseline ?? { kind: "none" }], ["variant", variant]] as const
   for (let k = 0; k < seeds; k++)
-    for (const [arm, iv] of [["baseline", opts.baseline ?? { kind: "none" }], ["variant", variant]] as const) {
+    for (const [arm, iv] of arms) {
       const r = playAhead(applyIntervention(forkState(s, k), iv), ticks)
       runs[arm].push(outcomeOf(r.events, r.state, side, opts.endValue))
+      if (iv.kind === "pass_to" && r.events.some((e) => e.type === "pass" && e.player_id === iv.playerId && e.attrs.forced_pass === true)) applied[arm]++
     }
+  const forcedApplied = { baseline: arms[0][1].kind === "pass_to" ? applied.baseline : null, variant: variant.kind === "pass_to" ? applied.variant : null }
   const per = (xs: Outcome[]) => Object.fromEntries(OUTCOME_KEYS.map((key) => [key, estimate(xs.map((o) => o[key]))])) as WhatIfResult["baseline"]
   const difference = Object.fromEntries(OUTCOME_KEYS.map((key) => [key, estimate(runs.variant.map((o, i) => o[key] - runs.baseline[i]![key]))])) as WhatIfResult["difference"]
-  return { side, at_tick: s.tick, horizon_s: horizonS, seeds, baseline: per(runs.baseline), variant: per(runs.variant), difference }
+  return { side, at_tick: s.tick, horizon_s: horizonS, seeds, baseline: per(runs.baseline), variant: per(runs.variant), difference, forced_applied: forcedApplied }
 }
 
 /** The match states (after the step of each tick) at the given ticks, for a plain or scripted match. */

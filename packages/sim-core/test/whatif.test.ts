@@ -88,6 +88,28 @@ describe("interventions", () => {
   })
 })
 
+describe("review fixes", () => {
+  it("forks carry no forced outcomes of a scenario window (they would know the future)", () => {
+    const s = { ...match.states.get(20_000)!, forced: [{ window: [30, 45] as const, team: "home" as const, effect: "goal" as const }] }
+    expect(forkState(s, 0).forced).toEqual([])
+  })
+
+  it("a forced pass is marked, reported per arm, and dropped after its tick if it cannot be played", () => {
+    const s = onBall(20_000)
+    const owner = (s.possession as { playerId: string }).playerId
+    const target = passOptions(s)[0]!
+    const r = whatIf(s, { kind: "pass_to", playerId: owner, receiverId: target.receiverId }, { seeds: 4, horizonS: 5 })
+    expect(r.forced_applied).toEqual({ baseline: null, variant: 4 })
+    const forced = applyIntervention(forkState(s, 0), { kind: "pass_to", playerId: owner, receiverId: target.receiverId })
+    expect(playAhead(forced, 60).events.some((e) => e.type === "pass" && e.attrs.forced_pass === true)).toBe(true)
+    // An override nobody can carry out (an unknown receiver) is never applied and does not linger.
+    const stale = { ...forced, override: { ...forced.override!, receiverId: "nobody" } }
+    const after = playAhead(stale, 60)
+    expect(after.events.some((e) => e.attrs.forced_pass === true)).toBe(false)
+    expect(after.state.override).toBeUndefined()
+  })
+})
+
 describe("what if", () => {
   it("pairs the arms seed by seed: changing nothing makes no difference at all", () => {
     const r = whatIf(onBall(20_000), { kind: "none" }, { seeds: 6, horizonS: 15 })
