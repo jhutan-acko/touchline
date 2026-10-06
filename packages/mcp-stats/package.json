@@ -3,15 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "serve": "tsx src/cli.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "serve": "tsx src/cli.ts"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.0",
+    "@touchline/advisor": "workspace:*",
     "@touchline/schema": "workspace:*",
     "@touchline/sim": "workspace:*",
+    "@touchline/sim-core": "workspace:*",
     "@touchline/stats": "workspace:*",
     "effect": "4.0.0",
     "zod": "4.6.5"
   },
-  "devDependencies": { "@touchline/league": "workspace:*", "@touchline/sim-core": "workspace:*" }
+  "devDependencies": {
+    "@touchline/league": "workspace:*"
+  }
 }

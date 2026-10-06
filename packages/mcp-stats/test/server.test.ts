@@ -12,12 +12,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { League } from "@touchline/league"
 import { writeMatch } from "@touchline/sim"
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
-import { modelsFromJson, StatsEngine, StatsQuery } from "@touchline/stats"
+import { Session } from "@touchline/advisor"
+import { modelsFromJson, StatsEngine, StatsQuery, xtGridFromJson } from "@touchline/stats"
 import { loadRun } from "../src/load.js"
 import { createStatsServer } from "../src/server.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const pkg = join(root, "packages/mcp-stats")
+const xt = xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
 const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const dir = mkdtempSync(join(tmpdir(), "touchline-mcp-"))
@@ -26,6 +28,8 @@ const cfg = { matchId: "mcp", seed: 4246, kickoffTime: "2026-10-18T14:00:00.000Z
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean }
 let q: StatsQuery
 let client: Client
+/** A client of a server that can re-simulate (the run rebuilt into a session). */
+let advised: Client
 const call = async (name: string, args: Record<string, unknown> = {}) => (await client.callTool({ name, arguments: args })) as ToolResult
 const data = async (name: string, args: Record<string, unknown> = {}) => {
   const r = await call(name, args)
@@ -35,18 +39,24 @@ const data = async (name: string, args: Record<string, unknown> = {}) => {
 
 beforeAll(async () => {
   await Effect.runPromise(writeMatch(cfg, dir))
-  q = await Effect.runPromise(loadRun(dir, models, { roster: league }))
+  q = await Effect.runPromise(loadRun(dir, models, { roster: league, xt }))
   const [a, b] = InMemoryTransport.createLinkedPair()
   await createStatsServer(q).connect(a)
   client = new Client({ name: "test", version: "0" })
   await client.connect(b)
+  const [c, d] = InMemoryTransport.createLinkedPair()
+  await createStatsServer(q, { session: Session.fromRun(dir, league, [DEFAULT_PARAMS]), xt }).connect(c)
+  advised = new Client({ name: "advised", version: "0" })
+  await advised.connect(d)
 }, 120_000)
 afterAll(() => client?.close())
 
 describe("MCP stats server", () => {
-  it("offer the nine read-only tools", async () => {
+  it("offer the thirteen read-only tools", async () => {
     const { tools } = await client.listTools()
-    expect(tools.map((t) => t.name).sort()).toEqual(["get_decision", "get_events", "get_metric", "get_series", "get_signals", "list_metrics", "match_info", "rank_players", "verify_claim"])
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "explain_pass", "get_decision", "get_events", "get_metric", "get_series", "get_signals", "list_metrics", "match_info", "pitch_control", "rank_players", "suggest_position", "verify_claim", "what_if"
+    ])
     for (const t of tools) expect(t.annotations?.readOnlyHint, t.name).toBe(true)
   })
 
@@ -144,6 +154,43 @@ describe("MCP stats server", () => {
     expect((await call("get_signals", { team_id: "nobody-fc" })).isError).toBe(true)
     expect((await call("rank_players", { metric_id: "plyr.dist", team_id: "nobody-fc" })).isError).toBe(true)
     expect((await call("get_events", { types: ["shoot"] })).isError).toBe(true)
+  })
+
+  it("map pitch control for either team, the two maps adding up to the whole pitch", async () => {
+    const home = await data("pitch_control", { team_id: cfg.home.id, at_frame: 30_005 })
+    const away = await data("pitch_control", { team_id: cfg.away.id, at_frame: 30_005 })
+    expect(home).toMatchObject({ as_of_frame: 30_005, sample_frame: 30_000, cols: 21, rows: 14 })
+    expect(home.control).toHaveLength(294)
+    expect(home.share + away.share).toBeCloseTo(1, 3)
+    expect((await call("pitch_control", { team_id: "nobody-fc" })).isError).toBe(true)
+  })
+
+  it("re-simulate what-ifs from a frame, refusing frames past the latest and servers that cannot", async () => {
+    const at = q.engine.events.find((e) => e.type === "pass" && e.frame_id > 20_000)!.frame_id - 1
+    const call2 = async (name: string, args: Record<string, unknown>) => (await advised.callTool({ name, arguments: args })) as ToolResult
+    const same = JSON.parse((await call2("what_if", { at_frame: at, intervention: { kind: "none" }, seeds: 4, horizon_s: 5 })).content[0]!.text)
+    expect(same.difference.total).toEqual({ mean: 0, se: 0 })
+    const press = JSON.parse((await call2("what_if", { at_frame: at, intervention: { kind: "tactic", team_id: cfg.away.id, style: { pressIntensity: 1 } }, team_id: cfg.home.id, seeds: 4, horizon_s: 5 })).content[0]!.text)
+    expect(press).toMatchObject({ team_id: cfg.home.id, seeds: 4, horizon_s: 5, at_tick: at })
+    expect((await call2("what_if", { at_frame: q.engine.now + 10, intervention: { kind: "none" } })).content[0]!.text).toMatch(/later than the latest frame/)
+    expect((await call("what_if", { at_frame: at, intervention: { kind: "none" } })).content[0]!.text).toMatch(/not available/)
+  })
+
+  it("explain a pass and suggest a position through the re-simulation tools", async () => {
+    const pass = q.engine.events.find((e) => e.type === "pass" && e.frame_id > 20_000 && (e.attrs.options as unknown[]).length >= 3)!
+    const x = JSON.parse(((await advised.callTool({ name: "explain_pass", arguments: { event_id: pass.id, seeds: 4 } })) as ToolResult).content[0]!.text)
+    expect(x.event_id).toBe(pass.id)
+    expect(["played_pass_was_best", "better_option_found", "not_verified"]).toContain(x.verdict)
+    const mate = cfg.home.starters[5]!.id
+    let t = 20_000
+    while (true) {
+      const r = (await advised.callTool({ name: "suggest_position", arguments: { player_id: mate, at_frame: t } })) as ToolResult
+      if (!r.isError) {
+        expect(["attack", "defend"]).toContain(JSON.parse(r.content[0]!.text).mode)
+        break
+      }
+      t += 50
+    }
   })
 
   it("load a match as it stood at a given minute", async () => {

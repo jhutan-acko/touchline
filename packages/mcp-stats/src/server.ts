@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import { EventType, SignalType } from "@touchline/schema"
 import { METRICS, StatsError, type StatsQuery } from "@touchline/stats"
+import { registerAdvisorTools, type Advisor } from "./advise.js"
 
 export const SERVER_NAME = "touchline-stats"
 export const SERVER_VERSION = "0.1.0"
@@ -10,7 +11,8 @@ const instructions = (fps: number) => [
   "Read-only statistics for one football match from the Touchline stats engine.",
   "Every number you state must come from these tools: cite the metric id and the `ref` (metric@from-to) or event ids they return.",
   `Frames are global ticks (${fps} per second in this match; match_info gives dt and fps); every answer says which frame it is as of (\`as_of_frame\`) and never includes anything later.`,
-  "Subjects are \"match\", a team id or a player id (match_info lists them). list_metrics says which subjects and windows each metric supports."
+  "Subjects are \"match\", a team id or a player id (match_info lists them). list_metrics says which subjects and windows each metric supports.",
+  "what_if, explain_pass and suggest_position re-simulate from the state at a frame; their numbers are estimates with standard errors, never facts about the match."
 ].join(" ")
 const eventType = z.enum([...EventType.literals] as [string, ...string[]])
 
@@ -38,8 +40,8 @@ const answer = (f: () => unknown) => {
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 
-/** An MCP server exposing the stats tools (spec §5.3) over one match's StatsQuery. */
-export const createStatsServer = (q: StatsQuery): McpServer => {
+/** An MCP server exposing the stats tools (spec §5.3) over one match's StatsQuery; the re-simulation tools need `advisor`. */
+export const createStatsServer = (q: StatsQuery, advisor: Advisor | null = null): McpServer => {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: instructions(Math.round(1 / q.engine.info.dt)) })
 
   server.registerTool(
@@ -161,5 +163,6 @@ export const createStatsServer = (q: StatsQuery): McpServer => {
     async ({ metric_id, subject, at_frame, value, window_s, tolerance }) => answer(() => q.verifyClaim(metric_id, subject, at_frame, value, window_s, tolerance))
   )
 
+  registerAdvisorTools(server, q, advisor)
   return server
 }

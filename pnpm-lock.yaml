@@ -72,12 +72,18 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
         version: 1.32.0(zod@4.6.5)
+      '@touchline/advisor':
+        specifier: workspace:*
+        version: link:../advisor
       '@touchline/schema':
         specifier: workspace:*
         version: link:../schema
       '@touchline/sim':
         specifier: workspace:*
         version: link:../sim
+      '@touchline/sim-core':
+        specifier: workspace:*
+        version: link:../sim-core
       '@touchline/stats':
         specifier: workspace:*
         version: link:../stats
@@ -91,9 +97,6 @@ importers:
       '@touchline/league':
         specifier: workspace:*
         version: link:../league
-      '@touchline/sim-core':
-        specifier: workspace:*
-        version: link:../sim-core
 
   packages/schema:
     dependencies:

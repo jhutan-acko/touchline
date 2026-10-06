@@ -56,6 +56,8 @@ pnpm stats --run out/m-7 --signals out/m-7/signals.jsonl
 
 Agents read the match only through MCP tools (spec §5.3): `match_info`, `list_metrics`, `get_metric`, `get_series`, `rank_players`, `get_signals`, `get_events`, `get_decision` and `verify_claim`. All are read-only, every answer says which frame it is as of, and nothing later than that is ever returned.
 
+Four more tools look at the match through the engine itself: `pitch_control` (who would win the ball where), `what_if` (re-simulate from a frame with a forced pass, a moved player or a changed team style, against a baseline, over paired seeds), `explain_pass` (every option the passer weighed, on paper by pitch control × expected threat and played out by re-simulation; a better option is reported only when it is clearly better in play) and `suggest_position` (the best spot within 12 m for a player, in attack or defence). The server rebuilds the run from its manifest for these; a run made with parameters it does not have keeps the other tools and says why on stderr.
+
 ```bash
 pnpm -s mcp-stats --run out/m-7                 # stdio (stdout carries the protocol; logs go to stderr)
 pnpm -s mcp-stats --run out/m-7 --minute 60     # the match as it stood at 60'
@@ -68,11 +70,12 @@ An MCP client can launch it directly, for example: `{"command": "npx", "args": [
 
 | Package | What it does |
 |---|---|
-| `packages/sim-core` | The match engine: one pure, deterministic `step(state)` per 0.1 s tick |
+| `packages/sim-core` | The match engine: one pure, deterministic `step(state)` per 0.1 s tick; pitch control; what-if forks |
 | `packages/league` | Fictional league generator: 8 clubs, kits, styles, 160 players |
 | `packages/schema` | Effect Schema for the live domain stream (events and frames) and for signals and metric ids |
 | `packages/sim` | Effect streams, CDF v0.3.2 writers, run manifest, CLI |
 | `packages/stats` | Stats engine: metrics and signals on the domain stream, replay of run folders, `pnpm stats` |
+| `packages/advisor` | What-if sessions rebuilt from run folders, better-option explainer, positioning advisor |
 | `packages/mcp-stats` | MCP server exposing the stats tools to agents (stdio or Streamable HTTP) |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
 | `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report, stats-model fitting |
