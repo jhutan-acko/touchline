@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from typing_extensions import Never
 
 from . import contracts_gen
-from .contracts import Analysis, Cue, Draft, Moment, MomentTrace, Recap, Signal, Verdict
+from .contracts import Analysis, Cue, Draft, Moment, MomentTrace, Recap, Signal, Verdict, segment_key
 from .factchecker import feedback, other_names, published
 from .personalizer import Story
 from .recap import Told, recap_story
@@ -196,7 +196,8 @@ class Publish(Executor):
                 job.timings[f"personalizer_{g.mode}"] = g.ms
                 if g.fallback and "personalizer" not in job.fallbacks:
                     job.fallbacks.append("personalizer")
-            cues = [c for g in sorted(got, key=lambda g: g.mode) for c in g.cues]
+            order = {segment_key(seg): i for i, seg in enumerate(self.s.segments)}
+            cues = sorted((c for g in got for c in g.cues), key=lambda c: order.get(segment_key(c.segment), len(order)))
             trace = MomentTrace(
                 moment=job.moment, analysis=n.analysis, draft=p.verified.draft, verdicts=n.verdicts, fallbacks=job.fallbacks,
                 cue_ids=[c.cue_id for c in cues], timings_ms=job.timings, model=self.s.settings.model_label,

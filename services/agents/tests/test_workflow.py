@@ -42,7 +42,7 @@ async def test_a_batch_comes_out_as_verified_cues_for_every_segment(session, sig
     results = await run(session, batch)
     assert results and {r.trace.moment.type for r in results} >= {"goal"}
     for r in results:
-        assert [c.segment for c in r.cues] == sorted(SEGMENTS, key=lambda s: s.mode)  # casual first, then analyst
+        assert [c.segment for c in r.cues] == SEGMENTS  # in the order the segments were asked for
         assert all(c.verified and c.moment_id == r.trace.moment.moment_id for c in r.cues)
         assert r.trace.verdicts[-1].status == "pass" and r.trace.fallbacks == [] and r.trace.model == "stub"
         assert {"detector", "analyst", "narrator", "factchecker", "personalizer_casual", "personalizer_analyst"} <= set(r.trace.timings_ms)
