@@ -1,0 +1,15 @@
+{
+  "name": "@touchline/advisor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p ." },
+  "dependencies": {
+    "@touchline/schema": "workspace:*",
+    "@touchline/sim": "workspace:*",
+    "@touchline/sim-core": "workspace:*",
+    "@touchline/stats": "workspace:*"
+  },
+  "devDependencies": { "@touchline/league": "workspace:*", "effect": "4.0.0" }
+}

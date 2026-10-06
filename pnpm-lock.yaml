@@ -24,6 +24,28 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15))
 
+  packages/advisor:
+    dependencies:
+      '@touchline/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@touchline/sim':
+        specifier: workspace:*
+        version: link:../sim
+      '@touchline/sim-core':
+        specifier: workspace:*
+        version: link:../sim-core
+      '@touchline/stats':
+        specifier: workspace:*
+        version: link:../stats
+    devDependencies:
+      '@touchline/league':
+        specifier: workspace:*
+        version: link:../league
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+
   packages/calibrate:
     dependencies:
       '@touchline/league':
