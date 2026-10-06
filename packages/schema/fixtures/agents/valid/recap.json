@@ -1,0 +1,32 @@
+{
+  "contract": "recap",
+  "value": {
+    "recap_id": "m042-recap-half_time",
+    "match_id": "m042",
+    "kind": "half_time",
+    "at_frame": 27000,
+    "sentences": [
+      "Ironmoor lead at the break",
+      "They lead 1-0."
+    ],
+    "claims": [
+      {
+        "kind": "score",
+        "sentence": 1,
+        "quote": "1-0",
+        "metric_id": null,
+        "subject": null,
+        "value": null,
+        "at_frame": 27000,
+        "window_s": null,
+        "event_id": null,
+        "receiver_id": null
+      }
+    ],
+    "turning_points": [
+      "m042-mo-40213-pressure_shift"
+    ],
+    "player_of_match": "p-iro-09",
+    "verified": true
+  }
+}

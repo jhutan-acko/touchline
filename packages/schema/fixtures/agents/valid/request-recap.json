@@ -1,0 +1,17 @@
+{
+  "contract": "request",
+  "value": {
+    "kind": "recap",
+    "match_id": "m042",
+    "mcp_url": "http://127.0.0.1:7801/mcp",
+    "segments": [
+      {
+        "mode": "casual",
+        "lang": "en",
+        "club": "ironmoor"
+      }
+    ],
+    "recap": "full_time",
+    "at_frame": 57000
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "contract": "request",
+  "value": {
+    "kind": "signals",
+    "match_id": "m042",
+    "mcp_url": "http://127.0.0.1:7801/mcp",
+    "segments": [
+      {
+        "mode": "casual",
+        "lang": "en",
+        "club": "ironmoor"
+      },
+      {
+        "mode": "analyst",
+        "lang": "hi",
+        "club": null
+      }
+    ],
+    "now_frame": 40213,
+    "signals": [
+      {
+        "id": "m042-pressure_shift-40213-ironmoor",
+        "match_id": "m042",
+        "type": "pressure_shift",
+        "frame_id": 40213,
+        "frame_from": 39880,
+        "frame_to": 40213,
+        "period": "second_half",
+        "match_clock": "67:02",
+        "team_id": "ironmoor",
+        "player_id": null,
+        "metric": "team.press",
+        "value": 0.71,
+        "salience": 0.82,
+        "evidence": [
+          "team.press@39880-40213"
+        ],
+        "data": {
+          "before": 0.4,
+          "after": 0.71,
+          "pressures": 14
+        }
+      }
+    ]
+  }
+}

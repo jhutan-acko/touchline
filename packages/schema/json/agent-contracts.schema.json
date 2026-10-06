@@ -1,0 +1,964 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://touchline.dev/schema/agent-contracts.json",
+  "title": "AgentContracts",
+  "type": "object",
+  "properties": {
+    "signal": {
+      "$ref": "#/$defs/Signal"
+    },
+    "moment": {
+      "$ref": "#/$defs/Moment"
+    },
+    "claim": {
+      "$ref": "#/$defs/Claim"
+    },
+    "analysis": {
+      "$ref": "#/$defs/Analysis"
+    },
+    "draft": {
+      "$ref": "#/$defs/Draft"
+    },
+    "verdict": {
+      "$ref": "#/$defs/Verdict"
+    },
+    "cue": {
+      "$ref": "#/$defs/Cue"
+    },
+    "recap": {
+      "$ref": "#/$defs/Recap"
+    },
+    "trace": {
+      "$ref": "#/$defs/MomentTrace"
+    },
+    "request": {
+      "$ref": "#/$defs/AgentRequest"
+    }
+  },
+  "required": [
+    "signal",
+    "moment",
+    "claim",
+    "analysis",
+    "draft",
+    "verdict",
+    "cue",
+    "recap",
+    "trace",
+    "request"
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "Signal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "match_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "goal",
+            "big_chance",
+            "pressure_shift",
+            "momentum_swing",
+            "chaos_spike",
+            "speed_alert",
+            "distance_milestone",
+            "difficult_pass_completed",
+            "player_milestone",
+            "card",
+            "substitution_impact"
+          ]
+        },
+        "frame_id": {
+          "type": "integer"
+        },
+        "frame_from": {
+          "type": "integer"
+        },
+        "frame_to": {
+          "type": "integer"
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "first_half",
+            "second_half"
+          ]
+        },
+        "match_clock": {
+          "type": "string"
+        },
+        "team_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "player_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metric": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "pass.dist",
+                "pass.acc",
+                "pass.xp",
+                "ball.speed",
+                "shot.speed",
+                "plyr.vmax",
+                "plyr.dist",
+                "shot.xg",
+                "team.mom",
+                "team.press",
+                "ppda",
+                "tilt",
+                "game.chaos",
+                "team.poss",
+                "act.xt",
+                "pitch.ctrl"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "salience": {
+          "type": "number"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "match_id",
+        "type",
+        "frame_id",
+        "frame_from",
+        "frame_to",
+        "period",
+        "match_clock",
+        "team_id",
+        "player_id",
+        "metric",
+        "value",
+        "salience",
+        "evidence",
+        "data"
+      ],
+      "additionalProperties": true
+    },
+    "Moment": {
+      "type": "object",
+      "properties": {
+        "moment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "goal",
+            "big_chance",
+            "pressure_shift",
+            "momentum_swing",
+            "chaos_spike",
+            "speed_alert",
+            "distance_milestone",
+            "difficult_pass_completed",
+            "player_milestone",
+            "card",
+            "substitution_impact"
+          ]
+        },
+        "signal_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "frame_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frame_from": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frame_to": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "first_half",
+            "second_half"
+          ]
+        },
+        "match_clock": {
+          "type": "string"
+        },
+        "team_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "player_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "salience": {
+          "type": "number"
+        },
+        "priority": {
+          "type": "number",
+          "enum": [
+            1,
+            2,
+            3
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "model",
+            "rules"
+          ]
+        }
+      },
+      "required": [
+        "moment_id",
+        "match_id",
+        "type",
+        "signal_ids",
+        "frame_id",
+        "frame_from",
+        "frame_to",
+        "period",
+        "match_clock",
+        "team_id",
+        "player_id",
+        "salience",
+        "priority",
+        "source"
+      ],
+      "additionalProperties": true
+    },
+    "Claim": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "metric",
+            "score",
+            "minute",
+            "event",
+            "better_option"
+          ]
+        },
+        "sentence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quote": {
+          "type": "string"
+        },
+        "metric_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "pass.dist",
+                "pass.acc",
+                "pass.xp",
+                "ball.speed",
+                "shot.speed",
+                "plyr.vmax",
+                "plyr.dist",
+                "shot.xg",
+                "team.mom",
+                "team.press",
+                "ppda",
+                "tilt",
+                "game.chaos",
+                "team.poss",
+                "act.xt",
+                "pitch.ctrl"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "at_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "receiver_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "sentence",
+        "quote",
+        "metric_id",
+        "subject",
+        "value",
+        "at_frame",
+        "window_s",
+        "event_id",
+        "receiver_id"
+      ],
+      "additionalProperties": true
+    },
+    "Analysis": {
+      "type": "object",
+      "properties": {
+        "moment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cause": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Claim"
+          }
+        }
+      },
+      "required": [
+        "moment_id",
+        "cause",
+        "explanation",
+        "claims"
+      ],
+      "additionalProperties": true
+    },
+    "Draft": {
+      "type": "object",
+      "properties": {
+        "moment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lang": {
+          "type": "string",
+          "enum": [
+            "en",
+            "es",
+            "hi"
+          ]
+        },
+        "sentences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Claim"
+          }
+        }
+      },
+      "required": [
+        "moment_id",
+        "lang",
+        "sentences",
+        "claims"
+      ],
+      "additionalProperties": true
+    },
+    "SentenceCheck": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "index",
+        "verified",
+        "reasons"
+      ],
+      "additionalProperties": true
+    },
+    "Verdict": {
+      "type": "object",
+      "properties": {
+        "moment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "retry",
+            "drop"
+          ]
+        },
+        "sentences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SentenceCheck"
+          }
+        },
+        "claims_checked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "claims_verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "undeclared": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "moment_id",
+        "status",
+        "sentences",
+        "claims_checked",
+        "claims_verified",
+        "undeclared"
+      ],
+      "additionalProperties": true
+    },
+    "Segment": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "casual",
+            "analyst"
+          ]
+        },
+        "lang": {
+          "type": "string",
+          "enum": [
+            "en",
+            "es",
+            "hi"
+          ]
+        },
+        "club": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "lang",
+        "club"
+      ],
+      "additionalProperties": true
+    },
+    "Cue": {
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema": {
+          "type": "string",
+          "enum": [
+            "touchline.cue/1"
+          ]
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "moment_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "object",
+          "properties": {
+            "frame_from": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "frame_to": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "clock": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "frame_from",
+            "frame_to",
+            "clock"
+          ],
+          "additionalProperties": true
+        },
+        "display": {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "enum": [
+                "top_bar",
+                "lower_third",
+                "side_panel",
+                "pitch_marker",
+                "recap_card"
+              ]
+            },
+            "priority": {
+              "type": "number",
+              "enum": [
+                1,
+                2,
+                3
+              ]
+            },
+            "ttl_ms": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "template": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "slot",
+            "priority",
+            "ttl_ms",
+            "template"
+          ],
+          "additionalProperties": true
+        },
+        "segment": {
+          "$ref": "#/$defs/Segment"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "headline": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "headline",
+                "body"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cue_id",
+        "schema",
+        "match_id",
+        "moment_id",
+        "anchor",
+        "display",
+        "segment",
+        "text",
+        "data",
+        "evidence",
+        "verified"
+      ],
+      "additionalProperties": true
+    },
+    "Recap": {
+      "type": "object",
+      "properties": {
+        "recap_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "half_time",
+            "full_time"
+          ]
+        },
+        "at_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sentences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Claim"
+          }
+        },
+        "turning_points": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "player_of_match": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "recap_id",
+        "match_id",
+        "kind",
+        "at_frame",
+        "sentences",
+        "claims",
+        "turning_points",
+        "player_of_match",
+        "verified"
+      ],
+      "additionalProperties": true
+    },
+    "MomentTrace": {
+      "type": "object",
+      "properties": {
+        "moment": {
+          "$ref": "#/$defs/Moment"
+        },
+        "analysis": {
+          "$ref": "#/$defs/Analysis"
+        },
+        "draft": {
+          "$ref": "#/$defs/Draft"
+        },
+        "verdicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Verdict"
+          }
+        },
+        "fallbacks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cue_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "timings_ms": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "moment",
+        "analysis",
+        "draft",
+        "verdicts",
+        "fallbacks",
+        "cue_ids",
+        "timings_ms",
+        "model"
+      ],
+      "additionalProperties": true
+    },
+    "SignalsRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "signals"
+          ]
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_url": {
+          "type": "string"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "minItems": 1,
+          "maxItems": 12
+        },
+        "now_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Signal"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "match_id",
+        "mcp_url",
+        "segments",
+        "now_frame",
+        "signals"
+      ],
+      "additionalProperties": true
+    },
+    "RecapRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "recap"
+          ]
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_url": {
+          "type": "string"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "minItems": 1,
+          "maxItems": 12
+        },
+        "recap": {
+          "type": "string",
+          "enum": [
+            "half_time",
+            "full_time"
+          ]
+        },
+        "at_frame": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "match_id",
+        "mcp_url",
+        "segments",
+        "recap",
+        "at_frame"
+      ],
+      "additionalProperties": true
+    },
+    "AgentRequest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SignalsRequest"
+        },
+        {
+          "$ref": "#/$defs/RecapRequest"
+        }
+      ]
+    }
+  }
+}

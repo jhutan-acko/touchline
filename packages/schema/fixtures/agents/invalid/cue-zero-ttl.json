@@ -1,0 +1,39 @@
+{
+  "contract": "cue",
+  "why": "ttl must be positive",
+  "value": {
+    "cue_id": "m042-c0311",
+    "schema": "touchline.cue/1",
+    "match_id": "m042",
+    "moment_id": "m042-mo-39880-pressure_shift",
+    "anchor": {
+      "frame_from": 39880,
+      "frame_to": 40213,
+      "clock": "67:02"
+    },
+    "display": {
+      "slot": "lower_third",
+      "priority": 2,
+      "ttl_ms": 0,
+      "template": "pressure_shift"
+    },
+    "segment": {
+      "mode": "casual",
+      "lang": "en",
+      "club": "ironmoor"
+    },
+    "text": {
+      "headline": "Ironmoor turn the screw",
+      "body": "They have pressed Kestrel Bay into their own half since the hour mark."
+    },
+    "data": {
+      "team.press": 0.71
+    },
+    "evidence": [
+      "team.press@39880-40213",
+      "m042-e1102",
+      "m042-e1150"
+    ],
+    "verified": true
+  }
+}

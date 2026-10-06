@@ -1,0 +1,95 @@
+{
+  "contract": "trace",
+  "why": "claims cite known metric ids only",
+  "value": {
+    "moment": {
+      "moment_id": "m042-mo-40213-pressure_shift",
+      "match_id": "m042",
+      "type": "pressure_shift",
+      "signal_ids": [
+        "m042-pressure_shift-40213-ironmoor"
+      ],
+      "frame_id": 40213,
+      "frame_from": 39880,
+      "frame_to": 40213,
+      "period": "second_half",
+      "match_clock": "67:02",
+      "team_id": "ironmoor",
+      "player_id": null,
+      "salience": 0.82,
+      "priority": 2,
+      "source": "rules"
+    },
+    "analysis": {
+      "moment_id": "m042-mo-40213-pressure_shift",
+      "cause": "sustained high press",
+      "explanation": "Ironmoor pushed their press higher and won the ball back in Kestrel Bay's half.",
+      "claims": [
+        {
+          "kind": "metric",
+          "sentence": 1,
+          "quote": "0.71",
+          "metric_id": "team.vibes",
+          "subject": "ironmoor",
+          "value": 0.71,
+          "at_frame": 40213,
+          "window_s": null,
+          "event_id": null,
+          "receiver_id": null
+        }
+      ]
+    },
+    "draft": {
+      "moment_id": "m042-mo-40213-pressure_shift",
+      "lang": "en",
+      "sentences": [
+        "Ironmoor turn the screw",
+        "Their pressing index is up to 0.71."
+      ],
+      "claims": [
+        {
+          "kind": "metric",
+          "sentence": 1,
+          "quote": "0.71",
+          "metric_id": "team.press",
+          "subject": "ironmoor",
+          "value": 0.71,
+          "at_frame": 40213,
+          "window_s": null,
+          "event_id": null,
+          "receiver_id": null
+        }
+      ]
+    },
+    "verdicts": [
+      {
+        "moment_id": "m042-mo-40213-pressure_shift",
+        "status": "pass",
+        "sentences": [
+          {
+            "index": 0,
+            "verified": true,
+            "reasons": []
+          },
+          {
+            "index": 1,
+            "verified": true,
+            "reasons": []
+          }
+        ],
+        "claims_checked": 1,
+        "claims_verified": 1,
+        "undeclared": 0
+      }
+    ],
+    "fallbacks": [],
+    "cue_ids": [
+      "m042-c0311"
+    ],
+    "timings_ms": {
+      "analyst": 812.5,
+      "narrator": 301.0
+    },
+    "model": "stub"
+  }
+}

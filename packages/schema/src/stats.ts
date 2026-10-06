@@ -35,7 +35,7 @@ export const Signal = Schema.Struct({
   /** Event ids and metric references (`metric@from-to`) that support the signal. */
   evidence: Schema.Array(Schema.String),
   data: Schema.Record(Schema.String, Schema.Finite)
-})
+}).annotate({ identifier: "Signal" })
 export type Signal = typeof Signal.Type
 
 export const decodeSignal = Schema.decodeUnknownSync(Signal)

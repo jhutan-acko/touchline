@@ -1,0 +1,12 @@
+{
+  "contract": "request",
+  "why": "at least one segment",
+  "value": {
+    "kind": "recap",
+    "match_id": "m042",
+    "mcp_url": "http://127.0.0.1:7801/mcp",
+    "segments": [],
+    "recap": "full_time",
+    "at_frame": 57000
+  }
+}

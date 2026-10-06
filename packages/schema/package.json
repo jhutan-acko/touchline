@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p ." },
+  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "json": "tsx scripts/json.ts" },
   "dependencies": { "effect": "4.0.0" },
   "devDependencies": { "@touchline/sim-core": "workspace:*" }
 }

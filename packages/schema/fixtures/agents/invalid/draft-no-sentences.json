@@ -1,0 +1,23 @@
+{
+  "contract": "draft",
+  "why": "a draft has a headline",
+  "value": {
+    "moment_id": "m042-mo-40213-pressure_shift",
+    "lang": "en",
+    "sentences": [],
+    "claims": [
+      {
+        "kind": "metric",
+        "sentence": 1,
+        "quote": "0.71",
+        "metric_id": "team.press",
+        "subject": "ironmoor",
+        "value": 0.71,
+        "at_frame": 40213,
+        "window_s": null,
+        "event_id": null,
+        "receiver_id": null
+      }
+    ]
+  }
+}
