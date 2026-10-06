@@ -77,6 +77,16 @@ export interface Params {
     readonly highLaunchDeg: number
     readonly throughLeadM: number
     readonly choiceTemperature: number
+    /**
+     * How much a passer trusts pitch control at the target over the lane-based xPass when weighing options
+     * (0: xPass only; 1: pitch control only). Pitch control sees who can reach the ball first, including runs.
+     */
+    readonly pitchControlWeight: number
+    /**
+     * Logit bonus per unit of the best option's arrival chance (above SAFETY_PIVOT) for each kind of pass: passers
+     * choose the kind of pass by how safe its best option is, not only by habit and pressure.
+     */
+    readonly safetyWeight: number
   }
   readonly execution: {
     readonly dirSigma: number
@@ -257,7 +267,9 @@ export const DEFAULT_PARAMS: Params = {
     arriveSpeed: 7,
     highLaunchDeg: 30,
     throughLeadM: 8,
-    choiceTemperature: 0.35
+    choiceTemperature: 0.35,
+    pitchControlWeight: 0,
+    safetyWeight: 0
   },
   execution: { dirSigma: 0.035, distSigma: 0.07, pressureK: 1.6, weakFootK: 1.45, mishitBase: 0.006, mishitK: 0.11 },
   shot: {
@@ -377,7 +389,7 @@ const PROBABILITIES = new Set([
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
   "keeper.letRunShare", "keeper.comeShare", "keeper.catchBase", "keeper.catchHandling", "keeper.fumbleShare",
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
-  "fatigue.halfTimeRecovery", "script.howlerFumble"
+  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */

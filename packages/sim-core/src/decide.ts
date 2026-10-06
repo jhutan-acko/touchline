@@ -1,6 +1,7 @@
 import { classifyPass, type PassHeight, type PassKind } from "./classify.js"
 import { actionZone, attackX, dirOf, dist, goalAngle, goalOf, PITCH, type Side, type Vec2 } from "./geometry.js"
 import { ACTIONS, type Action, type Params } from "./params.js"
+import { pitchControlAt, type PcPlayer } from "./pitchcontrol.js"
 import type { Rng } from "./rng.js"
 import type { OptionRecord, PlayerState, RestartKind, TeamStyle } from "./types.js"
 
@@ -57,6 +58,8 @@ export interface Decision {
 }
 
 export const OPTIONS_RECORDED = 5
+/** A pass type whose safest option is expected to arrive more (less) often than this gains (loses) logit, by pass.safetyWeight. */
+export const SAFETY_PIVOT = 0.75
 
 const r3 = (v: number): number => Math.round(v * 1000) / 1000
 
@@ -131,12 +134,17 @@ export const buildCandidates = (input: DecisionInput, p: Params, pressure: numbe
   const lastDef = lastDefenderAttackX(side, opponents)
   const out: Candidate[] = []
   const ownerThreat = threat(side, owner.pos)
+  // With a pitch-control weight, a passer blends the lane-based xPass with who would win a ball played there.
+  const w = p.pass.pitchControlWeight
+  const toPc = (pl: PlayerState): PcPlayer => ({ x: pl.pos.x, y: pl.pos.y, vx: pl.vel.x, vy: pl.vel.y, gk: pl.role === "GK" })
+  const pc = w > 0 ? { att: teammates.filter((t) => t.id !== owner.id && !t.sentOff).map(toPc), def: opponents.filter((o) => !o.sentOff).map(toPc) } : null
   const push = (receiver: PlayerState, target: Vec2, height: PassHeight) => {
     const kind = classifyPass({ side, from: owner.pos, to: target, height, lastDefenderAttackX: lastDef }, p.classifier)
     if (kind === "set_piece") return
     const distance = dist(owner.pos, target)
     const lane = defendersInLane(owner.pos, target, opponents)
-    const xp = xpassOf(p, distance, lane, pressure, height)
+    const lanes = xpassOf(p, distance, lane, pressure, height)
+    const xp = pc ? (1 - w) * lanes + w * pitchControlAt(target, pc.att, pc.def, owner.pos).att : lanes
     const value = xp * (0.3 + threat(side, target)) - (1 - xp) * 0.3 * (1 - ownerThreat)
     out.push({ action: KIND_TO_ACTION[kind], kind, receiverId: receiver.id, target, height, xpass: xp, value, lane })
   }
@@ -161,6 +169,8 @@ const softmaxPick = (logits: ReadonlyArray<number>, rng: Rng): number => {
   const m = Math.max(...logits)
   return rng.weighted(logits.map((l) => (Number.isFinite(l) ? Math.exp(l - m) : 0)))
 }
+
+const NON_PASS: ReadonlyArray<Action> = ["shot", "carry", "hold", "take_on", "clear"]
 
 const RESTART_ACTIONS: Readonly<Record<RestartKind, ReadonlyArray<Action>>> = {
   kickoff: ["short_pass", "back_pass"],
@@ -231,6 +241,12 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (lateTrailing && (a === "shot" || a === "cross" || a === "long_pass")) l += 0.4
     if (lateLeading && (a === "hold" || a === "back_pass")) l += 0.4
     l += input.scriptBias[a] ?? 0
+    // Passers lean towards the kinds of pass that have a safe option now (and away from those that have none).
+    if (p.pass.safetyWeight > 0 && !NON_PASS.includes(a)) {
+      let best = -Infinity
+      for (const c of candidates) if (c.action === a && c.xpass > best) best = c.xpass
+      if (Number.isFinite(best)) l += p.pass.safetyWeight * (best - SAFETY_PIVOT)
+    }
     return l
   })
   const finite = logits.filter((l) => Number.isFinite(l))
@@ -247,7 +263,6 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   if (idx < 0) idx = ACTIONS.indexOf(allowed ? [...allowed][0]! : "hold")
   const action = ACTIONS[idx]!
 
-  const NON_PASS: ReadonlyArray<Action> = ["shot", "carry", "hold", "take_on", "clear"]
   let passOptions = candidates.filter((c) => c.action === action)
   if (NON_PASS.includes(action)) return { action, candidate: null, decisionQuality: null, xg: action === "shot" ? xg : null, pressure, ...record }
   let fallback = false

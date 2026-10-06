@@ -70,6 +70,10 @@ export const KNOBS: ReadonlyArray<Knob> = [
     }) },
   { name: "save_b0", what: "keeper save model intercept (save rate, shots on target, goals)", init: DEFAULT_PARAMS.shot.save.b0, min: -1, max: 3.5, step: 0.25,
     apply: (p, v) => ({ ...p, shot: { ...p.shot, save: { ...p.shot.save, b0: v } } }) },
+  { name: "pass_pc_weight", what: "weight of pitch control in a passer's estimate of a pass arriving (pass completion)", init: DEFAULT_PARAMS.pass.pitchControlWeight, min: 0, max: 0.8, step: 0.2,
+    apply: (p, v) => ({ ...p, pass: { ...p.pass, pitchControlWeight: v } }) },
+  { name: "pass_safety", what: "how much the safest option of each kind of pass sways the choice of pass (completion, long-pass share)", init: DEFAULT_PARAMS.pass.safetyWeight, min: 0, max: 6, step: 1,
+    apply: (p, v) => ({ ...p, pass: { ...p.pass, safetyWeight: v } }) },
   { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) }
 ]
