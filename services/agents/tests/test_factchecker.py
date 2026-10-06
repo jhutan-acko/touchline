@@ -112,3 +112,13 @@ async def test_the_model_extracts_undeclared_numbers(stats, case):
         STUB_RESPONDERS["extract"] = original
     assert r.verdict.status == "pass", failing(r)
     assert len(r.extracted) == 1 and r.draft.claims[-1].sentence == len(bare.sentences) - 1
+
+
+async def test_an_event_claim_stamped_at_the_strike_is_found_as_of_the_moment(stats, case):
+    # A shot is stamped when it resolves (the goal frame), after the frame it was struck at; a claim about it made
+    # "as of" the strike is still about an event inside the moment.
+    m, _, d = case
+    xg = next(c for c in d.claims if c.metric_id == "shot.xg")
+    early = d.model_copy(update={"claims": [c.model_copy(update={"at_frame": m.frame_from}) if c is xg else c for c in d.claims]})
+    r = await check(stats, case, early)
+    assert r.verdict.status == "pass", failing(r)

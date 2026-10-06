@@ -32,8 +32,8 @@ MERGE_S = 10.0  # signals of the same team this close to a promoted one belong t
 INSTRUCTIONS = """You are the Moment Detector for a live football broadcast overlay.
 INPUT lists candidate signals from the stats engine (id, type, team, player, clock, salience 0..1, value, data), the
 moments already shown recently, and `max`, the most you may promote. Promote only what a viewer would want a caption
-for now: decisive or unusual events, clear shifts in pressure or momentum. Prefer variety over repeating what was just
-shown. Ids in `must` are always promoted; list them too. Answer with the ids to promote, most important first."""
+for now: decisive or unusual events (an error that led to a shot, a big chance), clear shifts in pressure or momentum.
+Prefer variety over repeating what was just shown. Ids in `must` are always promoted; list them too. Answer with the ids to promote, most important first."""
 
 
 class Selection(BaseModel):

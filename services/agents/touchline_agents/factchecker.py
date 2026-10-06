@@ -72,9 +72,10 @@ class FactChecker:
                 if c.metric_id is None or c.value is None:
                     return "a metric claim needs metric_id and value"
                 if c.event_id is not None:
-                    found = await stats.call("get_events", ids=[c.event_id], to_frame=c.at_frame)
+                    # Events are looked up as of the moment: one struck before `at_frame` may be stamped when it resolves.
+                    found = await stats.call("get_events", ids=[c.event_id], to_frame=latest)
                     if not found["events"]:
-                        return f"no event {c.event_id} by frame {c.at_frame}"
+                        return f"no event {c.event_id} by frame {latest}"
                     actual = found["events"][0]["values"].get(c.metric_id)
                     if actual is None or abs(actual - c.value) > tolerance(actual):
                         return f"{c.metric_id} of {c.event_id} is {actual}, not {c.value}"
@@ -96,15 +97,15 @@ class FactChecker:
                 if c.value is None or not (minute <= c.value <= minute + 1):
                     return f"the moment is in minute {minute + 1}, not {c.value}"
             elif c.kind == "event":
-                found = await stats.call("get_events", ids=[c.event_id], to_frame=c.at_frame) if c.event_id else {"events": []}
+                found = await stats.call("get_events", ids=[c.event_id], to_frame=latest) if c.event_id else {"events": []}
                 if not found["events"]:
-                    return f"no event {c.event_id} by frame {c.at_frame}"
+                    return f"no event {c.event_id} by frame {latest}"
                 if c.subject and c.subject.startswith("p-") and found["events"][0]["player_id"] != c.subject:
                     return f"event {c.event_id} was by {found['events'][0]['player_id']}, not {c.subject}"
             elif c.kind == "better_option":
                 if not c.event_id or not c.receiver_id:
                     return "a better option needs event_id and receiver_id"
-                d = await stats.decision(c.event_id, c.at_frame)
+                d = await stats.decision(c.event_id, latest)
                 if d["chosen_rank"] in (None, 1):
                     return f"the pass at {c.event_id} was already the best option"
                 if d["best_receiver_id"] != c.receiver_id:
@@ -121,7 +122,7 @@ class FactChecker:
         retry, a later attempt drops what fails. `extract=False` skips the model (variants are checked by code only)."""
         t0 = time.perf_counter()
         roster = await stats.roster()
-        others = _other_names(roster, involved)
+        others = other_names(roster, involved)
         claims = list(draft.claims)
         extracted: list[Claim] = []
         fallback = False
@@ -177,7 +178,7 @@ def _undeclared(sentence: str, claims: list[Claim]) -> list[str]:
     return [t for t in numbers_in(sentence) if not any(t in c.quote for c in claims if c.quote)]
 
 
-def _other_names(roster: dict, involved: set[str]) -> list[str]:
+def other_names(roster: dict, involved: set[str]) -> list[str]:
     """Full names and surnames of rostered players who are not involved (surnames shared with an involved player are
     left out: the text may mean the involved one)."""
     players = [p for side in ("home", "away") for p in roster[side]["players"]]
