@@ -6,7 +6,7 @@ from touchline_agents.config import load_settings
 from touchline_agents.contracts import Draft, Segment
 from touchline_agents.detector import PRIORITY
 from touchline_agents.llm import STUB_RESPONDERS, StubChatClient
-from touchline_agents.personalizer import Personalizer, Variant, check_variant, make_cue, template_variant
+from touchline_agents.personalizer import Personalizer, Story, Variant, check_variant, make_cue, template_variant
 
 from .factories import NAMES, claim, moment
 
@@ -16,10 +16,14 @@ DRAFT = Draft(moment_id="mo-goal-3000", lang="en", sentences=["Goal for Home FC!
               claims=[c.model_copy(update={"sentence": i + 2}) for i, c in enumerate(CLAIMS[:2])] + [CLAIMS[2].model_copy(update={"sentence": 1})])
 
 
+def story(type_: str = "goal", cause: str = "low-probability chance") -> Story:
+    return Story.of_moment(moment(type_, player="h9"), cause, NAMES)
+
+
 def payload(seg: Segment, type_: str = "goal", cause: str = "low-probability chance"):
-    m = moment(type_, player="h9")
-    return {"segment": seg.model_dump(mode="json"), "moment": m.model_dump(mode="json"), "cause": cause, "names": NAMES, "draft": DRAFT.sentences,
-            "claims": [c.model_dump(mode="json") for c in DRAFT.claims]}
+    s = story(type_, cause)
+    return {"segment": seg.model_dump(mode="json"), "story": {"template": s.template, "team_id": s.team_id, "player_id": s.player_id, "clock": s.clock},
+            "headline": s.headlines[seg.lang], "names": NAMES, "draft": DRAFT.sentences, "claims": [c.model_dump(mode="json") for c in DRAFT.claims]}
 
 
 SEGMENTS = [Segment(mode=m, lang=l, club=c) for m, l, c in itertools.product(["casual", "analyst"], ["en", "es", "hi"], [None, "home-fc", "away-fc"])]
@@ -64,7 +68,7 @@ def test_cue_follows_the_contract():
     seg = Segment(mode="analyst", lang="en", club=None)
     m = moment("goal")
     v = template_variant(payload(seg))
-    cue = make_cue(m, seg, v, DRAFT.claims, ["m-e10", "m-e11"])
+    cue = make_cue(Story.of_moment(m, "low-probability chance", NAMES), seg, v, DRAFT.claims, ["m-e10", "m-e11"])
     assert cue.cue_id == f"{m.moment_id}-analyst.en.neutral" and cue.schema_ == "touchline.cue/1"
     assert cue.display.slot == "side_panel" and cue.display.ttl_ms == 12000 and cue.verified
     assert cue.data == {"shot.xg": 0.1234, "score.home": 1, "score.away": 0, "team.mom": 0.58}
@@ -72,8 +76,7 @@ def test_cue_follows_the_contract():
 
 
 async def test_fans_out_over_segments_through_the_model():
-    m = moment("goal", player="h9")
-    out = await Personalizer(StubChatClient(), SETTINGS).fan_out(m, DRAFT, "low-probability chance", NAMES, SEGMENTS[:6], [], [])
+    out = await Personalizer(StubChatClient(), SETTINGS).fan_out(story(), DRAFT, NAMES, SEGMENTS[:6], [], [])
     assert [p.cue.segment for p in out] == SEGMENTS[:6] and not any(p.fallback for p in out)
     assert len({p.cue.cue_id for p in out}) == 6
 
@@ -83,7 +86,7 @@ async def test_a_variant_that_fails_the_check_becomes_the_template():
     STUB_RESPONDERS["personalize"] = lambda p, r: {"headline": "Goal!", "body": "They had 9 shots and 0.12 xG.", "numbers": [{"claim": 0, "quote": "0.12"}]}
     try:
         seg = Segment(mode="casual", lang="en", club=None)
-        out = await Personalizer(StubChatClient(), SETTINGS).personalize(moment("goal", player="h9"), DRAFT, "low-probability chance", NAMES, seg, [], [])
+        out = await Personalizer(StubChatClient(), SETTINGS).personalize(story(), DRAFT, NAMES, seg, [], [])
     finally:
         STUB_RESPONDERS["personalize"] = original
     assert out.fallback and any('"9"' in r for r in out.reasons)
@@ -96,6 +99,6 @@ async def test_openai_writes_native_variants_that_pass_the_check(seg):
     from touchline_agents.llm import make_client
 
     live = load_settings({"TOUCHLINE_LLM": "openai", "TOUCHLINE_TIMEOUT_SCALE": "10"})
-    out = await Personalizer(make_client(live, "small"), live).personalize(moment("goal", player="h9"), DRAFT, "low-probability chance", NAMES, seg, ["Cy Outsider"], [])
+    out = await Personalizer(make_client(live, "small"), live).personalize(story(), DRAFT, NAMES, seg, ["Cy Outsider"], [])
     print(round(out.ms), out.cue.text.model_dump(), out.reasons)
     assert not out.fallback, out.reasons

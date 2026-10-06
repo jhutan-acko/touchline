@@ -52,3 +52,10 @@ def headline(moment: dict, cause: str, names: dict[str, str], lang: str = "en") 
     team = names.get(moment["team_id"] or "", "")
     player = names.get(moment["player_id"] or "", team)
     return HEADLINES[lang][headline_key(moment, cause)].format(team=team, player=player)
+
+
+RECAP_HEADLINES: dict[str, dict[str, str]] = {
+    "en": {"half_time": "Half-time: {home} v {away}", "full_time": "Full-time: {home} v {away}", "potm": "Player of the match: {player}."},
+    "es": {"half_time": "Descanso: {home} - {away}", "full_time": "Final: {home} - {away}", "potm": "Jugador del partido: {player}."},
+    "hi": {"half_time": "हाफ़-टाइम: {home} बनाम {away}", "full_time": "फ़ुल-टाइम: {home} बनाम {away}", "potm": "प्लेयर ऑफ़ द मैच: {player}।"},
+}
