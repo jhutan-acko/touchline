@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 .superpowers/
 .pytest_cache/
+
+# Local secrets (API keys): never committed
+.env
+.env.*
+!.env.example
