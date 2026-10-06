@@ -1,12 +1,12 @@
 # Attribution
 
-Touchline's simulator is original code. These projects and papers shaped its design; no code was copied from them.
+Touchline's simulator is original code. These projects and papers shaped its design; no code was copied from them, except the pitch-control model, which is ported from LaurieOnTracking (MIT, below).
 
 | Source | Licence | What we took |
 |---|---|---|
 | [tbleckert/football-simulator](https://github.com/tbleckert/football-simulator) | MIT | Ideas: typed event taxonomy, restart phase machine, intents with durations, injectable RNG |
 | [ZOXEXIVO/open-football](https://github.com/ZOXEXIVO/open-football) | Apache-2.0 | Ideas: constant-bearing interception, 3D ball physics, per-match plausibility bands |
-| Spearman (2018) pitch control, via [LaurieOnTracking](https://github.com/Friends-of-Tracking-Data-FoTD/LaurieOnTracking) | MIT | 0.7 s reaction time in time-to-intercept |
+| Spearman (2018) pitch control, via [LaurieOnTracking](https://github.com/Friends-of-Tracking-Data-FoTD/LaurieOnTracking) (© 2021 Friends-of-Tracking-Data-FoTD) | MIT | `calculate_pitch_control_at_target` ported to TypeScript with its default parameters (`packages/sim-core/src/pitchcontrol.ts`, checked against values from the original); the 0.7 s reaction time in time-to-intercept |
 | Singh (2019) expected threat, via [socceraction](https://github.com/ML-KULeuven/socceraction)'s `xthreat` module | MIT | The method: value iteration over moves and shots on a grid (our implementation, `touchline_analytics/xt.py`) |
 | Reynolds, *Steering Behaviors for Autonomous Characters* (GDC 1999) | — | Arrive, pursue and separation steering |
 | Anzer et al., *Common Data Format (CDF)*, arXiv:2505.15820 | — | Output format (v0.3.2) |
