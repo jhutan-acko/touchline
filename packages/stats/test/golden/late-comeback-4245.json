@@ -26,6 +26,10 @@
   "tilt|eastvale": 0.391892,
   "tilt|ironmoor": 0.608108,
   "game.chaos|match": 0.544193,
+  "act.xt|eastvale": 1.415984,
+  "act.xt|ironmoor": 3.098592,
+  "pitch.ctrl|eastvale": 0.576124,
+  "pitch.ctrl|ironmoor": 0.423876,
   "team.poss|eastvale": 0.488235,
   "team.poss|ironmoor": 0.457199
  },

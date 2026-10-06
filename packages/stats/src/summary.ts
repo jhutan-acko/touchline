@@ -2,7 +2,7 @@ import type { MetricId } from "@touchline/schema"
 import { metricDef } from "./catalog.js"
 import type { StatsEngine } from "./engine.js"
 
-const TEAM_METRICS: ReadonlyArray<MetricId> = ["team.poss", "pass.acc", "pass.xp", "pass.dist", "shot.xg", "shot.speed", "team.press", "ppda", "tilt", "team.mom", "plyr.dist"]
+const TEAM_METRICS: ReadonlyArray<MetricId> = ["team.poss", "pass.acc", "pass.xp", "pass.dist", "shot.xg", "shot.speed", "team.press", "ppda", "tilt", "team.mom", "act.xt", "pitch.ctrl", "plyr.dist"]
 
 const fmt = (v: number | null, unit: string) => (v === null ? "-" : unit === "share" ? `${(v * 100).toFixed(1)} %` : unit === "m" && v > 1000 ? `${(v / 1000).toFixed(1)} km` : v.toFixed(2))
 

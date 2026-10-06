@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { emittedAt, readRun, StatsEngine, StatsQuery, type ReplayError, type Roster, type StatsInput, type StatsModels } from "@touchline/stats"
+import { emittedAt, readRun, StatsEngine, StatsQuery, type ReplayError, type Roster, type StatsInput, type StatsModels, type XtGrid } from "@touchline/stats"
 
 export interface LoadOptions {
   /**
@@ -8,13 +8,15 @@ export interface LoadOptions {
    */
   readonly minute?: number
   readonly roster?: Roster
+  /** The expected-threat grid (without it `act.xt` has no value). */
+  readonly xt?: XtGrid
 }
 
 /** Replay a run folder into a stats engine (up to a minute, if given) and wrap it for queries. */
 export const loadRun = (dir: string, models: StatsModels, opts: LoadOptions = {}): Effect.Effect<StatsQuery, ReplayError> =>
   Effect.gen(function* () {
     const run = yield* readRun(dir, opts.roster)
-    const engine = new StatsEngine(run.info, models)
+    const engine = new StatsEngine(run.info, models, opts.xt ?? null)
     const minute = opts.minute
     const ticksPerMin = 60 / run.info.dt
     // The last tick to take: known for the first half up front, for the second once its first frame arrives.

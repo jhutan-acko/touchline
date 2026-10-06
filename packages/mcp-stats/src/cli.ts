@@ -6,7 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { Effect } from "effect"
 import { CliError, cliOptions, exitOnUserError, integer } from "@touchline/sim"
-import { modelsFromJson, ReplayError, type Roster, type StatsQuery } from "@touchline/stats"
+import { modelsFromJson, ReplayError, xtGridFromJson, type Roster, type StatsQuery } from "@touchline/stats"
 import { loadRun } from "./load.js"
 import { createStatsServer } from "./server.js"
 
@@ -24,6 +24,7 @@ exitOnUserError(() => {
   if (o.run === "") throw new CliError("--run is required (a folder written by pnpm sim, e.g. out/m-1)")
 })
 const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
+const xt = xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
 const leaguePath = join(root, "data/league/league.json")
 const roster = existsSync(leaguePath) ? (JSON.parse(readFileSync(leaguePath, "utf8")) as Roster) : undefined
 
@@ -49,7 +50,7 @@ const serveHttp = (q: StatsQuery, port: number) => {
   })
 }
 
-Effect.runPromise(loadRun(here(o.run), models, { ...(o.minute ? { minute: Number(o.minute) } : {}), ...(roster ? { roster } : {}) }))
+Effect.runPromise(loadRun(here(o.run), models, { xt, ...(o.minute ? { minute: Number(o.minute) } : {}), ...(roster ? { roster } : {}) }))
   .then(async (q) => {
     if (o.http !== "") serveHttp(q, Number(o.http))
     else {

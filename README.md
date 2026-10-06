@@ -44,7 +44,7 @@ Options for `pnpm sim`: `--seed` (0–4294967295), `--home` / `--away` (club ids
 
 ## Stats engine
 
-`packages/stats` turns the domain stream into the metrics of spec §5.2 (pass distance, accuracy and xPass, shot xG and speed, top speed and distance, possession, pressure index, PPDA, field tilt, momentum, control vs chaos) and raises signals when thresholds are crossed (goals, big chances, pressure shifts, momentum swings, chaos spikes, speed and distance alerts, difficult passes, milestones, cards, substitution impact). It is incremental and deterministic: every value is kept as of every tick, so a question about minute 60 gets the same answer during the match and afterwards, and a live run and a replay of its files agree exactly.
+`packages/stats` turns the domain stream into the metrics of spec §5.2 (pass distance, accuracy and xPass, shot xG and speed, top speed and distance, possession, pressure index, PPDA, field tilt, momentum, control vs chaos, expected threat added, pitch control) and raises signals when thresholds are crossed (goals, big chances, pressure shifts, momentum swings, chaos spikes, speed and distance alerts, difficult passes, milestones, cards, substitution impact). It is incremental and deterministic: every value is kept as of every tick, so a question about minute 60 gets the same answer during the match and afterwards, and a live run and a replay of its files agree exactly.
 
 ```bash
 pnpm sim --seed 7                      # writes out/m-7

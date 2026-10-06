@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect"
 import { CliError, cliOptions, exitOnUserError } from "@touchline/sim"
 import { StatsEngine } from "./engine.js"
 import { modelsFromJson } from "./models.js"
+import { xtGridFromJson } from "./xt.js"
 import { readRun, ReplayError, type Roster } from "./replay.js"
 import { signalStream } from "./stream.js"
 import { summary } from "./summary.js"
@@ -21,12 +22,13 @@ exitOnUserError(() => {
   if (o.run === "") throw new CliError("--run is required (a folder written by pnpm sim, e.g. out/m-1)")
 })
 const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
+const xt = xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
 const leaguePath = join(root, "data/league/league.json")
 const roster = existsSync(leaguePath) ? (JSON.parse(readFileSync(leaguePath, "utf8")) as Roster) : undefined
 
 const program = Effect.gen(function* () {
   const run = yield* readRun(here(o.run), roster)
-  const engine = new StatsEngine(run.info, models)
+  const engine = new StatsEngine(run.info, models, xt)
   const signals = Array.from(yield* Stream.runCollect(signalStream(engine, run.inputs)))
   if (o.signals) writeFileSync(here(o.signals), signals.map((s) => JSON.stringify(s)).join("\n") + "\n")
   console.log(summary(engine))

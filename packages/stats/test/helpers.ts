@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url"
 import type { DomainEvent } from "@touchline/schema"
 import type { MatchInfo, TrackFrame, TrackPlayer } from "../src/input.js"
 import { modelsFromJson, type StatsModels } from "../src/models.js"
+import { xtGridFromJson, type XtGrid } from "../src/xt.js"
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 export const models = (): StatsModels => modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
+export const xtGrid = (): XtGrid => xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
 
 /** Two teams of three: a keeper and two outfielders each. */
 export const INFO: MatchInfo = {

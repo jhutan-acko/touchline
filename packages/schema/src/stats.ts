@@ -3,7 +3,7 @@ import { Schema } from "effect"
 /** Stable metric ids (spec §5.2); agents cite them in every numeric claim. */
 export const MetricId = Schema.Literals([
   "pass.dist", "pass.acc", "pass.xp", "ball.speed", "shot.speed", "plyr.vmax", "plyr.dist", "shot.xg",
-  "team.mom", "team.press", "ppda", "tilt", "game.chaos", "team.poss"
+  "team.mom", "team.press", "ppda", "tilt", "game.chaos", "team.poss", "act.xt", "pitch.ctrl"
 ])
 export type MetricId = typeof MetricId.Type
 

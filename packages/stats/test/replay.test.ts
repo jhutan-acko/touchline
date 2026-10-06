@@ -13,9 +13,10 @@ import { StatsEngine } from "../src/engine.js"
 import { emittedAt, infoFromConfig, type StatsInput } from "../src/input.js"
 import { readRun, ReplayError } from "../src/replay.js"
 import { signalStream, stepInputs } from "../src/stream.js"
-import { models, root } from "./helpers.js"
+import { models, root, xtGrid } from "./helpers.js"
 
 const M = models()
+const XT = xtGrid()
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const club = (id: string) => league.clubs.find((c) => c.id === id)!
 const collect = <A, E>(s: Stream.Stream<A, E>) => Effect.runPromise(Stream.runCollect(s)).then((c) => Array.from(c))
@@ -43,10 +44,10 @@ describe("replay and streams", () => {
 
   beforeAll(async () => {
     await Effect.runPromise(writeMatch(cfg, dir))
-    live = new StatsEngine(infoFromConfig(cfg), M)
+    live = new StatsEngine(infoFromConfig(cfg), M, XT)
     liveSignals = await collect(signalStream(live, stepInputs(matchSteps(cfg))))
     const run = await Effect.runPromise(readRun(dir, league))
-    replay = new StatsEngine(run.info, M)
+    replay = new StatsEngine(run.info, M, XT)
     inputs = await collect(run.inputs)
     replaySignals = await collect(signalStream(replay, Stream.fromIterable(inputs)))
   }, 120_000)
@@ -63,7 +64,7 @@ describe("replay and streams", () => {
 
   it("answer a query about tick t the same before and after seeing what came later", () => {
     for (const t of [12_345, 40_000]) {
-      const partial = new StatsEngine(replay.info, M)
+      const partial = new StatsEngine(replay.info, M, XT)
       for (const i of inputs) if ((i.kind === "frame" ? i.frame.tick : emittedAt(i.event)) <= t) partial.ingest(i)
       partial.finish()
       expect(snapshot(partial, t)).toEqual(snapshot(replay, t))

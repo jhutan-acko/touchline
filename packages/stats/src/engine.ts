@@ -1,5 +1,5 @@
 import type { DomainEvent, MetricId, Signal, SignalType } from "@touchline/schema"
-import { attackX, matchClock, PITCH } from "@touchline/sim-core"
+import { attackX, matchClock, PITCH, pitchControlGrid, type PcPlayer } from "@touchline/sim-core"
 
 const PITCH_HALF_L = PITCH.halfL
 import { metricDef, type SubjectKind } from "./catalog.js"
@@ -7,6 +7,7 @@ import { passValues, shotXg } from "./derive.js"
 import { emittedAt, type MatchInfo, type StatsInput, type TeamInfo, type TrackFrame } from "./input.js"
 import type { StatsModels } from "./models.js"
 import { Momentum, threatAt } from "./momentum.js"
+import { xtAt, type XtGrid } from "./xt.js"
 import { Counters, maxBetween, Series } from "./store.js"
 
 /** A query the engine cannot answer (unknown subject, metric not defined for it) or input out of order. */
@@ -110,9 +111,16 @@ export class StatsEngine {
   /** Substitutions awaiting their impact check; a team's changes at the same moment are judged together. */
   private readonly pendingSubs: Array<{ readonly team: TeamInfo; readonly tick: number; readonly events: DomainEvent[] }> = []
 
+  /** The home team's share of pitch control, sampled every 10 s (see pitchControl). */
+  private readonly pcSamples = new Series()
+  private readonly pcGrids: Array<{ readonly tick: number; readonly home: ReadonlyArray<number> }> = []
+  private readonly gkIds: ReadonlySet<string>
+
   constructor(
     readonly info: MatchInfo,
-    readonly models: StatsModels
+    readonly models: StatsModels,
+    /** The expected-threat grid; without it `act.xt` has no value. */
+    readonly xt: XtGrid | null = null
   ) {
     for (const t of [info.home, info.away]) {
       this.teamById.set(t.id, t)
@@ -121,6 +129,7 @@ export class StatsEngine {
     this.speedWindow = Math.max(1, Math.round(0.5 / info.dt))
     this.ballWindow = Math.max(1, Math.round(0.2 / info.dt))
     this.momentum = new Momentum(info.dt)
+    this.gkIds = new Set([...info.home.players, ...info.away.players].filter((p) => p.role === "GK").map((p) => p.id))
   }
 
   opponentOf(team: TeamInfo): TeamInfo {
@@ -232,7 +241,10 @@ export class StatsEngine {
         if (team) this.counters.add("pressures", team.id, tick, 1)
         break
       case "carry":
-        if (team && e.x !== null && e.y !== null && e.x_end !== null && e.y_end !== null) this.addThreat(team, tick, e.x, e.y, e.x_end, e.y_end)
+        if (team && e.x !== null && e.y !== null && e.x_end !== null && e.y_end !== null) {
+          this.addThreat(team, tick, e.x, e.y, e.x_end, e.y_end)
+          this.addXt(e, tick, team)
+        }
         break
       case "possession_change":
         this.counters.add("turnovers", "match", tick, 1)
@@ -273,7 +285,19 @@ export class StatsEngine {
     const ax = attackX(team.side, e.x!)
     if (ax < PPDA_LINE_X) this.counters.add("ppda_passes", this.opponentOf(team).id, tick, 1)
     if (ax > FINAL_THIRD_X) this.counters.add("final_third", team.id, tick, 1)
-    if (ok) this.addThreat(team, tick, e.x!, e.y!, e.x_end!, e.y_end!)
+    if (ok) {
+      this.addThreat(team, tick, e.x!, e.y!, e.x_end!, e.y_end!)
+      this.addXt(e, tick, team)
+    }
+  }
+
+  /** Expected threat added by a completed pass or a carry: xT at its end minus xT at its start. */
+  private addXt(e: DomainEvent, tick: number, team: TeamInfo): void {
+    if (!this.xt || e.x === null || e.y === null || e.x_end === null || e.y_end === null) return
+    const attack = team.side === "home" ? 1 : -1
+    const gain = xtAt(this.xt, e.x_end, e.y_end, attack) - xtAt(this.xt, e.x, e.y, attack)
+    this.derived.set(e.id, { ...(this.derived.get(e.id) ?? {}), "act.xt": gain })
+    for (const subject of [e.player_id, team.id]) if (subject !== null) this.counters.add("xt", subject, tick, gain)
   }
 
   /** A tackle, interception or foul in the opponent's own 60 % of the pitch counts for PPDA. */
@@ -405,6 +429,7 @@ export class StatsEngine {
     const w = this.ticks(DYNAMICS_WINDOW_S)
     const home = this.momentum.share(this.info.home.id, this.info.away.id, t)
     if (home !== null) this.momSamples.push(t, home)
+    this.samplePitchControl(f)
     const r3 = (v: number) => Math.round(v * 1000) / 1000
 
     for (const team of [this.info.home, this.info.away]) {
@@ -469,6 +494,38 @@ export class StatsEngine {
         salience: Math.min(0.8, 0.4 + Math.abs(after - before)), evidence: [...sub.events.map((e) => e.id), `team.mom@${sub.tick - sw}-${sub.tick + sw}`], data: { before: r3(before), after: r3(after), substitutions: sub.events.length }
       })
     }
+  }
+
+  /** Pitch control of the home team over the whole pitch (a 21 x 14 grid), with velocities from the last 0.5 s. */
+  private samplePitchControl(f: TrackFrame): void {
+    const players = (list: TrackFrame["home"]): PcPlayer[] =>
+      list.map((p) => {
+        const hist = this.recent.get(p.id) ?? []
+        const a = hist[0]
+        const span = a ? (f.tick - a.tick) * this.info.dt : 0
+        return { x: p.x, y: p.y, vx: a && span > 0 ? (p.x - a.x) / span : 0, vy: a && span > 0 ? (p.y - a.y) / span : 0, gk: this.gkIds.has(p.id) }
+      })
+    const grid = pitchControlGrid(players(f.home), players(f.away), null)
+    this.pcGrids.push({ tick: f.tick, home: grid.att })
+    this.pcSamples.push(f.tick, grid.att.reduce((a, b) => a + b, 0) / grid.att.length)
+  }
+
+  /**
+   * The latest pitch-control map at or before `at` (sampled every 10 s): the home team's control in each cell of a
+   * 21 x 14 grid (row-major, row 0 at y = -34, column 0 at x = -52.5); the away team's is 1 minus it.
+   */
+  pitchControl(at: number): { readonly tick: number; readonly cols: number; readonly rows: number; readonly home: ReadonlyArray<number> } | null {
+    let lo = 0
+    let hi = this.pcGrids.length - 1
+    let best = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (this.pcGrids[mid]!.tick <= at) {
+        best = mid
+        lo = mid + 1
+      } else hi = mid - 1
+    }
+    return best < 0 ? null : { ...this.pcGrids[best]!, cols: 21, rows: 14 }
   }
 
   /**
@@ -617,6 +674,24 @@ export class StatsEngine {
       }
       case "game.chaos":
         return this.chaosAt(at)
+      case "act.xt":
+        return this.xt ? this.counters.between("xt", subject, from, at) : null
+      case "pitch.ctrl": {
+        // The latest sample, or over a window the mean of the samples.
+        const home = subject === this.info.home.id
+        const s = this.pcSamples
+        if (from === null) {
+          const i = s.indexAt(at)
+          return i < 0 ? null : home ? s.values[i]! : 1 - s.values[i]!
+        }
+        let sum = 0
+        let n = 0
+        for (let i = s.indexAt(at); i >= 0 && s.ticks[i]! > from; i--) {
+          sum += home ? s.values[i]! : 1 - s.values[i]!
+          n++
+        }
+        return n ? sum / n : null
+      }
       case "team.poss":
         return ratio(this.counters.between("poss", subject, from, at), this.counters.between("inplay", "match", from, at))
       default:

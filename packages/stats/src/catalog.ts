@@ -30,6 +30,8 @@ export const METRICS: ReadonlyArray<MetricDef> = [
   { id: "ppda", name: "PPDA", unit: "passes per action", subjects: ["team"], windowed: true, defaultWindowS: null, description: "Opponent passes in their own 60 % of the pitch per defensive action there (tackles, interceptions, fouls)." },
   { id: "tilt", name: "Field tilt", unit: "share", subjects: ["team"], windowed: true, defaultWindowS: null, description: "The team's share of passes made in the attacking third." },
   { id: "game.chaos", name: "Control vs chaos", unit: "index 0..1", subjects: ["match"], windowed: false, defaultWindowS: null, description: "Last 5 minutes: turnover rate, short possession chains and momentum volatility, each scaled to 0..1 and averaged." },
+  { id: "act.xt", name: "Expected threat added", unit: "xT", subjects: ["player", "team"], windowed: true, defaultWindowS: null, description: "Sum over completed passes and carries of expected threat at the end minus at the start (12 x 8 grid fitted on IDSSE by value iteration)." },
+  { id: "pitch.ctrl", name: "Pitch control", unit: "share", subjects: ["team"], windowed: true, defaultWindowS: null, description: "The team's share of the pitch it would win the ball on (Spearman pitch control over a 21 x 14 grid, sampled every 10 s); over a window, the mean of the samples." },
   { id: "team.poss", name: "Possession", unit: "share", subjects: ["team"], windowed: true, defaultWindowS: null, description: "Share of in-play time the team had the ball, from tracking." }
 ]
 
