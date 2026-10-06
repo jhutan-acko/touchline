@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync, rmSync } from "node:fs"
+import { mkdirSync, readFileSync, rmSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect } from "effect"
@@ -15,6 +15,14 @@ const o = cliOptions("realism: simulate held-out matches and write a realism rep
   out: { default: join(root, "out/realism-report.md"), help: "where to write the report" },
   matches: { default: "10", check: positiveInteger, help: "held-out matches to simulate (seeds 2000+)" },
   params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" }
+})
+// Make the report's folder now, before the matches are simulated.
+exitOnUserError(() => {
+  try {
+    mkdirSync(dirname(here(o.out)), { recursive: true })
+  } catch (e) {
+    throw new CliError(`Cannot write to ${o.out}: ${e instanceof Error ? e.message : String(e)}`)
+  }
 })
 const matches = Number(o.matches)
 const params: Params = exitOnUserError(() => {

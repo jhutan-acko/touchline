@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync } from "node:fs"
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -31,6 +31,19 @@ describe("calibration command lines", () => {
     expect(tune).toMatch(/--out\s.*\(default: [^)]*out\/touchline-params\.json\)/)
     const realism = run("src/realism.ts", ["--help"]).stdout
     expect(realism).toMatch(/--out\s.*\(default: [^)]*out\/realism-report\.md\)/)
+  })
+  it("the tuner and the realism report make their output folder before any work, and refuse one they cannot make", () => {
+    const base = mkdtempSync(join(tmpdir(), "touchline-cli-"))
+    // The run stops at the missing start file, but the folder for its result already exists.
+    const r = run("src/cli.ts", ["--from", "no-such-start.json", "--out", join(base, "new/sub/params.json")])
+    expect(r.status).toBe(2)
+    expect(existsSync(join(base, "new/sub"))).toBe(true)
+    writeFileSync(join(base, "file"), "")
+    for (const [script, out] of [["src/cli.ts", "file/params.json"], ["src/realism.ts", "file/report.md"]] as const) {
+      const bad = run(script, ["--out", join(base, out)])
+      expect(bad.status, script).toBe(2)
+      expect(bad.stderr.trim()).toMatch(/^Cannot write to /)
+    }
   })
   it("the tuner reports a missing targets or start file in one line", () => {
     const out = join(mkdtempSync(join(tmpdir(), "touchline-cli-")), "params.json")

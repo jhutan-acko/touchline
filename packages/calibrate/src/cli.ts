@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { League } from "@touchline/league"
@@ -21,6 +21,14 @@ const o = cliOptions("calibrate: tune engine knobs to real-match targets (method
   from: { default: "", help: "start from the calibration.knobs of this file" }
 })
 const outPath = here(o.out)
+// Make the output folder now: a tuning chunk runs for most of an hour and must not fail when it writes its result.
+exitOnUserError(() => {
+  try {
+    mkdirSync(dirname(outPath), { recursive: true })
+  } catch (e) {
+    throw new CliError(`Cannot write to ${o.out}: ${e instanceof Error ? e.message : String(e)}`)
+  }
+})
 const matches = Number(o.matches)
 const rounds = Number(o.rounds)
 /** Read a JSON input file; a missing or malformed file is a one-line error (exit 2). */

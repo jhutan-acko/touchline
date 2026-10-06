@@ -74,6 +74,8 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, pass: { ...p.pass, pitchControlWeight: v } }) },
   { name: "pass_safety", what: "how much the safest option of each kind of pass sways the choice of pass (completion, long-pass share)", init: DEFAULT_PARAMS.pass.safetyWeight, min: 0, max: 6, step: 1,
     apply: (p, v) => ({ ...p, pass: { ...p.pass, safetyWeight: v } }) },
+  { name: "pass_arrive", what: "ground passes are struck to arrive at this speed (m/s): faster passes are intercepted less but run out more", init: DEFAULT_PARAMS.pass.arriveSpeed, min: 5, max: 12, step: 1,
+    apply: (p, v) => ({ ...p, pass: { ...p.pass, arriveSpeed: v } }) },
   { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) }
 ]
