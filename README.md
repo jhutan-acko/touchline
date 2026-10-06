@@ -30,11 +30,12 @@ UPDATE_REALISM_BASELINE=1 pnpm --filter @touchline/calibrate test realism-gate  
 
 ## Stats models
 
-The stats engine's pass-difficulty (xPass) and expected-goals (xG) models are logistic regressions fitted on the seven IDSSE matches, with features taken from event locations and the tracking frame at that moment (all seven tracking files, ~370 MB each):
+The stats engine's pass-difficulty (xPass) and expected-goals (xG) models are logistic regressions, and its expected-threat (xT) grid is solved by value iteration over passes and shots, fitted on the seven IDSSE matches, with features taken from event locations and the tracking frame at that moment (all seven tracking files, ~370 MB each):
 
 ```bash
 uv run --project python/analytics python -m touchline_analytics.idsse --tracking J03WMX J03WN1 J03WOH J03WOY J03WPY J03WQQ J03WR9
 uv run --project python/analytics python -m touchline_analytics.stats_models   # data/params/stats-models.json (coefficients only)
+uv run --project python/analytics python -m touchline_analytics.xt             # data/params/xt-grid.json (12 x 8 expected-threat grid)
 ```
 
 `pnpm sim` loads `data/params/touchline-params.json` by default (`--params <file>` to override). Every parameter file must carry provenance with an allowed licence; StatsBomb-derived parameters are refused.
