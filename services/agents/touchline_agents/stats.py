@@ -21,6 +21,11 @@ from agent_framework.exceptions import ToolExecutionException
 from .config import REPO
 
 
+# Tools a model may call (fast, read-only). Re-simulation tools take seconds and stay off the live path; code can
+# still call any tool directly (the Fact-Checker's verify_claim).
+MODEL_TOOLS = ["match_info", "list_metrics", "get_metric", "get_series", "rank_players", "get_signals", "get_events", "get_decision"]
+
+
 class StatsError(Exception):
     """A stats tool refused the request (unknown id, no such event, ...) or the server is unusable."""
 
@@ -41,7 +46,7 @@ class StatsClient:
 
     def __init__(self, url: str, allowed_hosts: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})) -> None:
         self.url = check_url(url, allowed_hosts)
-        self.tool = MCPStreamableHTTPTool(name="stats", url=self.url, load_prompts=False)
+        self.tool = MCPStreamableHTTPTool(name="stats", url=self.url, load_prompts=False, allowed_tools=MODEL_TOOLS)
         self._info: dict | None = None
 
     async def __aenter__(self) -> "StatsClient":
