@@ -285,3 +285,28 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const recorded = options.some(same) ? options : [...options, chosenOption]
   return { action: chosen.action, candidate: chosen, decisionQuality: quality, xg: null, pressure, ...record, options: recorded, chosenRank, fallback }
 }
+
+/**
+ * A decision whose pass is replaced by a what-if override: the best-valued pass to `receiverId` (of `kind` if
+ * given). The record keeps the probabilities and options the player weighed, with the forced pass ranked among
+ * them. Returned unchanged when no such pass is available (the receiver too close, too far or sent off).
+ */
+export const overridePass = (d: Decision, input: DecisionInput, o: { readonly receiverId: string; readonly kind?: string }, p: Params): Decision => {
+  const candidates = buildCandidates(input, p, d.pressure)
+  const matching = candidates.filter((c) => c.receiverId === o.receiverId && (o.kind === undefined || c.kind === o.kind))
+  if (matching.length === 0) return d
+  const chosen = matching.reduce((a, b) => (b.value > a.value ? b : a))
+  const best = Math.max(...candidates.map((c) => c.value))
+  const option = toOption(chosen)
+  const same = (r: OptionRecord) => r.receiver_id === option.receiver_id && r.target_x === option.target_x && r.target_y === option.target_y
+  return {
+    ...d,
+    action: chosen.action,
+    candidate: chosen,
+    decisionQuality: best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1,
+    xg: null,
+    chosenRank: 1 + candidates.filter((c) => c.value > chosen.value).length,
+    options: d.options.some(same) ? d.options : [...d.options, option],
+    fallback: false
+  }
+}

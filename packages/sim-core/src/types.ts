@@ -287,6 +287,14 @@ export interface SubsState {
   readonly used: ReadonlyArray<string>
 }
 
+/** A what-if instruction: at their next decision, this player plays the pass to `receiverId` (see whatif.ts). */
+export interface PassOverride {
+  readonly playerId: string
+  readonly receiverId: string
+  /** The kind of pass (short, through, ...); the best-valued kind to that receiver when absent. */
+  readonly kind?: string
+}
+
 export interface MatchState {
   readonly config: MatchConfig
   readonly tick: number
@@ -316,6 +324,8 @@ export interface MatchState {
   readonly scriptGoals: ReadonlyArray<number>
   readonly rng: Readonly<Record<Concern, RngState>>
   readonly eventSeq: number
+  /** A pass to force at the player's next decision (what-if forks only; absent in played matches). */
+  readonly override?: PassOverride
 }
 
 export interface StepResult {

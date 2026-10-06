@@ -30,11 +30,15 @@ export interface ScriptedRun {
   /** Every step of the accepted match, kickoff to full time: frame and events only. */
   readonly steps: ReadonlyArray<StepOutput>
   readonly windows: ReadonlyArray<WindowResult>
+  /** The accepted match's states at the ticks asked for in `statesAt` (what-if forks start from them). */
+  readonly states: ReadonlyMap<number, MatchState>
 }
 
 export interface RunOptions {
   /** Re-plays of a window with fresh random sub-streams before forcing (default 5; at most MAX_RETRIES). */
   readonly retries?: number
+  /** Keep the accepted match's state at these ticks (after each tick's step). */
+  readonly statesAt?: ReadonlySet<number>
 }
 
 /** Each window's retries draw sub-seeds window * 64 + attempt, so more than 62 would reuse the next window's. */
@@ -145,12 +149,16 @@ export const runScript = (cfg: MatchConfig, opts: RunOptions = {}): ScriptedRun 
   const blocks = groups(cfg.script?.entries ?? [])
   const steps: StepOutput[] = []
   const windows: WindowResult[] = []
+  const states = new Map<number, MatchState>()
+  const keep = opts.statesAt ?? new Set<number>()
   let s = initMatch(cfg)
+  if (keep.has(s.tick)) states.set(s.tick, s)
   const advance = (until: (st: MatchState) => boolean) => {
     while (!isFinished(s) && !until(s)) {
       const r = step(s)
       s = r.state
       steps.push({ frame: r.frame, events: r.events })
+      if (keep.has(s.tick)) states.set(s.tick, s)
     }
   }
   blocks.forEach((block, bi) => {
@@ -164,15 +172,18 @@ export const runScript = (cfg: MatchConfig, opts: RunOptions = {}): ScriptedRun 
       let t = attempt === 0 ? checkpoint : reseed(checkpoint, bi, attempt)
       if (forcing) t = { ...t, forced: forcesFor(block) }
       const buffer: StepOutput[] = []
+      const kept = new Map<number, MatchState>()
       while (!isFinished(t) && minuteOf(t) < end) {
         const r = step(t)
         t = r.state
         buffer.push({ frame: r.frame, events: r.events })
+        if (keep.has(t.tick)) kept.set(t.tick, t)
       }
       const events = buffer.flatMap((r) => r.events)
       const achieved = block.every((e) => entryAchieved(e, events, cfg))
       if (achieved || forcing) {
         steps.push(...buffer)
+        for (const [k, v] of kept) states.set(k, k === t.tick ? { ...v, forced: [] } : v)
         s = { ...t, forced: [] }
         const frames = buffer.filter((r) => r.frame)
         const results = block.map((e) => ({ achieved: entryAchieved(e, events, cfg), forced: forcing && entryForced(e, events, cfg) }))
@@ -182,5 +193,5 @@ export const runScript = (cfg: MatchConfig, opts: RunOptions = {}): ScriptedRun 
     }
   })
   advance(() => false)
-  return { steps, windows }
+  return { steps, windows, states }
 }

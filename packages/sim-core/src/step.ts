@@ -1,5 +1,5 @@
 import { stepBall } from "./ball.js"
-import { decide, lastDefenderAttackX, nearestOpponent, type Decision } from "./decide.js"
+import { decide, lastDefenderAttackX, nearestOpponent, overridePass, type Decision } from "./decide.js"
 import { buildEvent, round2 } from "./events.js"
 import { behindPoint, clearAway, crossBlocker, DEFLECT_SPEED, deflectLoose, inOwnBox, keeperAction, keeperCanCome } from "./deflect.js"
 import { executeKick, pressureFrom } from "./execute.js"
@@ -39,6 +39,7 @@ import {
   type Frame,
   type MatchConfig,
   type MatchState,
+  type PassOverride,
   type PendingEvent,
   type Phase,
   type PlayerState,
@@ -162,6 +163,7 @@ class Work {
   subs: Record<Side, SubsState>
   forced: ScriptEntry[]
   scriptGoals: number[]
+  override: PassOverride | null
   rng: Record<Concern, Rng>
   seq: number
   events: DomainEvent[] = []
@@ -185,6 +187,7 @@ class Work {
     this.subs = { ...s.subs }
     this.forced = [...s.forced]
     this.scriptGoals = [...s.scriptGoals]
+    this.override = s.override ?? null
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
@@ -291,7 +294,8 @@ class Work {
       forced: this.forced,
       scriptGoals: this.scriptGoals,
       rng: out,
-      eventSeq: this.seq
+      eventSeq: this.seq,
+      ...(this.override ? { override: this.override } : {})
     }
   }
 }
@@ -763,20 +767,21 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
   finishCarry(w, owner)
   const side = owner.side
   const team = teamOf(w.cfg, side)
-  const decision = decide(
-    {
-      owner,
-      teammates: w.active(side),
-      opponents: w.active(other(side)),
-      style: team.style,
-      scoreDiff: w.score[side] - w.score[other(side)],
-      minute: w.minute(),
-      restart,
-      scriptBias: scriptBias(w, side)
-    },
-    w.p,
-    w.rng.decision
-  )
+  const input = {
+    owner,
+    teammates: w.active(side),
+    opponents: w.active(other(side)),
+    style: team.style,
+    scoreDiff: w.score[side] - w.score[other(side)],
+    minute: w.minute(),
+    restart,
+    scriptBias: scriptBias(w, side)
+  }
+  let decision = decide(input, w.p, w.rng.decision)
+  if (w.override?.playerId === owner.id) {
+    decision = overridePass(decision, input, w.override, w.p)
+    w.override = null
+  }
   const until = (s: number) => w.tick + Math.max(1, Math.round(s / w.dt))
   switch (decision.action) {
     case "hold":
