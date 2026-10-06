@@ -29,5 +29,6 @@ dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "datamodel-code-generator==0.83
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 markers = ["live: calls the real model API (needs OPENAI_API_KEY; run with -m live)"]
 addopts = "-m 'not live'"
