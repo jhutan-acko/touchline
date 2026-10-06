@@ -26,6 +26,13 @@ const FRAME_MEMORY_S = 30
 export const DIFFICULT_PASS_XP = 0.55
 /** A shot at least this likely to score (xG) is a big chance. */
 export const BIG_CHANCE_XG = 0.3
+/**
+ * A visible error (a mis-hit pass or clearance, a bad first touch) that gave the ball away is costly when the
+ * opponents shoot within this many seconds, before the erring team wins it back (spec §5.1.10, as in the manifest's
+ * critical errors). A bad touch counts as giving the ball away when the opponents have it within 5 s.
+ */
+export const COSTLY_ERROR_S = 15
+const BAD_TOUCHES: ReadonlySet<string> = new Set(["heavy", "miscontrol", "missed"])
 /** Counts at which a player milestone is raised. */
 /** Opponent passes behind this line (attacking x, i.e. in their own 60 % of the pitch) and defensive actions beyond it count for PPDA. */
 export const PPDA_LINE_X = -PITCH_HALF_L + 0.6 * 2 * PITCH_HALF_L
@@ -110,6 +117,8 @@ export class StatsEngine {
   private pendingDynamics: TrackFrame | null = null
   /** Substitutions awaiting their impact check; a team's changes at the same moment are judged together. */
   private readonly pendingSubs: Array<{ readonly team: TeamInfo; readonly tick: number; readonly events: DomainEvent[] }> = []
+  /** Visible errors still within COSTLY_ERROR_S; `lost` once they have given the ball away. */
+  private pendingErrors: Array<{ readonly e: DomainEvent; lost: boolean }> = []
 
   /** The home team's share of pitch control, sampled every 10 s (see pitchControl). */
   private readonly pcSamples = new Series()
@@ -256,6 +265,37 @@ export class StatsEngine {
           else this.pendingSubs.push({ team, tick, events: [e] })
         }
         break
+    }
+    if (e.team_id !== null) this.trackErrors(e)
+  }
+
+  /** Follow visible errors until they lead to an opponent shot (raising costly_error), are won back, or expire. */
+  private trackErrors(e: DomainEvent): void {
+    const horizon = this.ticks(COSTLY_ERROR_S)
+    this.pendingErrors = this.pendingErrors.filter((p) => e.frame_id - p.e.frame_id <= horizon)
+    const a = e.attrs
+    if ((e.type === "pass" || e.type === "clearance") && a.execution === "mishit" && e.outcome !== "successful") {
+      this.pendingErrors.push({ e, lost: true })
+    } else if (e.type === "reception" && typeof a.first_touch === "string" && BAD_TOUCHES.has(a.first_touch)) {
+      // Lost only once the opponents have the ball (a loose touch the same team recovers is not).
+      this.pendingErrors.push({ e, lost: false })
+    } else if (e.type === "possession_change") {
+      // The erring team has it back: its errors lead nowhere. The other side has it: a bad touch within 5 s lost it.
+      this.pendingErrors = this.pendingErrors.filter((p) => p.e.team_id !== e.team_id)
+      for (const p of this.pendingErrors) if (e.frame_id - p.e.frame_id <= this.ticks(5)) p.lost = true
+    } else if (e.type === "shot") {
+      const costly = this.pendingErrors.filter((p) => p.lost && p.e.team_id !== e.team_id)
+      this.pendingErrors = this.pendingErrors.filter((p) => !costly.includes(p))
+      const xg = this.derived.get(e.id)?.["shot.xg"] ?? null
+      const v = xg === null ? null : Math.round(xg * 1000) / 1000
+      const goal = e.outcome === "goal"
+      for (const { e: m } of costly) {
+        this.raise("costly_error", e, {
+          team_id: m.team_id, player_id: m.player_id, metric: v === null ? null : "shot.xg", value: v, frame_from: m.frame_id, frame_to: emittedAt(e),
+          salience: goal ? 0.95 : Math.min(0.9, 0.7 + 0.2 * (xg ?? 0)), evidence: [m.id, e.id],
+          data: { ...(v === null ? {} : { "shot.xg": v }), goal: goal ? 1 : 0, under_pressure: m.attrs.under_pressure === true ? 1 : 0 }
+        })
+      }
     }
   }
 

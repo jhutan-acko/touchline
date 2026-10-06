@@ -18,11 +18,11 @@ from .llm import agent_options, run_structured, stub_responder
 COOLDOWN_S: dict[str, float] = {
     "goal": 0, "card": 0, "big_chance": 30, "pressure_shift": 300, "momentum_swing": 300, "chaos_spike": 300,
     "substitution_impact": 300, "difficult_pass_completed": 120, "speed_alert": 300, "player_milestone": 300,
-    "distance_milestone": 600,
+    "distance_milestone": 600, "costly_error": 0,
 }
 PRIORITY: dict[str, int] = {
     "goal": 1, "big_chance": 2, "pressure_shift": 2, "momentum_swing": 2, "chaos_spike": 2, "substitution_impact": 2,
-    "card": 3, "difficult_pass_completed": 3, "speed_alert": 3, "player_milestone": 3, "distance_milestone": 3,
+    "costly_error": 2, "card": 3, "difficult_pass_completed": 3, "speed_alert": 3, "player_milestone": 3, "distance_milestone": 3,
 }
 PROMOTE_SALIENCE = 0.5  # the rules promote at or above this
 CANDIDATE_SALIENCE = 0.25  # the model may promote at or above this

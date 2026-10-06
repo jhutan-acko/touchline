@@ -123,7 +123,7 @@ export const createStatsServer = (q: StatsQuery, advisor: Advisor | null = null)
     "get_events",
     {
       title: "Get events",
-      description: "Match events between two frames (passes, shots, tackles, ...) with the values the stats engine derived (pass.dist, pass.xp, shot.xg, shot.speed). Use their ids as evidence.",
+      description: "Match events between two frames (passes, shots, tackles, ...) with the values the stats engine derived (pass.dist, pass.xp, shot.xg, shot.speed) and what could be seen of them (qualifiers: execution such as mishit, first_touch such as heavy, under_pressure, card colour, ...). Use their ids as evidence.",
       inputSchema: {
         from_frame: fromFrame,
         to_frame: toFrame,

@@ -71,7 +71,8 @@
             "difficult_pass_completed",
             "player_milestone",
             "card",
-            "substitution_impact"
+            "substitution_impact",
+            "costly_error"
           ]
         },
         "frame_id": {
@@ -210,7 +211,8 @@
             "difficult_pass_completed",
             "player_milestone",
             "card",
-            "substitution_impact"
+            "substitution_impact",
+            "costly_error"
           ]
         },
         "signal_ids": {

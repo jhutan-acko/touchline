@@ -179,6 +179,10 @@
    null
   ],
   [
+   "golden-costly_error-21249-p-iro-02",
+   0.123
+  ],
+  [
    "golden-goal-21249-p-evu-11",
    0.123
   ],
@@ -425,6 +429,10 @@
   [
    "golden-player_milestone-55171-p-iro-10",
    0.757576
+  ],
+  [
+   "golden-costly_error-55327-p-evu-01",
+   0.281
   ]
  ]
 }

@@ -35,7 +35,19 @@ export interface EventView {
   readonly y_end: number | null
   /** Values the stats engine derived (pass.dist, pass.xp, shot.xg, shot.speed). */
   readonly values: Readonly<Record<string, number>>
+  /** What could be seen of the event (QUALIFIERS): how a pass was struck, a first touch, pressure, a card's colour. */
+  readonly qualifiers: Readonly<Record<string, string | boolean>>
 }
+
+/**
+ * Event attributes an observer could report, so agents can name a cause ("a mis-hit under pressure"). An allow-list:
+ * the simulator's ground truth (`scripted`) and decision-model internals (`best_receiver_id`: see get_decision) stay out.
+ */
+export const QUALIFIERS: ReadonlyArray<string> = [
+  "execution", "first_touch", "under_pressure", "lost_possession", "kind", "height", "body_part", "technique", "restart",
+  "colour", "on_target", "handling", "own_goal", "scorer_id", "receiver_id", "intended_receiver_id", "victim_id",
+  "winner_id", "loser_id", "target_id", "blocked", "ball", "reason", "side", "from", "method"
+]
 
 export interface DecisionView {
   readonly event_id: string
@@ -206,5 +218,9 @@ const view = (e: DomainEvent, values: Readonly<Record<string, number>>): EventVi
   y: e.y,
   x_end: e.x_end,
   y_end: e.y_end,
-  values
+  values,
+  qualifiers: Object.fromEntries(QUALIFIERS.flatMap((k) => {
+    const v = e.attrs[k]
+    return typeof v === "string" || typeof v === "boolean" ? [[k, v] as const] : []
+  }))
 })

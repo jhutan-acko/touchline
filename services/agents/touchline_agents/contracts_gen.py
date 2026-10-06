@@ -14,7 +14,7 @@ class Signal(BaseModel):
     )
     id: str
     match_id: str
-    type: Literal["goal", "big_chance", "pressure_shift", "momentum_swing", "chaos_spike", "speed_alert", "distance_milestone", "difficult_pass_completed", "player_milestone", "card", "substitution_impact"]
+    type: Literal["goal", "big_chance", "pressure_shift", "momentum_swing", "chaos_spike", "speed_alert", "distance_milestone", "difficult_pass_completed", "player_milestone", "card", "substitution_impact", "costly_error"]
     frame_id: int
     frame_from: int
     frame_to: int
@@ -35,7 +35,7 @@ class Moment(BaseModel):
     )
     moment_id: constr(min_length=1)
     match_id: constr(min_length=1)
-    type: Literal["goal", "big_chance", "pressure_shift", "momentum_swing", "chaos_spike", "speed_alert", "distance_milestone", "difficult_pass_completed", "player_milestone", "card", "substitution_impact"]
+    type: Literal["goal", "big_chance", "pressure_shift", "momentum_swing", "chaos_spike", "speed_alert", "distance_milestone", "difficult_pass_completed", "player_milestone", "card", "substitution_impact", "costly_error"]
     signal_ids: list[constr(min_length=1)] = Field(..., min_length=1)
     frame_id: conint(ge=0)
     frame_from: conint(ge=0)

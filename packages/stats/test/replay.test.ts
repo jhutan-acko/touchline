@@ -72,6 +72,13 @@ describe("replay and streams", () => {
     }
   })
 
+  it("raise a costly_error for exactly the manifest's errors leading to a shot or goal", () => {
+    const truth = (JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as { truths: { critical_errors: Array<{ mistake_id: string; shot_id: string }> } }).truths.critical_errors
+    const raised = liveSignals.filter((s) => s.type === "costly_error").map((s) => s.evidence.join(" ")).sort()
+    expect(raised.length).toBeGreaterThan(0)
+    expect(raised).toEqual(truth.map((c) => `${c.mistake_id} ${c.shot_id}`).sort())
+  })
+
   it("match the committed golden summary (UPDATE_STATS_GOLDEN=1 rewrites it after an intended change)", () => {
     const r = (v: number | null) => (v === null ? null : Math.round(v * 1e6) / 1e6)
     const summary = {

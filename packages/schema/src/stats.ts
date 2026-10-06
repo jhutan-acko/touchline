@@ -9,7 +9,7 @@ export type MetricId = typeof MetricId.Type
 
 export const SignalType = Schema.Literals([
   "goal", "big_chance", "pressure_shift", "momentum_swing", "chaos_spike", "speed_alert", "distance_milestone",
-  "difficult_pass_completed", "player_milestone", "card", "substitution_impact"
+  "difficult_pass_completed", "player_milestone", "card", "substitution_impact", "costly_error"
 ])
 export type SignalType = typeof SignalType.Type
 

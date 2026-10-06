@@ -20,6 +20,14 @@ def test_goals_and_red_cards_always_promoted_even_past_the_cap():
     assert ids[:3] == ["m-goal-100-home-fc", "m-goal-400-away-fc", "m-card-500-home-fc"] and len(ids) == 3
 
 
+def test_every_signal_type_has_a_cooldown_and_a_priority():
+    from touchline_agents.contracts_gen import Signal as Generated
+    from touchline_agents.detector import COOLDOWN_S, PRIORITY
+
+    types = set(Generated.model_fields["type"].annotation.__args__)
+    assert types == set(COOLDOWN_S) == set(PRIORITY) and "costly_error" in types
+
+
 def test_yellow_cards_and_low_salience_wait_for_the_rules_threshold():
     sigs = [signal("card", 100, salience=0.5, red=0), signal("speed_alert", 200, salience=0.28), signal("distance_milestone", 300, salience=0.15)]
     c = candidates(sigs, state())
