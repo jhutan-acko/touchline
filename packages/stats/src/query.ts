@@ -82,14 +82,17 @@ export class StatsQuery {
     const goals = this.eventsBetween(null, t, { types: ["goal"] })
     const team = (x: TeamInfo) => ({ id: x.id, name: x.name, side: x.side, players: x.players })
     const { home, away } = this.engine.info
-    const f = this.engine.frame
     return {
       match_id: this.engine.info.matchId,
       as_of_frame: t,
+      /** Seconds per frame and frames per second: frames are global ticks. */
+      dt: this.engine.info.dt,
+      fps: Math.round(1 / this.engine.info.dt),
       home: team(home),
       away: team(away),
       score: { home: goals.filter((g) => g.team_id === home.id).length, away: goals.filter((g) => g.team_id === away.id).length },
-      latest: f ? { frame: f.tick, period: f.period } : null
+      // Where the match stood at the frame asked about (never the latest ingested frame, which may be later).
+      latest: this.engine.frame ? { frame: t, period: this.engine.periodAt(t), match_clock: this.engine.clockAt(t) } : null
     }
   }
 
@@ -116,9 +119,16 @@ export class StatsQuery {
     return out
   }
 
+  /** Refuse an unknown team or player id in a filter, so a typo is not mistaken for "nothing happened". */
+  private checkFilter(teamId?: string, playerId?: string): void {
+    if (teamId && !this.engine.team(teamId)) throw new StatsError(`unknown team "${teamId}"; match_info lists the teams`)
+    if (playerId && !this.engine.teamOf(playerId)) throw new StatsError(`unknown player "${playerId}"; match_info lists the players`)
+  }
+
   rankPlayers(id: string, opts: { readonly teamId?: string; readonly at?: number | null; readonly windowS?: number | null; readonly top?: number; readonly order?: "desc" | "asc" } = {}) {
     const def = metricDef(id)
     if (!def?.subjects.includes("player")) throw new StatsError(`${id} is not a player metric`)
+    this.checkFilter(opts.teamId)
     const rows = this.players()
       .filter((p) => !opts.teamId || p.team_id === opts.teamId)
       .map((p) => ({ player_id: p.id, name: p.name, team_id: p.team_id, value: this.metric(id, p.id, opts.at, opts.windowS).value }))
@@ -128,6 +138,7 @@ export class StatsQuery {
   }
 
   signalsBetween(from: number | null, to?: number | null, f: { readonly types?: ReadonlyArray<string>; readonly teamId?: string; readonly minSalience?: number } = {}): Signal[] {
+    this.checkFilter(f.teamId)
     const t = this.asOf(to)
     return this.engine.signals
       .filter((s) => s.frame_id <= t && (from === null || s.frame_id >= from))
@@ -137,6 +148,7 @@ export class StatsQuery {
 
   /** Events known by `to` (emitted at or before it) whose own tick is at or after `from`. */
   eventsBetween(from: number | null, to?: number | null, f: { readonly types?: ReadonlyArray<string>; readonly teamId?: string; readonly playerId?: string } = {}): EventView[] {
+    this.checkFilter(f.teamId, f.playerId)
     const t = this.asOf(to)
     const out: EventView[] = []
     const { events, eventTicks } = this.engine
@@ -173,7 +185,9 @@ export class StatsQuery {
 
   verifyClaim(id: string, subject: string, at: number, claimed: number, windowS?: number | null, tolerance?: number): ClaimCheck {
     const m = this.metric(id, subject, at, windowS)
-    const tol = tolerance ?? (m.value === null ? 0 : claimTolerance(m.value))
+    // A caller may tighten the tolerance but never loosen it: the check is the Fact-Checker's, not the claimant's.
+    const standard = m.value === null ? 0 : claimTolerance(m.value)
+    const tol = tolerance === undefined ? standard : Math.min(tolerance, standard)
     const diff = m.value === null ? null : Math.abs(claimed - m.value)
     return { verified: diff !== null && diff <= tol, claimed, actual: m.value, difference: diff, tolerance: tol, ref: m.ref }
   }

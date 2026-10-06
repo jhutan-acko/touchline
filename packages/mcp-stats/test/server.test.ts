@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { League } from "@touchline/league"
 import { writeMatch } from "@touchline/sim"
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
-import { modelsFromJson, type StatsQuery } from "@touchline/stats"
+import { modelsFromJson, StatsEngine, StatsQuery } from "@touchline/stats"
 import { loadRun } from "../src/load.js"
 import { createStatsServer } from "../src/server.js"
 
@@ -113,6 +113,37 @@ describe("MCP stats server", () => {
     const s = await data("get_series", { metric_id: "team.mom", subject: cfg.home.id, from_frame: 0, to_frame: 6000, step_s: 60 })
     expect(s.map((p: { frame: number }) => p.frame)).toEqual(Array.from({ length: 11 }, (_, i) => i * 600))
     expect((await call("get_series", { metric_id: "team.mom", subject: cfg.home.id, step_s: 1 })).content[0]!.text).toMatch(/too many points/)
+  })
+
+  it("describe the match as of the frame asked about, not the latest one, with its frame rate", async () => {
+    const info = await data("match_info", { at_frame: 30_000 })
+    expect(info.as_of_frame).toBe(30_000)
+    expect(info.latest).toMatchObject({ frame: 30_000 })
+    expect(info.latest.period).toBe(q.engine.events.find((e) => e.type === "period_start" && e.attrs.period === "second_half")!.frame_id <= 30_000 ? "second_half" : "first_half")
+    expect(info).toMatchObject({ dt: 0.1, fps: 10 })
+    expect(client.getInstructions()).toContain("10 per second")
+    const fast = new Client({ name: "fast", version: "0" })
+    const [a, b] = InMemoryTransport.createLinkedPair()
+    await createStatsServer(new StatsQuery(new StatsEngine({ ...q.engine.info, dt: 0.04 }, models))).connect(a)
+    await fast.connect(b)
+    expect(fast.getInstructions()).toContain("25 per second")
+    await fast.close()
+  })
+
+  it("never let the caller loosen the claim tolerance beyond the default", async () => {
+    const actual = q.engine.value("pass.acc", cfg.away.id, { at: 40_000 })!
+    const loose = await data("verify_claim", { metric_id: "pass.acc", subject: cfg.away.id, at_frame: 40_000, value: 99, tolerance: 1e9 })
+    expect(loose.verified).toBe(false)
+    const tight = await data("verify_claim", { metric_id: "pass.acc", subject: cfg.away.id, at_frame: 40_000, value: actual + 0.002, tolerance: 0.001 })
+    expect(tight.verified).toBe(false)
+  })
+
+  it("refuse unknown team and player ids and event types in filters instead of answering with nothing", async () => {
+    expect((await call("get_events", { team_id: "nobody-fc" })).content[0]!.text).toMatch(/unknown team "nobody-fc"/)
+    expect((await call("get_events", { player_id: "p-nobody" })).content[0]!.text).toMatch(/unknown player "p-nobody"/)
+    expect((await call("get_signals", { team_id: "nobody-fc" })).isError).toBe(true)
+    expect((await call("rank_players", { metric_id: "plyr.dist", team_id: "nobody-fc" })).isError).toBe(true)
+    expect((await call("get_events", { types: ["shoot"] })).isError).toBe(true)
   })
 
   it("load a match as it stood at a given minute", async () => {

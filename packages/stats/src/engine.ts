@@ -96,6 +96,8 @@ export class StatsEngine {
   private lastFrameTick = -1
   private lastEventTick = -1
   private lastFrame: TrackFrame | null = null
+  /** Global tick of the second half's first frame, once seen. */
+  private secondHalfStart: number | null = null
   private readonly signalIds = new Set<string>()
   private readonly frames = new Map<number, TrackFrame>()
   private readonly tallies = new Map<string, Map<string, number>>()
@@ -135,6 +137,17 @@ export class StatsEngine {
     return this.lastFrame
   }
 
+  /** The period a tick belongs to (as far as the frames ingested so far show). */
+  periodAt(tick: number): "first_half" | "second_half" {
+    return this.secondHalfStart !== null && tick >= this.secondHalfStart ? "second_half" : "first_half"
+  }
+
+  /** The match clock at a tick. */
+  clockAt(tick: number): string {
+    const period = this.periodAt(tick)
+    return matchClock(period, tick - (period === "second_half" ? this.secondHalfStart! : 0), this.info.dt)
+  }
+
   teamOf(playerId: string): TeamInfo | undefined {
     return this.teamByPlayer.get(playerId)
   }
@@ -157,6 +170,7 @@ export class StatsEngine {
       if (f.tick <= this.lastFrameTick || f.tick < this.lastEventTick)
         throw new StatsError(`input out of order: frame ${f.tick} after frame ${this.lastFrameTick} and events of tick ${this.lastEventTick}`)
       this.lastFrameTick = f.tick
+      if (f.period === "second_half" && this.secondHalfStart === null) this.secondHalfStart = f.tick - f.frame_id
       this.lastFrame = f
       this.frames.set(f.tick, f)
       this.frames.delete(f.tick - this.ticks(FRAME_MEMORY_S))

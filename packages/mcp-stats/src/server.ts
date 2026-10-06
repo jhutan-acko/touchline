@@ -1,17 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { SignalType } from "@touchline/schema"
+import { EventType, SignalType } from "@touchline/schema"
 import { METRICS, StatsError, type StatsQuery } from "@touchline/stats"
 
 export const SERVER_NAME = "touchline-stats"
 export const SERVER_VERSION = "0.1.0"
 
-const INSTRUCTIONS = [
+const instructions = (fps: number) => [
   "Read-only statistics for one football match from the Touchline stats engine.",
   "Every number you state must come from these tools: cite the metric id and the `ref` (metric@from-to) or event ids they return.",
-  "Frames are global ticks (10 per second); every answer says which frame it is as of (`as_of_frame`) and never includes anything later.",
+  `Frames are global ticks (${fps} per second in this match; match_info gives dt and fps); every answer says which frame it is as of (\`as_of_frame\`) and never includes anything later.`,
   "Subjects are \"match\", a team id or a player id (match_info lists them). list_metrics says which subjects and windows each metric supports."
 ].join(" ")
+const eventType = z.enum([...EventType.literals] as [string, ...string[]])
 
 const metricIds = METRICS.map((m) => m.id) as [string, ...string[]]
 const signalType = z.enum([...SignalType.literals] as [string, ...string[]])
@@ -39,7 +40,7 @@ const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: t
 
 /** An MCP server exposing the stats tools (spec §5.3) over one match's StatsQuery. */
 export const createStatsServer = (q: StatsQuery): McpServer => {
-  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: INSTRUCTIONS })
+  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: instructions(Math.round(1 / q.engine.info.dt)) })
 
   server.registerTool(
     "match_info",
@@ -124,7 +125,7 @@ export const createStatsServer = (q: StatsQuery): McpServer => {
       inputSchema: {
         from_frame: fromFrame,
         to_frame: toFrame,
-        types: z.array(z.string()).optional().describe("only these event types, e.g. [\"shot\", \"goal\"]"),
+        types: z.array(eventType).optional().describe("only these event types, e.g. [\"shot\", \"goal\"]"),
         team_id: z.string().optional(),
         player_id: z.string().optional(),
         limit: z.number().int().min(1).max(500).optional().describe("at most this many, the latest kept (default 100)")
@@ -153,7 +154,7 @@ export const createStatsServer = (q: StatsQuery): McpServer => {
     "verify_claim",
     {
       title: "Verify a claim",
-      description: "Check a claimed metric value against the engine (the Fact-Checker's code check): verified when within the tolerance (default: 2 % of the actual value, at least 0.006).",
+      description: "Check a claimed metric value against the engine (the Fact-Checker's code check): verified when within the tolerance (2 % of the actual value, at least 0.006; a smaller tolerance may be given, never a larger one).",
       inputSchema: { metric_id: metricId, subject, at_frame: z.number().int().min(0), value: z.number(), window_s: windowS, tolerance: z.number().min(0).optional() },
       annotations: readOnly
     },
