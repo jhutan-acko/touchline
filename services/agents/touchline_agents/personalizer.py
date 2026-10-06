@@ -19,7 +19,7 @@ from .config import Settings
 from .contracts import Claim, Cue, Draft, Moment, Segment, segment_key
 from .llm import agent_options, run_structured, stub_responder
 from .numbers import format_metric, matches, numbers_in
-from .templates import FRAMING, LABELS, NEGATIVE, headline
+from .templates import CONTEXT, FRAMING, LABELS, NEGATIVE, headline, headline_key
 
 LANGS = ("en", "es", "hi")
 
@@ -52,14 +52,20 @@ class Story:
     clock: str
     priority: int
     headlines: dict[str, str]
+    # A sentence of context per language for analyst variants (no digits).
+    contexts: dict[str, str]
     # Casual and analyst slots: moments go to the lower third and the side panel, recaps to recap cards.
     slots: tuple[str, str] = ("lower_third", "side_panel")
 
     @staticmethod
-    def of_moment(m: Moment, cause: str, names: dict[str, str]) -> "Story":
+    def of_moment(m: Moment, cause: str, names: dict[str, str], explanation: str = "") -> "Story":
         d = m.model_dump(mode="json")
+        key = headline_key(d, cause)
+        contexts = {lang: CONTEXT[lang][key] for lang in LANGS}
+        if explanation and not any(ch.isdigit() for ch in explanation):
+            contexts["en"] = explanation
         return Story(m.moment_id, m.match_id, m.type, m.team_id, m.player_id, m.frame_from, m.frame_to, m.match_clock[:5], m.priority,
-                     {lang: headline(d, cause, names, lang) for lang in LANGS})
+                     {lang: headline(d, cause, names, lang) for lang in LANGS}, contexts)
 
 
 class UsedNumber(BaseModel):
@@ -84,8 +90,8 @@ def _quote(c: Claim, lang: str) -> str | None:
 
 
 def template_variant(payload: dict) -> Variant:
-    """The fallback: the template headline in the segment's language, club framing for casual viewers, and the
-    claims as labelled numbers (one for casual, up to three for analyst)."""
+    """The fallback: the template headline in the segment's language, club framing for casual viewers, the claims as
+    labelled numbers (one for casual, up to three for analyst), and a sentence of context for analysts."""
     seg, m, names = payload["segment"], payload["story"], payload["names"]
     lang = seg["lang"]
     head = payload["headline"]
@@ -102,6 +108,8 @@ def template_variant(payload: dict) -> Variant:
         label = LABELS[lang]["score" if c.kind == "score" else c.metric_id]
         parts.append(f"{label}: {q}" + ("।" if lang == "hi" else "."))
         used.append(UsedNumber(claim=i, quote=q))
+    if seg["mode"] == "analyst":
+        parts.append(payload["context"])
     return Variant(headline=head, body=" ".join(parts), numbers=used)
 
 
@@ -140,6 +148,8 @@ def check_variant(v: Variant, payload: dict, others: list[str]) -> list[str]:
             problems.append(f'"{t}" is not one of the verified claims')
     if lang == "hi" and not DEVANAGARI.search(text):
         problems.append("Hindi text must be in Devanagari")
+    if lang != "en" and any(len(s) >= 12 and s in text for s in payload["draft"]):
+        problems.append(f"copies the English draft instead of writing in {lang}")
     for name in others:
         if re.search(rf"\b{re.escape(name)}\b", text):
             problems.append(f"names {name}, who was not involved")
@@ -191,6 +201,7 @@ class Personalizer:
             "segment": segment.model_dump(mode="json"),
             "story": {"template": story.template, "team_id": story.team_id, "player_id": story.player_id, "clock": story.clock},
             "headline": story.headlines[segment.lang],
+            "context": story.contexts[segment.lang],
             "names": names,
             "draft": draft.sentences,
             "claims": [c.model_dump(mode="json") for c in draft.claims if _quote(c, "en") is not None],

@@ -29,7 +29,7 @@ METRICS_FOR: dict[str, list[tuple[str, str]]] = {
     "distance_milestone": [("plyr.dist", "player")],
     "player_milestone": [],
     "difficult_pass_completed": [("pass.xp", "player")],
-    "costly_error": [],
+    "costly_error": [("pass.acc", "team"), ("game.chaos", "match")],
 }
 LOOKBACK_S = 15  # the play before a moment: where errors leading to a shot are looked for (spec §5.1.10)
 TOUCHES = {"heavy": "heavy touch", "miscontrol": "miscontrol", "missed": "missed touch"}
@@ -79,6 +79,11 @@ async def evidence(stats: StatsClient, moment: Moment, signals: list[Signal]) ->
             metrics.append({"metric_id": metric_id, "subject": subject, "value": m["value"], "ref": m["ref"], "at_frame": at})
     events = await stats.events(max(0, moment.frame_from - LOOKBACK_S * fps), at, limit=60)
     events = [e for e in events if e["type"] not in ("off_ball_run", "pressure")] if len(events) > 40 else events
+    # The events the moment's signals rest on are always in the pack, however busy the play around them.
+    cited = [i for s in signals if s.id in moment.signal_ids for i in s.evidence if "@" not in i]
+    have = {e["id"] for e in events}
+    if missing := [i for i in dict.fromkeys(cited) if i not in have]:
+        events = sorted(events + (await stats.call("get_events", ids=missing, to_frame=at))["events"], key=lambda e: e["frame_id"])
     errors = [e["id"] for e in events if e["qualifiers"].get("execution") == "mishit" or e["qualifiers"].get("first_touch") in TOUCHES]
     decisions = []
     for e in events:
@@ -92,7 +97,9 @@ async def evidence(stats: StatsClient, moment: Moment, signals: list[Signal]) ->
     involved = {e.get("player_id") for e in events} | {moment.team_id, moment.player_id, info["home"]["id"], info["away"]["id"]}
     return {
         "moment": moment.model_dump(mode="json"),
-        "signals": [s.model_dump(mode="json", include={"id", "type", "team_id", "player_id", "metric", "value", "data", "evidence"}) for s in signals if s.id in moment.signal_ids],
+        # The lead signal first, then those it absorbed (the moment's own order).
+        "signals": [s.model_dump(mode="json", include={"id", "type", "team_id", "player_id", "metric", "value", "data", "evidence"})
+                    for i in moment.signal_ids for s in signals if s.id == i],
         "score": {"home": score["home"], "away": score["away"], "home_team": info["home"]["id"], "away_team": info["away"]["id"]},
         "names": {k: v for k, v in who.items() if k in involved},
         "metrics": metrics,
@@ -152,6 +159,9 @@ def template_analysis(pack: dict) -> Analysis:
             cause = _error_phrase(error)
             explanation = f"{name.get(error['team_id'], 'The opponents')} gave the ball away with a {cause} by {name.get(error['player_id'] or '', 'a defender')}, and {team} made them pay."
             claims += _error_claims(error, pack)
+        elif t == "big_chance" and shot and shot["outcome"] == "saved":
+            cause = "big chance saved by the goalkeeper"
+            explanation = f"{team} created a clear chance, but the goalkeeper saved it."
         else:
             xg = shot["values"].get("shot.xg") if shot else None
             cause = "clear chance created" if t == "big_chance" else "clear chance converted" if xg is not None and xg >= 0.3 else "low-probability chance"
@@ -163,7 +173,7 @@ def template_analysis(pack: dict) -> Analysis:
         if error:
             cause = _error_phrase(error)
             explanation = f"{name.get(error['player_id'] or '', 'A player')} gave the ball away with a {cause}, and {name.get(shot['team_id'], 'the opponents') if shot else 'the opponents'} got a shot away."
-            claims = _shot_claim(shot, at) + _error_claims(error, pack)
+            claims = _shot_claim(shot, at) + claims + _error_claims(error, pack)
             return Analysis(moment_id=m["moment_id"], cause=cause, explanation=explanation, claims=claims)
     lead = pack["signals"][0] if pack["signals"] else {"data": {}}
     rising = lead["data"].get("after", 0) >= lead["data"].get("before", 0)

@@ -16,7 +16,7 @@ from .llm import agent_options, run_structured, stub_responder
 from .numbers import format_metric
 from .personalizer import LANGS, Story
 from .stats import StatsClient, StatsError, names
-from .templates import RECAP_HEADLINES
+from .templates import CONTEXT, RECAP_HEADLINES
 
 TEAM_METRICS = ["team.poss", "shot.xg", "pass.acc", "tilt"]  # all over the match so far by default
 MAX_TURNING_POINTS = 3
@@ -131,7 +131,8 @@ def recap_story(recap: Recap, pack: dict) -> Story:
     s, name = pack["score"], pack["names"]
     home, away = name[s["home_team"]], name[s["away_team"]]
     return Story(recap.recap_id, recap.match_id, "recap", None, recap.player_of_match, recap.at_frame, recap.at_frame, pack["clock"][:5], 1,
-                 {lang: RECAP_HEADLINES[lang][recap.kind].format(home=home, away=away) for lang in LANGS}, ("recap_card", "recap_card"))
+                 {lang: RECAP_HEADLINES[lang][recap.kind].format(home=home, away=away) for lang in LANGS},
+                 {lang: CONTEXT[lang]["recap"] for lang in LANGS}, ("recap_card", "recap_card"))
 
 
 @dataclass(frozen=True)

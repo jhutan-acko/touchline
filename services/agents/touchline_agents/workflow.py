@@ -168,7 +168,7 @@ class Personalize(Executor):
         segments = [s for s in self.s.segments if s.mode == self.mode]
         names = n.pack["names"]
         others = other_names(await self.s.stats.roster(), set(names))
-        story = Story.of_moment(n.job.moment, n.analysis.cause, names)
+        story = Story.of_moment(n.job.moment, n.analysis.cause, names, n.analysis.explanation)
         evidence = list(dict.fromkeys(e for s in n.job.signals if s.id in n.job.moment.signal_ids for e in s.evidence))
         out = await self.s.agents.personalizer.fan_out(story, v.published, names, segments, others, evidence) if segments else []
         await ctx.send_message(Variants(v, self.mode, [p.cue for p in out], any(p.fallback for p in out), _ms(t0)))

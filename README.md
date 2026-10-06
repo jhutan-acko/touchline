@@ -66,17 +66,37 @@ pnpm -s mcp-stats --run out/m-7 --http 8787     # Streamable HTTP at http://127.
 
 An MCP client can launch it directly, for example: `{"command": "npx", "args": ["tsx", "packages/mcp-stats/src/cli.ts", "--run", "out/m-7"]}`.
 
+## Agents
+
+Six Microsoft Agent Framework agents in one workflow graph (`services/agents`, Python 3.12, spec §5.3): the Moment Detector promotes signals to moments, the Tactical Analyst explains them from MCP evidence, the Narrator writes the English draft with every number declared, the Fact-Checker checks every number, name and comparison against the stats server (one retry, then unverified sentences are dropped), the Personalizer writes each viewer segment's cue natively in English, Spanish or Hindi from verified claims only, and the Recap Producer writes half-time and full-time recaps. Every agent has a deterministic fallback. The service speaks A2A v1.0; `packages/agent-gateway` (Effect) sends it a match's signals and keeps the verified cues.
+
+Models: OpenAI `gpt-6.1-sol` for both tiers (set in `services/agents/touchline_agents/config.py`; override with `TOUCHLINE_MODEL_SMALL` / `TOUCHLINE_MODEL_LARGE`). Put the key in the repo's git-ignored `.env.local` as `OPENAI_API_KEY=...`; tests and CI use a deterministic stub and never call a model.
+
+```bash
+uv run --project services/agents touchline-agents                     # the agent service on http://127.0.0.1:8100/ (stub model)
+TOUCHLINE_LLM=openai TOUCHLINE_TIMEOUT_SCALE=6 uv run --project services/agents touchline-agents   # real models, recorded-run timeouts
+pnpm agents --run out/m-7 --segments casual.en.neutral,analyst.es.ironmoor   # cues, traces and recaps cached in out/m-7/agents/
+uv run --project services/agents touchline-eval suite --suite ci            # score the agents on six scripted matches (spec §5.3.1)
+uv run --project services/agents pytest -m live                             # the few tests that call the real model
+```
+
+A real model takes about 5 s per call, so a moment takes about 30 s end to end: real-model runs are recorded runs (the cached cues replay against the match; spec §6), and a live run with `--budget-ms 4000` falls back to templates wherever a model is late.
+
+Known limits: the Fact-Checker rejects rostered players who were not in the play, but not a name that is outside the roster altogether; Hindi is checked for Devanagari and Spanish only for not copying the English draft, so fluency needs a human spot-check; checkpoints are written after every step but a restarted service starts each match afresh.
+
 ## Packages
 
 | Package | What it does |
 |---|---|
 | `packages/sim-core` | The match engine: one pure, deterministic `step(state)` per 0.1 s tick; pitch control; what-if forks |
 | `packages/league` | Fictional league generator: 8 clubs, kits, styles, 160 players |
-| `packages/schema` | Effect Schema for the live domain stream (events and frames) and for signals and metric ids |
+| `packages/schema` | Effect Schema for the domain stream, signals, metric ids and the agent contracts (exported as JSON Schema for the Python side) |
 | `packages/sim` | Effect streams, CDF v0.3.2 writers, run manifest, CLI |
 | `packages/stats` | Stats engine: metrics and signals on the domain stream, replay of run folders, `pnpm stats` |
 | `packages/advisor` | What-if sessions rebuilt from run folders, better-option explainer, positioning advisor |
 | `packages/mcp-stats` | MCP server exposing the stats tools to agents (stdio or Streamable HTTP) |
+| `packages/agent-gateway` | A2A client of the agent service: signal batches, recaps, time budget, retry, circuit breaker, cue cache |
+| `services/agents` | The six agents, their workflow, the A2A server and the ground-truth evaluation harness (`evals/`) |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
 | `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report, stats-model fitting |
 
@@ -85,5 +105,7 @@ An MCP client can launch it directly, for example: `{"command": "npx", "args": [
 The engine runs a full match in about 2 s and its output passes the CDF validator in strict mode. Matches include substitutions, fatigue, first-touch errors, ground duels, keeper claims and punches, blocked crosses and shots, deflections behind, and a shot model with separate block, aim and save steps. Scenario scripts (`pnpm sim --scenario late_comeback`) inject tactical causes and record ground truth in the run manifest; `spadl.csv` gives a SPADL view and `--noise on` imitates unsynced real event data. With the calibrated parameters, 16 held-out simulated matches land within 1 SD of real matches on 16 of 19 statistics and within 2 SD on the other 3 (see `docs/realism/realism-report.md`). Passers weigh pitch control and the safety of each kind of pass, and ground passes are struck to arrive at 9 m/s, which brought pass completion to 75 % (real 78 %, within 1 SD) and penalties to 0.5 per match (real 0.4). Known gap: shots on target low (29 % vs 35 %: goal kicks come mostly from wide shots, while about half of real ones follow attacking balls over the byline).
 
 The realism gate (`packages/calibrate/test/realism-gate.test.ts`) runs 16 more held-out matches (seeds 3000–3015). It fails if any statistic moves more than 3.5 standard errors from the committed baseline, or drifts away from the real targets. After an intended engine change, re-run calibration, the realism report and the baseline refresh, and commit all three.
+
+The agents are scored against the scripted ground truth in each run's manifest (`docs/evals/`): with the stub model, six scripted matches give moment recall 94 %, precision 100 %, explanation accuracy 88 %, evidence correctness 94 %, grounding 100 % and persona separation 100 % (`touchline-eval suite --suite ci`). On one scripted match with `gpt-6.1-sol` (23 moments, 100 cues in four segments, 14 minutes, about 200 model calls), every first draft passed the Fact-Checker with all its claims verified, no agent fell back, explanation accuracy was 100 % by the LLM judge (one of three judge runs gave 50 %: the judge varies), decision feedback 83 % and persona separation 100 %; recall was 67 % because the scripted defensive error led to nothing (`docs/evals/agent-eval-live-2026-10-07.md`).
 
 See `ATTRIBUTION.md` for credits and `docs/superpowers/` for the spec and plans.

@@ -23,7 +23,7 @@ def story(type_: str = "goal", cause: str = "low-probability chance") -> Story:
 def payload(seg: Segment, type_: str = "goal", cause: str = "low-probability chance"):
     s = story(type_, cause)
     return {"segment": seg.model_dump(mode="json"), "story": {"template": s.template, "team_id": s.team_id, "player_id": s.player_id, "clock": s.clock},
-            "headline": s.headlines[seg.lang], "names": NAMES, "draft": DRAFT.sentences, "claims": [c.model_dump(mode="json") for c in DRAFT.claims]}
+            "headline": s.headlines[seg.lang], "context": s.contexts[seg.lang], "names": NAMES, "draft": DRAFT.sentences, "claims": [c.model_dump(mode="json") for c in DRAFT.claims]}
 
 
 SEGMENTS = [Segment(mode=m, lang=l, club=c) for m, l, c in itertools.product(["casual", "analyst"], ["en", "es", "hi"], [None, "home-fc", "away-fc"])]
@@ -57,6 +57,14 @@ def test_casual_is_short_and_framed_analyst_is_deep():
 def test_the_check_catches_bad_variants(variant, problem):
     p = payload(Segment(mode="casual", lang="en", club=None))
     assert any(problem in x for x in check_variant(variant, p, ["Cy Outsider"])), check_variant(variant, p, ["Cy Outsider"])
+
+
+@pytest.mark.parametrize("lang", ["en", "es", "hi"])
+def test_analyst_variants_go_deeper_than_casual_even_with_one_number(lang):
+    one = [DRAFT.claims[2].model_dump(mode="json")]
+    casual = template_variant({**payload(Segment(mode="casual", lang=lang, club=None), "card", "booking"), "claims": one})
+    analyst = template_variant({**payload(Segment(mode="analyst", lang=lang, club=None), "card", "booking"), "claims": one})
+    assert len(analyst.body.split()) > len(casual.body.split())
 
 
 def test_hindi_must_be_devanagari():
@@ -102,3 +110,10 @@ async def test_openai_writes_native_variants_that_pass_the_check(seg):
     out = await Personalizer(make_client(live, "small"), live).personalize(story(), DRAFT, NAMES, seg, ["Cy Outsider"], [])
     print(round(out.ms), out.cue.text.model_dump(), out.reasons)
     assert not out.fallback, out.reasons
+
+
+@pytest.mark.parametrize("lang", ["es", "hi"])
+def test_a_variant_that_copies_the_english_draft_is_not_spanish_or_hindi(lang):
+    p = payload(Segment(mode="analyst", lang=lang, club=None))
+    copied = Variant(headline="गोल" if lang == "hi" else "Gol", body="A tidy finish. Expected goals for the chance: 0.12.", numbers=[{"claim": 0, "quote": "0.12"}])
+    assert any("copies the English draft" in x for x in check_variant(copied, p, []))

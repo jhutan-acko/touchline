@@ -1,10 +1,7 @@
-import asyncio
-import socket
 import uuid
 
 import httpx
 import pytest
-import uvicorn
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.helpers import get_data_parts, new_data_part, new_text_part
 from a2a.types import Message, Role, SendMessageRequest, TaskState
@@ -17,21 +14,9 @@ from .conftest import MATCH_ID
 SEGMENTS = [{"mode": "casual", "lang": "en", "club": None}, {"mode": "analyst", "lang": "es", "club": None}]
 
 
-@pytest.fixture(scope="module")
-async def server():
-    from touchline_agents.server import create_app
-
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    url = f"http://127.0.0.1:{port}/"
-    srv = uvicorn.Server(uvicorn.Config(create_app(url, load_settings({}, env_file=None)), host="127.0.0.1", port=port, log_level="warning"))
-    task = asyncio.create_task(srv.serve())
-    while not srv.started:
-        await asyncio.sleep(0.05)
-    yield url
-    srv.should_exit = True
-    await task
+@pytest.fixture
+def server(agents_url):
+    return agents_url
 
 
 async def send(url: str, parts) -> tuple[TaskState, dict[str, list[dict]], str]:
@@ -92,3 +77,23 @@ async def test_bad_requests_fail_with_a_reason(server, parts, why):
     state, arts, text = await send(server, parts)
     assert state == TaskState.TASK_STATE_FAILED and arts == {}
     assert why in text, text
+
+
+async def test_a_batch_that_promotes_nothing_completes_without_artifacts(server, stats_url, stats):
+    quiet = [s for s in await stats.signals(limit=500) if s["type"] == "distance_milestone"][:1]
+    req = {"kind": "signals", "match_id": MATCH_ID, "mcp_url": stats_url, "segments": SEGMENTS, "now_frame": quiet[0]["frame_id"], "signals": quiet}
+    state, arts, _ = await send(server, [new_data_part(req, "application/json")])
+    assert state == TaskState.TASK_STATE_COMPLETED and arts == {}
+
+
+async def test_the_full_time_recap_closes_the_match(stats_url, stats):
+    from touchline_agents.contracts import parse_request
+    from touchline_agents.server import Sessions
+
+    sessions = Sessions(load_settings({}, env_file=None))
+    ft = (await stats.events(0, 10**7, types=["period_end"]))[-1]["frame_id"]
+    req = parse_request({"kind": "recap", "match_id": MATCH_ID, "mcp_url": stats_url, "segments": SEGMENTS, "recap": "full_time", "at_frame": ft})
+    await sessions.get(req)
+    assert sessions.open_matches() == [MATCH_ID]
+    await sessions.finish(req)
+    assert sessions.open_matches() == []

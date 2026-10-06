@@ -70,6 +70,18 @@ class Sessions:
             entry[0].segments = list(req.segments)
             return entry
 
+    def open_matches(self) -> list[str]:
+        return sorted(self._open)
+
+    async def finish(self, req: RecapRequest) -> None:
+        """After the full-time recap the match is over: close its stats connection and forget its session."""
+        if req.recap != "full_time":
+            return
+        async with self._guard:
+            entry = self._open.pop(req.match_id, None)
+            if entry is not None:
+                await entry[0].close()
+
     async def close(self) -> None:
         for s, _, _ in self._open.values():
             await s.close()
@@ -108,6 +120,8 @@ class TouchlineExecutor(AgentExecutor):
                     await up.add_artifact([new_data_part(dump(r.recap), JSON)], artifact_id=r.recap.recap_id, name="recap", last_chunk=True)
                     for cue in r.cues:
                         await up.add_artifact([new_data_part(dump(cue), JSON)], artifact_id=cue.cue_id, name="cue", last_chunk=True)
+            if isinstance(req, RecapRequest):
+                await self.sessions.finish(req)
         except Exception as e:  # the task fails with the reason; the service keeps serving
             log.exception("%s for %s failed", req.kind, req.match_id)
             await up.failed(new_text_message(f"{req.kind} failed: {type(e).__name__}: {e}", context_id=task.context_id, task_id=task.id))
