@@ -159,7 +159,7 @@ export class StatsQuery {
   }
 
   /** Events known by `to` (emitted at or before it) whose own tick is at or after `from`. */
-  eventsBetween(from: number | null, to?: number | null, f: { readonly types?: ReadonlyArray<string>; readonly teamId?: string; readonly playerId?: string } = {}): EventView[] {
+  eventsBetween(from: number | null, to?: number | null, f: { readonly types?: ReadonlyArray<string>; readonly teamId?: string; readonly playerId?: string; readonly ids?: ReadonlyArray<string> } = {}): EventView[] {
     this.checkFilter(f.teamId, f.playerId)
     const t = this.asOf(to)
     const out: EventView[] = []
@@ -168,6 +168,7 @@ export class StatsQuery {
       const e = events[i]!
       if (eventTicks[i]! > t || (from !== null && e.frame_id < from)) continue
       if ((f.types && !f.types.includes(e.type)) || (f.teamId && e.team_id !== f.teamId) || (f.playerId && e.player_id !== f.playerId)) continue
+      if (f.ids && !f.ids.includes(e.id)) continue
       out.push(view(e, this.engine.derived.get(e.id) ?? {}))
     }
     return out

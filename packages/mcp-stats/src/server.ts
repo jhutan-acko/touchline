@@ -130,13 +130,14 @@ export const createStatsServer = (q: StatsQuery, advisor: Advisor | null = null)
         types: z.array(eventType).optional().describe("only these event types, e.g. [\"shot\", \"goal\"]"),
         team_id: z.string().optional(),
         player_id: z.string().optional(),
+        ids: z.array(z.string()).max(100).optional().describe("only these event ids (unknown ids are skipped)"),
         limit: z.number().int().min(1).max(500).optional().describe("at most this many, the latest kept (default 100)")
       },
       annotations: readOnly
     },
-    async ({ from_frame, to_frame, types, team_id, player_id, limit }) =>
+    async ({ from_frame, to_frame, types, team_id, player_id, ids, limit }) =>
       answer(() => {
-        const all = q.eventsBetween(from_frame ?? null, to_frame, { ...(types ? { types } : {}), ...(team_id ? { teamId: team_id } : {}), ...(player_id ? { playerId: player_id } : {}) })
+        const all = q.eventsBetween(from_frame ?? null, to_frame, { ...(types ? { types } : {}), ...(team_id ? { teamId: team_id } : {}), ...(player_id ? { playerId: player_id } : {}), ...(ids ? { ids } : {}) })
         return { as_of_frame: q.asOf(to_frame), total: all.length, events: all.slice(-(limit ?? 100)) }
       })
   )

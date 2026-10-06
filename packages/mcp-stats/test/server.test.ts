@@ -148,6 +148,14 @@ describe("MCP stats server", () => {
     expect(tight.verified).toBe(false)
   })
 
+  it("look events up by id, never past the frame asked about", async () => {
+    const all = (await data("get_events", { from_frame: 0, to_frame: 20_000, types: ["pass"], limit: 500 })).events as Array<{ id: string; frame_id: number }>
+    const [a, b] = [all[3]!, all[all.length - 1]!]
+    const found = await data("get_events", { ids: [b.id, a.id, "no-such-event"] })
+    expect(found.events.map((e: { id: string }) => e.id)).toEqual([a.id, b.id])
+    expect((await data("get_events", { ids: [b.id], to_frame: a.frame_id })).events).toEqual([])
+  })
+
   it("refuse unknown team and player ids and event types in filters instead of answering with nothing", async () => {
     expect((await call("get_events", { team_id: "nobody-fc" })).content[0]!.text).toMatch(/unknown team "nobody-fc"/)
     expect((await call("get_events", { player_id: "p-nobody" })).content[0]!.text).toMatch(/unknown player "p-nobody"/)
