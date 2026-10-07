@@ -1,0 +1,79 @@
+/**
+ * Drawing the 2D pitch (spec §5.6) on a canvas: 105 × 68 m, x along the length (home attacks +x in the first half),
+ * y across. Pure: everything goes through the 2D context it is given, so tests can record the calls.
+ */
+import type { PitchFrame } from "@touchline/rpc"
+
+export const LENGTH = 105
+export const WIDTH = 68
+
+export interface Size {
+  readonly w: number
+  readonly h: number
+}
+
+export interface Kits {
+  readonly home: string
+  readonly away: string
+}
+
+/** Pitch metres to canvas pixels (y up on the pitch is up on the screen). */
+export const toPx = (size: Size, x: number, y: number): [number, number] => [((x + LENGTH / 2) / LENGTH) * size.w, ((WIDTH / 2 - y) / WIDTH) * size.h]
+
+type Ctx = Pick<CanvasRenderingContext2D, "fillRect" | "strokeRect" | "beginPath" | "arc" | "moveTo" | "lineTo" | "stroke" | "fill"> & {
+  fillStyle: CanvasRenderingContext2D["fillStyle"]
+  strokeStyle: CanvasRenderingContext2D["strokeStyle"]
+  lineWidth: number
+}
+
+const PITCH = "#1f6b3a"
+const LINE = "#e8f5ec"
+const BALL = "#ffffff"
+
+const box = (ctx: Ctx, size: Size, x0: number, x1: number, halfW: number) => {
+  const [a, b] = toPx(size, x0, halfW)
+  const [c, d] = toPx(size, x1, -halfW)
+  ctx.strokeRect(Math.min(a, c), b, Math.abs(c - a), d - b)
+}
+
+/** The markings: touchlines, halfway line, centre circle, penalty and goal areas. */
+export const drawMarkings = (ctx: Ctx, size: Size) => {
+  ctx.fillStyle = PITCH
+  ctx.fillRect(0, 0, size.w, size.h)
+  ctx.strokeStyle = LINE
+  ctx.lineWidth = Math.max(1, size.w / 500)
+  ctx.strokeRect(0, 0, size.w, size.h)
+  const [mx] = toPx(size, 0, 0)
+  ctx.beginPath()
+  ctx.moveTo(mx, 0)
+  ctx.lineTo(mx, size.h)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(mx, size.h / 2, (9.15 / LENGTH) * size.w, 0, Math.PI * 2)
+  ctx.stroke()
+  for (const s of [-1, 1]) {
+    box(ctx, size, s * (LENGTH / 2), s * (LENGTH / 2 - 16.5), 20.16)
+    box(ctx, size, s * (LENGTH / 2), s * (LENGTH / 2 - 5.5), 9.16)
+  }
+}
+
+/** The pitch with the frame's players in their kit colours and the ball (bigger when it is in the air). */
+export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: Kits) => {
+  drawMarkings(ctx, size)
+  if (!frame) return
+  const r = (0.9 / LENGTH) * size.w
+  for (const [side, colour] of [["home", kits.home], ["away", kits.away]] as const) {
+    ctx.fillStyle = colour
+    for (const p of frame[side]) {
+      const [x, y] = toPx(size, p.x, p.y)
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  const [bx, by] = toPx(size, frame.ball.x, frame.ball.y)
+  ctx.fillStyle = BALL
+  ctx.beginPath()
+  ctx.arc(bx, by, r * (0.5 + Math.min(1, frame.ball.z / 3) * 0.5), 0, Math.PI * 2)
+  ctx.fill()
+}
