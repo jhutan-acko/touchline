@@ -1,8 +1,8 @@
 # Touchline realism report
 
-Generated 2026-10-06 from 16 synthetic matches (calib-2026-10-06; held-out seeds 2000–2015) against real-match targets.
+Generated 2026-10-07 from 16 synthetic matches (calib-2026-10-06; held-out seeds 2000–2015) against real-match targets.
 
-**Real data:** IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga) — events: 7 matches; tracking: 1 match(es) (J03WPY). Licence CC-BY-4.0; Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y. Only aggregate statistics are shown.
+**Real data:** IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga) — events: 7 matches; tracking: 1 match(es) (J03WPY); spatial: 7 matches. Licence CC-BY-4.0; Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y. Only aggregate statistics are shown.
 
 ## Match statistics
 
@@ -27,10 +27,17 @@ Generated 2026-10-06 from 16 synthetic matches (calib-2026-10-06; held-out seeds
 | Ball in play, share of match time | 55.7% ± 0.0% | 53.6% ± 3.1% | -0.77 | -4 % | within 1 SD |
 | Distance per full-match outfielder (km) | 10.88 ± 0.00 | 11.05 ± 0.92 | +0.31 | +2 % | within 1 SD |
 | Peak speed per player, median (km/h) | 27.9 ± 0.0 | 28.2 ± 0.2 | +0.17 | +1 % | within 1 SD |
+| Team width in possession (m) | 45.9 ± 4.3 | 49.8 ± 3.0 | +0.91 | +8 % | within 1 SD |
+| Team width out of possession (m) | 37.0 ± 2.2 | 45.1 ± 1.6 | +3.63 | +22 % | off |
+| Defending team length, keeper excluded (m) | 32.2 ± 1.2 | 45.3 ± 0.6 | +8.18 | +41 % | off |
+| Defensive line height from own goal (m) | 35.1 ± 1.5 | 18.3 ± 2.3 | -9.57 | -48 % | off |
+| Nearest defender to the ball (m) | 5.1 ± 0.5 | 7.6 ± 0.6 | +4.95 | +48 % | off |
+| Teammates within 15 m of the ball | 2.10 ± 0.14 | 1.43 ± 0.16 | -4.92 | -32 % | off |
+| Off-ball attacker to nearest defender (m) | 6.0 ± 0.5 | 13.4 ± 1.5 | +15.58 | +123 % | off |
 
-Summary: 16 within 1 SD, 3 within 2 SD, 0 off. z uses the real between-match SD, floored at 5 % of the mean (tracking targets come from one match).
+Summary: 17 within 1 SD, 3 within 2 SD, 6 off. z uses the real between-match SD, floored at 5 % of the mean (tracking targets come from one match).
 
-Every statistic is within 30 % of the real mean.
+More than 30 % from the real mean: Defending team length, keeper excluded (m) (+41 %), Defensive line height from own goal (m) (-48 %), Nearest defender to the ball (m) (+48 %), Teammates within 15 m of the ball (-32 %), Off-ball attacker to nearest defender (m) (+123 %).
 
 ## Distributions
 

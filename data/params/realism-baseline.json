@@ -37,7 +37,14 @@
   "cards": 5.6875,
   "in_play_share": 0.5420982613392862,
   "distance_km_median": 11.166831839853833,
-  "peak_speed_kmh_median": 28.21277257322876
+  "peak_speed_kmh_median": 28.21277257322876,
+  "width_poss_m": 49.82625,
+  "width_def_m": 44.8896875,
+  "length_def_m": 44.26187500000001,
+  "line_height_def_m": 18.5321875,
+  "ball_pressure_m": 7.731427113499073,
+  "support_15m": 1.42469351796528,
+  "free_space_m": 14.095781624854798
  },
  "sd": {
   "passes": 75.46389865359463,
@@ -58,6 +65,13 @@
   "cards": 2.548692475237712,
   "in_play_share": 0.03651546583309797,
   "distance_km_median": 0.6864793847785698,
-  "peak_speed_kmh_median": 0.24063993519288635
+  "peak_speed_kmh_median": 0.24063993519288635,
+  "width_poss_m": 3.0268242433283117,
+  "width_def_m": 1.310223223665851,
+  "length_def_m": 2.09523735727801,
+  "line_height_def_m": 2.856797139426133,
+  "ball_pressure_m": 0.739337358008117,
+  "support_15m": 0.16305157115857988,
+  "free_space_m": 2.2316016423944847
  }
 }
