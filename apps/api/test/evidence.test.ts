@@ -1,4 +1,5 @@
 import { Effect, Exit } from "effect"
+import type { Cue, MomentTrace, Recap } from "@touchline/schema"
 import { beforeAll, describe, expect, it } from "vitest"
 import { makeEvidence, SERIES_S, SERIES_STEP_S } from "../src/evidence.js"
 import { readMatch } from "../src/library.js"
@@ -61,5 +62,30 @@ describe("recaps", () => {
     expect(half.recap?.kind).toBe("half_time")
     expect(half.cards.map((c) => c.segment.lang)).toEqual(["en"]) // the only variant made; English is the fallback
     expect(await Effect.runPromise(ev.recap(MATCH_ID, "full_time", { mode: "casual", lang: "en", club: null }))).toEqual({ recap: null, cards: [] })
+  })
+})
+
+describe("as of a session", () => {
+  const seg = { mode: "casual", lang: "en", club: null } as const
+
+  it("say nothing about a moment or a recap the session has not reached", async () => {
+    const goal = lib.goals[0]!
+    const id = `mo-${goal.id}-casual.en.neutral`
+    const early = await Effect.runPromise(Effect.exit(ev.evidence(MATCH_ID, id, { frame: goal.frame_id - 1, live: null })))
+    expect(Exit.isFailure(early)).toBe(true)
+    expect((await Effect.runPromise(ev.evidence(MATCH_ID, id, { frame: goal.frame_id, live: null }))).cause).toBe("clear chance converted")
+    expect(await Effect.runPromise(ev.recap(MATCH_ID, "half_time", seg, { frame: 100, live: null }))).toEqual({ recap: null, cards: [] })
+  })
+
+  it("answer a live session from what its agents wrote, never from the cache", async () => {
+    const trace = { ...lib.traces[0]!, analysis: { ...lib.traces[0]!.analysis, cause: "written live" }, model: "live-model" }
+    const cue = lib.cues.find((c) => c.moment_id === trace.moment.moment_id && c.segment.club === null && c.segment.lang === "en")!
+    const live = { cues: [] as Cue[], traces: [] as MomentTrace[], recaps: [] as Recap[] }
+    expect(Exit.isFailure(await Effect.runPromise(Effect.exit(ev.evidence(MATCH_ID, cue.cue_id, { frame: 1e9, live }))))).toBe(true)
+    live.cues.push(cue)
+    live.traces.push(trace)
+    const e = await Effect.runPromise(ev.evidence(MATCH_ID, cue.cue_id, { frame: 1e9, live }))
+    expect([e.cause, e.model]).toEqual(["written live", "live-model"])
+    expect(await Effect.runPromise(ev.recap(MATCH_ID, "half_time", seg, { frame: 1e9, live }))).toEqual({ recap: null, cards: [] }) // the cache's recap is not the live one
   })
 })

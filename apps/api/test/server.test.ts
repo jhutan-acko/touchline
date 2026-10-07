@@ -56,7 +56,7 @@ describe("API over WebSocket", () => {
 
   it("plays a session to a moment, then explains its cue and pauses it", async () => {
     const goal = lib.goals[0]!
-    const ticks = await client((c) =>
+    const { ticks, ev, recap } = await client((c) =>
       Effect.gen(function* () {
         const s = yield* c.StartSession({ match_id: MATCH_ID, speed: 64, from_minute: Math.floor(goal.frame_id / 600), live: false })
         expect(s.match.players.length).toBeGreaterThan(30)
@@ -66,17 +66,18 @@ describe("API over WebSocket", () => {
         )
         const p = yield* c.Control({ session_id: s.session_id, action: "pause", speed: null })
         expect(p.state).toBe("paused")
-        return [...got]
+        const ev = yield* c.GetEvidence({ session_id: s.session_id, cue_id: `mo-${goal.id}-casual.en.northwick` })
+        const recap = yield* c.GetRecap({ session_id: s.session_id, kind: "half_time", segment: { mode: "casual", lang: "en", club: null } })
+        return { ticks: [...got], ev, recap }
       })
     )
     expect(ticks[0]!.kind).toBe("playback")
-    expect(ticks.filter((t) => t.kind === "frame").length).toBeGreaterThan(100)
+    expect(ticks.filter((t) => t.kind === "frame").length).toBeGreaterThan(10) // ×64: every 25th frame
     const last = ticks.at(-1)!
     expect(last.kind === "cue" && last.cue.cue_id).toBe(`mo-${goal.id}-casual.en.northwick`)
-    const ev = await client((c) => c.GetEvidence({ match_id: MATCH_ID, cue_id: `mo-${goal.id}-casual.en.northwick` }))
     expect(ev.cause).toBe("clear chance converted")
-    const recap = await client((c) => c.GetRecap({ match_id: MATCH_ID, kind: "half_time", segment: { mode: "casual", lang: "en", club: null } }))
-    expect(recap.cards).toHaveLength(1)
+    // The session is paused just after the goal: the half-time recap exists only once play reaches the whistle.
+    expect(recap.cards).toHaveLength(goal.period === "first_half" ? 0 : 1)
   }, 120_000)
 
   it("refuses to watch an unknown session", async () => {

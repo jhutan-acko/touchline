@@ -12,6 +12,16 @@ import { METRICS, modelsFromJson, StatsError, xtGridFromJson, type Roster, type 
 import { pickCues } from "./cues.js"
 import type { LibraryMatch } from "./library.js"
 import { root } from "./playback.js"
+import type { LiveStore } from "./session.js"
+
+/**
+ * What a session has reached: answers never go past its frame, and a live session's come from what its agents wrote
+ * (`live`), never from the cache. Without a view, the whole recorded match (tools and tests).
+ */
+export interface View {
+  readonly frame: number
+  readonly live: LiveStore | null
+}
 
 export const SERIES_S = 300 // the metric's last five minutes
 export const SERIES_STEP_S = 15
@@ -44,13 +54,18 @@ export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>) => {
 
   const names = (m: LibraryMatch) => new Map<string, string>([[m.info.home.id, m.info.home.name], [m.info.away.id, m.info.away.name], ...m.info.players.map((p) => [p.id, p.name] as const)])
 
-  const evidence = (matchId: string, cueId: string) =>
+  /** The cues, traces and recaps a view may answer from. */
+  const source = (m: LibraryMatch, view?: View) =>
+    view?.live
+      ? view.live
+      : { cues: m.cues, traces: jsonl<MomentTrace>(join(m.dir, "agents", "traces.jsonl"), decodeMomentTrace), recaps: jsonl<Recap>(join(m.dir, "agents", "recaps.jsonl"), decodeRecap) }
+
+  const evidence = (matchId: string, cueId: string, view?: View) =>
     Effect.gen(function* () {
       const m = yield* match(matchId)
-      const cue = m.cues.find((c) => c.cue_id === cueId)
-      if (!cue || !cue.moment_id) return yield* new EvidenceNotFound({ cue_id: cueId })
-      const traces = jsonl<MomentTrace>(join(m.dir, "agents", "traces.jsonl"), decodeMomentTrace)
-      const recaps = jsonl<Recap>(join(m.dir, "agents", "recaps.jsonl"), decodeRecap)
+      const { cues, traces, recaps } = source(m, view)
+      const cue = cues.find((c) => c.cue_id === cueId)
+      if (!cue || !cue.moment_id || (view && cue.anchor.frame_to > view.frame)) return yield* new EvidenceNotFound({ cue_id: cueId })
       const trace = traces.find((t) => t.moment.moment_id === cue.moment_id) ?? null
       const recap = recaps.find((r) => r.recap_id === cue.moment_id) ?? null
       if (!trace && !recap) return yield* new EvidenceNotFound({ cue_id: cueId })
@@ -90,17 +105,19 @@ export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>) => {
         })),
         series,
         events,
-        model: trace?.model ?? m.info.model
+        model: trace?.model ?? (view?.live ? null : m.info.model)
       }
       return out
     })
 
-  const recap = (matchId: string, kind: "half_time" | "full_time", segment: Segment) =>
+  const recap = (matchId: string, kind: "half_time" | "full_time", segment: Segment, view?: View) =>
     Effect.gen(function* () {
       const m = yield* match(matchId)
-      const r = jsonl<Recap>(join(m.dir, "agents", "recaps.jsonl"), decodeRecap).find((x) => x.kind === kind) ?? null
-      const view: RecapView = { recap: r, cards: r ? pickCues(m.cues.filter((c) => c.moment_id === r.recap_id), segment) : [] }
-      return view
+      const { cues, recaps } = source(m, view)
+      const found = recaps.find((x) => x.kind === kind)
+      const r = found && !(view && found.at_frame > view.frame) ? found : null // not before its whistle
+      const out: RecapView = { recap: r, cards: r ? pickCues(cues.filter((c) => c.moment_id === r.recap_id), segment) : [] }
+      return out
     })
 
   return { evidence, recap } as const

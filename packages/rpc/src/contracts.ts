@@ -149,11 +149,13 @@ export class TouchlineRpcs extends RpcGroup.make(
     success: Playback,
     error: SessionNotFound
   }),
-  Rpc.make("GetEvidence", { payload: { match_id: Schema.String, cue_id: Schema.String }, success: Evidence, error: Schema.Union([MatchNotFound, EvidenceNotFound]) }),
+  /** What is behind a cue the session has shown (never past its frame; a live session's from its own agents). */
+  Rpc.make("GetEvidence", { payload: { session_id: Schema.String, cue_id: Schema.String }, success: Evidence, error: Schema.Union([SessionNotFound, MatchNotFound, EvidenceNotFound]) }),
+  /** A recap once the session has reached its whistle (empty before). */
   Rpc.make("GetRecap", {
-    payload: { match_id: Schema.String, kind: Schema.Literals(["half_time", "full_time"]), segment: Segment },
+    payload: { session_id: Schema.String, kind: Schema.Literals(["half_time", "full_time"]), segment: Segment },
     success: RecapView,
-    error: MatchNotFound
+    error: Schema.Union([SessionNotFound, MatchNotFound])
   })
 ) {}
 

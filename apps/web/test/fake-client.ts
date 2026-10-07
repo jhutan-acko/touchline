@@ -18,27 +18,35 @@ export const INFO: MatchInfo = {
 }
 
 export interface FakeClient extends TouchlineClient {
-  readonly watchers: Array<{ segment: Segment; onTick: (t: Tick) => void }>
+  readonly watchers: Array<{ segment: Segment; onTick: (t: Tick) => void; onEnd?: (error: string | null) => void }>
   readonly calls: string[]
   push(t: Tick): void
+  /** End every watch with an error (null: the session closed normally). */
+  fail(error: string | null): void
+  /** How many times watch was called. */
+  watchCount(): number
 }
 
 export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView } = {}): FakeClient => {
   const watchers: FakeClient["watchers"] = []
   const calls: string[] = []
   let playback: Playback = { state: "playing", frame: 0, speed: 4, live: false }
+  let watched = 0
   return {
     watchers,
     calls,
     push: (t) => watchers.forEach((w) => w.onTick(t)),
+    fail: (error) => watchers.splice(0).forEach((w) => w.onEnd?.(error)),
+    watchCount: () => watched,
     listMatches: async () => o.matches ?? [MATCH],
     startSession: async (id, s) => {
       calls.push(`start ${id} x${s.speed} live=${s.live}`)
       playback = { ...playback, speed: s.speed, live: s.live }
       return { session_id: "s1", match: INFO }
     },
-    watch: (_id, segment, onTick) => {
-      const w = { segment, onTick }
+    watch: (_id, segment, onTick, onEnd) => {
+      watched++
+      const w = { segment, onTick, ...(onEnd ? { onEnd } : {}) }
       watchers.push(w)
       return () => watchers.splice(watchers.indexOf(w), 1)
     },
@@ -52,7 +60,10 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
       if (!o.evidence) throw new Error("no evidence")
       return o.evidence
     },
-    recap: async () => o.recap ?? { recap: null, cards: [] },
+    recap: async (sessionId, kind) => {
+      calls.push(`recap ${sessionId} ${kind}`)
+      return o.recap ?? { recap: null, cards: [] }
+    },
     close: async () => {}
   }
 }

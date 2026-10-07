@@ -6,15 +6,32 @@
 import { randomUUID } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { Effect, Fiber, PubSub, Ref, Scope, Stream, SubscriptionRef } from "effect"
+import { Cause, Deferred, Effect, Fiber, PubSub, Ref, Stream, SubscriptionRef } from "effect"
 import { SessionNotFound, type Playback, type Tick } from "@touchline/rpc"
-import { segmentKey, type Cue, type Segment } from "@touchline/schema"
+import { segmentKey, type Cue, type MomentTrace, type Recap, type Segment } from "@touchline/schema"
 import { pickCues } from "./cues.js"
 import type { LibraryMatch } from "./library.js"
 import { beats, paced, type Beat, type Board, type Control } from "./playback.js"
 
 /** A session nobody watches stops after this long. */
 export const IDLE_STOP_S = 30
+/** After the final whistle, live agents get this long to deliver their last cues and the full-time recap. */
+export const LIVE_GRACE_S = 60
+/** Frames sent to watchers per second of wall-clock time, at most (about: every ⌊speed × fps / 25⌋th frame). */
+export const FRAMES_PER_S = 25
+
+/** Which frames a session at `speed` sends: every `frameStep`th. */
+export const frameStep = (speed: number, fps: number): number => Math.max(1, Math.floor((speed * fps) / FRAMES_PER_S))
+
+/** What a session's bus carries: the timeline, then `closed` once nothing more will come (live agents included). */
+export type BusBeat = Beat | { readonly kind: "closed" }
+
+/** What a live session's agents have written so far: its cues, the traces behind them and its recaps. */
+export interface LiveStore {
+  readonly cues: Cue[]
+  readonly traces: MomentTrace[]
+  readonly recaps: Recap[]
+}
 
 /** The cue the scoreboard sends each second (spec §5.4: stats cues share the contract, verified, without text). */
 export const boardCue = (matchId: string, b: Board, segment: Segment): Cue => ({
@@ -48,8 +65,12 @@ export interface Session {
   readonly match: LibraryMatch
   readonly live: boolean
   readonly control: SubscriptionRef.SubscriptionRef<Control>
-  readonly bus: PubSub.PubSub<Beat>
+  readonly bus: PubSub.PubSub<BusBeat>
   readonly playback: Ref.Ref<Playback>
+  /** True once the bus has sent `closed`. */
+  readonly closed: Ref.Ref<boolean>
+  /** What the live agents wrote (empty for a recorded session). */
+  readonly agents: LiveStore
   readonly watchers: Ref.Ref<number>
   /** The segments watched so far (live agents write cues for these). */
   readonly segments: Ref.Ref<ReadonlyMap<string, Segment>>
@@ -79,38 +100,72 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         if (f) yield* Fiber.interrupt(f)
       })
 
+    /** Stop the session if nobody is watching it `IDLE_STOP_S` from now. */
+    const stopIfIdle = (s: Session) =>
+      Effect.forkIn(Effect.sleep(`${IDLE_STOP_S} seconds`).pipe(Effect.andThen(Ref.get(s.watchers)), Effect.flatMap((m) => (m === 0 ? stop(s.id) : Effect.void))), scope)
+
     const start = (match: LibraryMatch, o: StartOptions) =>
       Effect.gen(function* () {
         const id = randomUUID()
         const from = startFrame(match, o.fromMinute)
+        const fps = match.info.fps
         const control = yield* SubscriptionRef.make<Control>({ paused: false, speed: o.speed })
-        const bus = yield* PubSub.unbounded<Beat>()
+        const bus = yield* PubSub.unbounded<BusBeat>()
         const playback = yield* Ref.make<Playback>({ state: "playing", frame: from, speed: o.speed, live: o.live })
         const watchers = yield* Ref.make(0)
         const segments = yield* Ref.make<ReadonlyMap<string, Segment>>(new Map())
-        const s: Session = { id, match, live: o.live, control, bus, playback, watchers, segments }
+        const closed = yield* Ref.make(false)
+        const ended = yield* Deferred.make<void>()
+        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, watchers, segments }
+        const end = (frame: number) =>
+          Ref.update(playback, (p): Playback => ({ ...p, state: "ended", frame })).pipe(Effect.andThen(PubSub.publish(bus, { kind: "end", frame })))
         // A live session shows the agents' cues as they are written, never the cache's.
         const timeline = beats(o.live ? { ...match, cues: [] } : match, from)
-        const play = paced(timeline, control, match.info.fps).pipe(
+        const play = paced(timeline, control, fps).pipe(
           Stream.runForEach((b) =>
             Effect.gen(function* () {
-              if (b.kind === "frame") yield* Ref.update(playback, (p) => ({ ...p, frame: b.frame.frame }))
-              if (b.kind === "end") yield* Ref.update(playback, (p): Playback => ({ ...p, state: "ended", frame: b.frame }))
+              if (b.kind === "frame") {
+                yield* Ref.update(playback, (p) => ({ ...p, frame: b.frame.frame }))
+                // Watchers get at most about FRAMES_PER_S frames a second, however fast the session plays.
+                if (b.frame.frame % frameStep((yield* SubscriptionRef.get(control)).speed, fps) !== 0) return
+              }
+              if (b.kind === "end") return yield* end(b.frame)
               yield* PubSub.publish(bus, b)
             })
           ),
-          Effect.catch((e) => Effect.logError(`session ${id}: ${String(e)}`)),
+          // A replay that fails still ends the match for its watchers.
+          Effect.catch((e) => Effect.logError(`session ${id}: ${String(e)}`).pipe(Effect.andThen(Effect.flatMap(Ref.get(playback), (p) => end(p.frame))))),
+          Effect.ensuring(Deferred.succeed(ended, undefined))
+        )
+        // Live agents that fail are logged and never stop play; after the whistle they get LIVE_GRACE_S to finish.
+        const agents = o.live && options.companion
+          ? options.companion(s).pipe(
+              Effect.catchCause((c) => Effect.logError(`session ${id}: live agents: ${Cause.pretty(c)}`)),
+              Effect.raceFirst(Deferred.await(ended).pipe(Effect.andThen(Effect.sleep(`${LIVE_GRACE_S} seconds`))))
+            )
+          : Effect.void
+        const main = Effect.all([play, agents], { concurrency: "unbounded", discard: true }).pipe(
+          Effect.andThen(Ref.set(closed, true)),
+          Effect.andThen(PubSub.publish(bus, { kind: "closed" })),
           Effect.andThen(Effect.sleep("60 seconds")), // let late requests (evidence, recap) see the ended session
-          Effect.ensuring(Effect.sync(() => sessions.delete(id)))
+          Effect.ensuring(
+            Effect.gen(function* () {
+              sessions.delete(id)
+              fibers.delete(id)
+              yield* Ref.set(closed, true)
+              yield* PubSub.shutdown(bus)
+            })
+          )
         )
         sessions.set(id, s)
-        fibers.set(id, yield* Effect.forkIn(Effect.all([play, ...(o.live && options.companion ? [options.companion(s)] : [])], { concurrency: "unbounded", discard: true }), scope))
+        fibers.set(id, yield* Effect.forkIn(main, scope))
+        yield* stopIfIdle(s) // started but never watched (a closed tab, a double click)
         return s
       })
 
     const get = (id: string) => Effect.fromNullishOr(sessions.get(id)).pipe(Effect.mapError(() => new SessionNotFound({ session_id: id })))
 
-    const toTicks = (s: Session, segment: Segment) => (b: Beat): Tick[] => {
+    const toTicks = (s: Session, segment: Segment) => (b: BusBeat): Tick[] => {
       switch (b.kind) {
         case "frame":
           return [{ kind: "frame", frame: b.frame }]
@@ -119,28 +174,27 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         case "cues":
           return pickCues(b.cues, segment).map((cue) => ({ kind: "cue" as const, cue }))
         case "signals":
+        case "closed":
           return []
         case "end":
           return [{ kind: "playback", playback: { state: "ended", frame: b.frame, speed: 0, live: s.live } }]
       }
     }
 
-    /** The session's ticks for one segment, from now until the match ends; the session stops when nobody watches. */
+    /** The session's ticks for one segment, from now until the session closes; the session stops when nobody watches. */
     const watch = (id: string, segment: Segment) =>
       Stream.unwrap(
         Effect.gen(function* () {
           const s = yield* get(id)
+          // Subscribe before looking at `closed`, so the closing beat cannot slip between the two.
+          const sub = yield* PubSub.subscribe(s.bus)
           const now = yield* Ref.get(s.playback)
+          if (yield* Ref.get(s.closed)) return Stream.make({ kind: "playback", playback: now } as Tick)
           yield* Ref.update(s.watchers, (n) => n + 1)
           yield* Ref.update(s.segments, (m) => new Map([...m, [segmentKey(segment), segment]]))
-          const leave = Ref.updateAndGet(s.watchers, (n) => n - 1).pipe(
-            Effect.flatMap((n) =>
-              n > 0 ? Effect.void : Effect.forkIn(Effect.sleep(`${IDLE_STOP_S} seconds`).pipe(Effect.andThen(Ref.get(s.watchers)), Effect.flatMap((m) => (m === 0 ? stop(id) : Effect.void))), scope)
-            ),
-            Effect.asVoid
-          )
+          const leave = Ref.updateAndGet(s.watchers, (n) => n - 1).pipe(Effect.flatMap((n) => (n > 0 ? Effect.void : stopIfIdle(s))), Effect.asVoid)
           return Stream.make({ kind: "playback", playback: now } as Tick).pipe(
-            Stream.concat(Stream.fromPubSub(s.bus).pipe(Stream.takeUntil((b) => b.kind === "end"), Stream.map(toTicks(s, segment)), Stream.flattenIterable)),
+            Stream.concat(Stream.fromSubscription(sub).pipe(Stream.takeUntil((b) => b.kind === "closed"), Stream.map(toTicks(s, segment)), Stream.flattenIterable)),
             Stream.ensuring(leave)
           )
         })

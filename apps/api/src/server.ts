@@ -4,7 +4,7 @@
  */
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Ref } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
 import { MatchNotFound, TouchlineRpcs, type MatchSummary } from "@touchline/rpc"
@@ -29,6 +29,9 @@ export const handlersLayer = (o: ApiOptions) =>
       const sessions = yield* makeSessions(o.library, o.companion ? { companion: o.companion } : {})
       const ev = makeEvidence(o.library)
       const match = (id: string) => Effect.fromNullishOr(o.library.get(id)).pipe(Effect.mapError(() => new MatchNotFound({ match_id: id })))
+      /** A session and what it has reached: answers never go past its frame. */
+      const view = (id: string) =>
+        sessions.get(id).pipe(Effect.flatMap((s) => Effect.map(Ref.get(s.playback), (p) => ({ s, v: { frame: p.frame, live: s.live ? s.agents : null } }))))
       return TouchlineRpcs.toLayer({
         ListMatches: () => Effect.succeed([...o.library.values()].map((m) => summary(m.info))),
         GetMatch: ({ match_id }) => match(match_id).pipe(Effect.map((m) => m.info)),
@@ -39,8 +42,8 @@ export const handlersLayer = (o: ApiOptions) =>
           ),
         Watch: ({ session_id, segment }) => sessions.watch(session_id, segment),
         Control: ({ session_id, action, speed }) => sessions.control(session_id, action, speed),
-        GetEvidence: ({ match_id, cue_id }) => ev.evidence(match_id, cue_id),
-        GetRecap: ({ match_id, kind, segment }) => ev.recap(match_id, kind, segment)
+        GetEvidence: ({ session_id, cue_id }) => view(session_id).pipe(Effect.flatMap(({ s, v }) => ev.evidence(s.match.info.match_id, cue_id, v))),
+        GetRecap: ({ session_id, kind, segment }) => view(session_id).pipe(Effect.flatMap(({ s, v }) => ev.recap(s.match.info.match_id, kind, segment, v)))
       })
     })
   )

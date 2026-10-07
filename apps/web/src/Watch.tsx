@@ -35,6 +35,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
         <Pitch frame={pane.frame} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
         <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
       </div>
+      {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
       {pane.playback?.state === "ended" && <p className="text-center font-semibold">{t(lang, "ended")}</p>}
       {pane.feed.length > 0 && (
         <ol aria-label="feed" className="flex max-h-40 flex-col gap-1 overflow-y-auto text-sm">
@@ -66,7 +67,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
   const [second, setSecond] = useState<Profile | null>(null)
   const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [] })
   const [playback, setPlayback] = useState<Pick<Playback, "state" | "speed">>({ state: "playing", speed: 4 })
-  const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback)
+  const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback, () => {}) // a lost session shows on the pane
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -86,8 +87,8 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
         <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} />
         {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={setWhy} label="B" />}
       </div>
-      <RecapPanel client={client} matchId={match.match_id} segment={segmentOf(profile)} lang={lang} />
-      {why && <WhyDrawer client={client} matchId={match.match_id} cue={why} lang={lang} onClose={() => setWhy(null)} />}
+      <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
+      {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} />}
     </div>
   )
 }

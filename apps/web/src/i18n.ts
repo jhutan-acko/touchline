@@ -37,7 +37,11 @@ const en = {
   momentum: "Momentum",
   back: "Back to matches",
   fromMinute: "From minute",
-  stats: "Stats only"
+  stats: "Stats only",
+  lost: "Connection lost — trying again…",
+  gone: "This session has ended.",
+  notYet: "Not yet: the recap comes at the whistle.",
+  startFailed: "Could not start the match. Try again."
 } as const
 
 export type Key = keyof typeof en
@@ -80,7 +84,11 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     momentum: "Impulso",
     back: "Volver a los partidos",
     fromMinute: "Desde el minuto",
-    stats: "Solo estadísticas"
+    stats: "Solo estadísticas",
+    lost: "Conexión perdida; reintentando…",
+    gone: "Esta sesión ha terminado.",
+    notYet: "Todavía no: el resumen llega con el silbato.",
+    startFailed: "No se pudo iniciar el partido. Inténtalo de nuevo."
   },
   hi: {
     title: "Touchline",
@@ -118,7 +126,11 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     momentum: "लय",
     back: "मैचों पर वापस",
     fromMinute: "मिनट से",
-    stats: "सिर्फ़ आंकड़े"
+    stats: "सिर्फ़ आंकड़े",
+    lost: "कनेक्शन टूट गया — फिर से कोशिश हो रही है…",
+    gone: "यह सत्र समाप्त हो गया है।",
+    notYet: "अभी नहीं: सारांश सीटी बजने पर आएगा।",
+    startFailed: "मैच शुरू नहीं हो सका। फिर से कोशिश करें।"
   }
 }
 

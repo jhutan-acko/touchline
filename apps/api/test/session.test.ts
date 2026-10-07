@@ -103,6 +103,44 @@ describe("sessions", () => {
       })
     ), 120_000)
 
+  it("stop a session nobody ever watches", () =>
+    run(
+      Effect.gen(function* () {
+        const sessions = yield* makeSessions(library())
+        yield* sessions.start(match, { speed: 1, fromMinute: 0, live: false })
+        expect(sessions.count()).toBe(1)
+        yield* advance(IDLE_STOP_S + 1, 500)
+        expect(sessions.count()).toBe(0)
+      })
+    ), 120_000)
+
+  it("send a fast session's frames at about 25 a second of wall-clock time", () =>
+    run(
+      Effect.gen(function* () {
+        const sessions = yield* makeSessions(library())
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: 10, live: false })
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.filter((t: Tick) => t.kind === "frame"), Stream.take(4), Stream.runCollect, Effect.forkChild)
+        const ids = [...(yield* settle(w))].flatMap((t) => (t.kind === "frame" ? [t.frame.frame] : []))
+        expect(ids.slice(1).map((f, i) => f - ids[i]!)).toEqual([25, 25, 25]) // ×64 at 10 fps: every 25th frame
+      })
+    ), 120_000)
+
+  it("end at once the stream of a viewer who joins after the match is over", () =>
+    run(
+      Effect.gen(function* () {
+        const sessions = yield* makeSessions(library())
+        const s = yield* sessions.start(match, { speed: 4, fromMinute: 130, live: false })
+        const a = yield* sessions.watch(s.id, home).pipe(Stream.runCollect, Effect.forkChild)
+        expect([...(yield* settle(a))].at(-1)).toMatchObject({ kind: "playback", playback: { state: "ended" } })
+        const b = yield* sessions.watch(s.id, home).pipe(Stream.runCollect, Effect.forkChild)
+        yield* advance(5)
+        expect(b.pollUnsafe()).toBeDefined()
+        const tb = [...(yield* Fiber.join(b))]
+        expect(tb).toHaveLength(1)
+        expect(tb[0]).toMatchObject({ kind: "playback", playback: { state: "ended" } })
+      })
+    ), 120_000)
+
   it("start the second half from minute 45 and on", () => {
     const ht = startFrame(match, 45)
     expect(startFrame(match, 50) - ht).toBe(3000)

@@ -20,8 +20,10 @@ export interface TouchlineClient {
   /** Calls `onTick` for each tick of the session for `segment`; returns a function that stops watching. */
   watch(sessionId: string, segment: Segment, onTick: (t: Tick) => void, onEnd?: (error: string | null) => void): () => void
   control(sessionId: string, action: "play" | "pause" | "speed", speed?: number): Promise<Playback>
-  evidence(matchId: string, cueId: string): Promise<Evidence>
-  recap(matchId: string, kind: "half_time" | "full_time", segment: Segment): Promise<RecapView>
+  /** What is behind a cue the session has shown. */
+  evidence(sessionId: string, cueId: string): Promise<Evidence>
+  /** A recap, once the session has reached its whistle (empty before). */
+  recap(sessionId: string, kind: "half_time" | "full_time", segment: Segment): Promise<RecapView>
   close(): Promise<void>
 }
 
@@ -47,8 +49,8 @@ export const connect = async (url: string): Promise<TouchlineClient> => {
       return () => fiber.interruptUnsafe()
     },
     control: (session_id, action, speed) => call(client.Control({ session_id, action, speed: speed ?? null })),
-    evidence: (match_id, cue_id) => call(client.GetEvidence({ match_id, cue_id })),
-    recap: (match_id, kind, segment) => call(client.GetRecap({ match_id, kind, segment })),
+    evidence: (session_id, cue_id) => call(client.GetEvidence({ session_id, cue_id })),
+    recap: (session_id, kind, segment) => call(client.GetRecap({ session_id, kind, segment })),
     close: async () => {
       await runtime.runPromise(Scope.close(scope, Exit.void))
       await runtime.dispose()

@@ -48,7 +48,7 @@ describe("browser client", () => {
     const last = ticks.at(-1)!
     expect(last.kind === "cue" && last.cue.segment).toEqual({ mode: "analyst", lang: "es", club: null })
     expect((await client.control(session_id, "pause")).state).toBe("paused")
-    const ev = await client.evidence(MATCH_ID, last.kind === "cue" ? last.cue.cue_id : "")
+    const ev = await client.evidence(session_id, last.kind === "cue" ? last.cue.cue_id : "")
     expect(ev.events[0]!.id).toBe(goal.id)
   })
 

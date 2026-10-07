@@ -3,7 +3,8 @@ import { TestClock } from "effect/testing"
 import { beforeAll, describe, expect, it } from "vitest"
 import type { Artifact, Sender } from "@touchline/agent-gateway"
 import type { Tick } from "@touchline/rpc"
-import type { AgentRequest, Cue } from "@touchline/schema"
+import type { AgentRequest, Cue, MomentTrace, Recap } from "@touchline/schema"
+import { makeEvidence } from "../src/evidence.js"
 import { readMatch, type LibraryMatch } from "../src/library.js"
 import { coalesce, liveAgents } from "../src/live.js"
 import { makeSessions } from "../src/session.js"
@@ -24,22 +25,46 @@ const advance = (seconds: number, stepMs = 50) =>
     }
   })
 
-/** A fake agent service: a cue per requested segment for every batch with a goal in it. */
+/** A fake agent service: for every batch with a goal, a cue per requested segment and the moment's trace; for a recap request, the recap and its card per segment. */
 const fakeAgents = () => {
   const requests: AgentRequest[] = []
   const base = lib.cues[0]!
   const send: Sender = async function* (req) {
     requests.push(req)
-    if (req.kind !== "signals") return
-    for (const g of req.signals.filter((s) => s.type === "goal")) {
+    if (req.kind === "recap") {
+      const recapId = `${MATCH_ID}-recap-${req.recap}`
+      const recap: Recap = { recap_id: recapId, match_id: MATCH_ID, kind: req.recap, at_frame: req.at_frame, sentences: ["Full time."], claims: [], turning_points: [], player_of_match: null, verified: true }
+      yield { name: "recap", data: recap } satisfies Artifact
       for (const seg of req.segments) {
-        const cue: Cue = { ...base, cue_id: `live-${g.id}-${seg.mode}.${seg.lang}.${seg.club ?? "neutral"}`, moment_id: `live-${g.id}`, segment: seg, anchor: { frame_from: g.frame_from, frame_to: g.frame_to, clock: g.match_clock.slice(0, 5) } }
+        const cue: Cue = { ...base, cue_id: `${recapId}-${seg.mode}.${seg.lang}.${seg.club ?? "neutral"}`, moment_id: recapId, segment: seg, anchor: { frame_from: req.at_frame, frame_to: req.at_frame, clock: "90:00" }, display: { ...base.display, slot: "recap_card" } }
         yield { name: "cue", data: cue } satisfies Artifact
       }
+      return
+    }
+    if (req.kind !== "signals") return
+    for (const g of req.signals.filter((s) => s.type === "goal")) {
+      const momentId = `live-${g.id}`
+      for (const seg of req.segments) {
+        const cue: Cue = { ...base, cue_id: `${momentId}-${seg.mode}.${seg.lang}.${seg.club ?? "neutral"}`, moment_id: momentId, segment: seg, anchor: { frame_from: g.frame_from, frame_to: g.frame_to, clock: g.match_clock.slice(0, 5) } }
+        yield { name: "cue", data: cue } satisfies Artifact
+      }
+      const t0 = lib.traces[0]!
+      const trace: MomentTrace = { ...t0, moment: { ...t0.moment, moment_id: momentId, frame_to: g.frame_to }, analysis: { ...t0.analysis, moment_id: momentId, cause: "written live" }, model: "live-model" }
+      yield { name: "trace", data: trace } satisfies Artifact
     }
   }
   return { send, requests }
 }
+
+/** Advance the clock (with real I/O in between) until the fiber is done, then join it. */
+const settle = <A, E>(f: Fiber.Fiber<A, E>, maxSeconds = 300) =>
+  Effect.gen(function* () {
+    for (let t = 0; t < maxSeconds * 1000 && !f.pollUnsafe(); t += 50) {
+      yield* Effect.promise(() => new Promise((r) => setImmediate(r)))
+      yield* TestClock.adjust("50 millis")
+    }
+    return yield* Fiber.join(f)
+  })
 
 const run = <A, E>(e: Effect.Effect<A, E, import("effect").Scope.Scope>) => Effect.runPromise(e.pipe(Effect.scoped, Effect.provide(TestClock.layer())))
 const fakeMcp = async () => ({ url: "http://127.0.0.1:1/mcp", stop: () => {} })
@@ -63,6 +88,51 @@ describe("live agents", () => {
         const signals = agents.requests.filter((r) => r.kind === "signals")
         expect(signals[0]!.segments).toEqual([home])
         expect(signals.every((r) => r.kind === "signals" && r.signals.every((x) => x.frame_id <= r.now_frame))).toBe(true)
+        const ev = makeEvidence(new Map([[MATCH_ID, match]]))
+        const why = yield* ev.evidence(MATCH_ID, last.kind === "cue" ? last.cue.cue_id : "", { frame: goal.frame_id, live: s.agents })
+        expect([why.cause, why.model]).toEqual(["written live", "live-model"]) // the live trace, not the cache's
+      })
+    ), 120_000)
+
+  it("deliver the full-time recap and its card before a live viewer's stream ends", () =>
+    run(
+      Effect.gen(function* () {
+        const agents = fakeAgents()
+        const sessions = yield* makeSessions(new Map([[MATCH_ID, match]]), { companion: liveAgents({ agentsUrl: "", budgetMs: 0, send: agents.send, mcp: fakeMcp }) })
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: 130, live: true })
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.runCollect, Effect.forkChild)
+        const ticks = [...(yield* settle(w))]
+        expect(ticks.some((t) => t.kind === "cue" && t.cue.moment_id === `${MATCH_ID}-recap-full_time`)).toBe(true)
+        const ev = makeEvidence(new Map([[MATCH_ID, match]]))
+        const view = yield* ev.recap(MATCH_ID, "full_time", home, { frame: match.info.frames, live: s.agents })
+        expect([view.recap?.kind, view.cards.length]).toEqual(["full_time", 1])
+      })
+    ), 120_000)
+
+  it("keep playing, and end every stream, when the live agents cannot start", () =>
+    run(
+      Effect.gen(function* () {
+        const agents = fakeAgents()
+        const broken = async () => { throw new Error("pnpm not found") }
+        const sessions = yield* makeSessions(new Map([[MATCH_ID, match]]), { companion: liveAgents({ agentsUrl: "", budgetMs: 0, send: agents.send, mcp: broken }) })
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: 130, live: true })
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.runCollect, Effect.forkChild)
+        yield* advance(30)
+        expect(w.pollUnsafe()).toBeDefined()
+        expect([...(yield* Fiber.join(w))].some((t) => t.kind === "playback" && t.playback.state === "ended")).toBe(true)
+      })
+    ), 120_000)
+
+  it("ask for no half-time recap when the session starts in the second half", () =>
+    run(
+      Effect.gen(function* () {
+        const agents = fakeAgents()
+        const sessions = yield* makeSessions(new Map([[MATCH_ID, match]]), { companion: liveAgents({ agentsUrl: "", budgetMs: 0, send: agents.send, mcp: fakeMcp }) })
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: 60, live: true })
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.filter((t: Tick) => t.kind === "frame"), Stream.take(20), Stream.runDrain, Effect.forkChild)
+        yield* settle(w)
+        yield* advance(1)
+        expect(agents.requests.filter((r) => r.kind === "recap")).toEqual([])
       })
     ), 120_000)
 

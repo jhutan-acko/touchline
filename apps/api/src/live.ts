@@ -41,11 +41,12 @@ export const coalesce = (jobs: ReadonlyArray<Job>): Job[] => {
 
 export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
   Effect.gen(function* () {
+    // Subscribe first: play runs while the stats server starts (a few seconds), and no signal may be missed.
+    const sub = yield* PubSub.subscribe(s.bus)
     const send = o.send ?? a2aSender(o.agentsUrl)
     const mcp = yield* Effect.acquireRelease(Effect.promise(() => (o.mcp ?? startMcpStats)(s.match.dir)), (m) => Effect.sync(() => m.stop()))
     const width = Math.round((o.batchS ?? 15) * s.match.info.fps)
     const jobs = yield* Queue.unbounded<Job>()
-    const sub = yield* PubSub.subscribe(s.bus)
 
     const segments = Effect.map(Ref.get(s.segments), (m) => (m.size ? [...m.values()].slice(0, 12) : [DEFAULT_SEGMENT]))
     const publish = (frame: number, cues: ReadonlyArray<Cue>) => {
@@ -63,6 +64,10 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
           const req: AgentRequest = job.kind === "signals" ? { kind: "signals", ...base, now_frame: job.frame, signals: job.signals } : { kind: "recap", ...base, recap: job.recap, at_frame: job.frame }
           const got = received()
           yield* Effect.exit(exchange(send, req, o.budgetMs, got)) // a failed or late request still publishes what arrived in time
+          // Kept for "Why?" and the recap panel: a live session answers from what its agents wrote.
+          s.agents.cues.push(...got.cues)
+          s.agents.traces.push(...got.traces)
+          s.agents.recaps.push(...got.recaps)
           const now = (yield* Ref.get(s.playback)).frame
           yield* publish(now, got.cues)
         }
@@ -74,6 +79,7 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
       let pending: Signal[] = []
       let end = -1
       let half = false
+      let first = true
       let last = 0
       while (true) {
         const b = yield* PubSub.take(sub)
@@ -81,6 +87,9 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
           if (end < 0) end = Math.floor(b.frame / width) * width + width
           pending = [...pending, ...b.signals]
         } else if (b.kind === "frame") {
+          // A session that starts in the second half has no first half to recap.
+          if (first && b.frame.period === "second_half") half = true
+          first = false
           if (!half && b.frame.period === "second_half") {
             half = true
             if (pending.length) yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: last })

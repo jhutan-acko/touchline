@@ -15,8 +15,15 @@ export const App = ({ client }: { client: TouchlineClient }) => {
   const [live, setLive] = useState(false)
   const [fromMinute, setFromMinute] = useState(0)
   const [session, setSession] = useState<{ id: string; match: MatchInfo } | null>(null)
+  const [failed, setFailed] = useState(false)
   const watch = (m: MatchSummary) =>
-    client.startSession(m.match_id, { speed: 4, fromMinute, live }).then((s) => setSession({ id: s.session_id, match: s.match }))
+    client.startSession(m.match_id, { speed: 4, fromMinute, live }).then(
+      (s) => {
+        setFailed(false)
+        setSession({ id: s.session_id, match: s.match })
+      },
+      () => setFailed(true)
+    )
   useEffect(() => {
     client.listMatches().then(setMatches, () => setMatches([]))
   }, [client])
@@ -34,6 +41,7 @@ export const App = ({ client }: { client: TouchlineClient }) => {
           </select>
         </label>
       </header>
+      {failed && <p role="alert" className="mb-4 rounded bg-red-900/60 px-3 py-2">{t(lang, "startFailed")}</p>}
       {session ? (
         <Watch client={client} sessionId={session.id} match={session.match} profile={profile} onProfile={setProfile} onBack={() => setSession(null)} />
       ) : (

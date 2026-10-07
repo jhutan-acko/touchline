@@ -6,15 +6,15 @@ import { t, type Lang } from "./i18n.js"
 import { Sparkline } from "./Sparkline.js"
 
 /** Behind a cue (spec §5.6 "Why?" drawer): the cause, each checked fact, the metric's history and the events. */
-export const WhyDrawer = ({ client, matchId, cue, lang, onClose }: { client: TouchlineClient; matchId: string; cue: Cue; lang: Lang; onClose: () => void }) => {
+export const WhyDrawer = ({ client, sessionId, cue, lang, onClose }: { client: TouchlineClient; sessionId: string; cue: Cue; lang: Lang; onClose: () => void }) => {
   const [ev, setEv] = useState<Evidence | null | "none">(null)
   useEffect(() => {
     let live = true
-    client.evidence(matchId, cue.cue_id).then((e) => live && setEv(e), () => live && setEv("none"))
+    client.evidence(sessionId, cue.cue_id).then((e) => live && setEv(e), () => live && setEv("none"))
     return () => {
       live = false
     }
-  }, [client, matchId, cue.cue_id])
+  }, [client, sessionId, cue.cue_id])
   return (
     <aside role="dialog" aria-label={t(lang, "why")} className="fixed inset-y-0 right-0 z-10 w-full max-w-md overflow-y-auto bg-slate-900 p-5 shadow-2xl ring-1 ring-slate-700">
       <div className="mb-3 flex items-center justify-between">
