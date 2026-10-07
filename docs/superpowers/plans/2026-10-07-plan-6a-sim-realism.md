@@ -1115,7 +1115,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 8: Switch the behaviours on, recalibrate, enforce the spatial targets, and review in the replay
 
 **Files:**
-- Modify: `packages/sim-core/src/params.ts` (`DEFAULT_PARAMS` values)
+- Modify: `packages/sim-core/src/params.ts` (`DEFAULT_PARAMS` values; `shape.defLineM`, `shape.defDepth`)
+- Modify: `packages/sim-core/src/shape.ts` (`anchorFor` out-of-possession offsets)
+- Test: `packages/sim-core/test/shape.test.ts`
 - Modify: `packages/calibrate/src/knobs.ts`, `packages/calibrate/src/evaluate.ts`, `packages/calibrate/src/tune.ts`, `packages/calibrate/src/cli.ts`
 - Modify: `packages/calibrate/test/realism-gate.test.ts`
 - Regenerate: `data/params/touchline-params.json`, `data/params/realism-baseline.json`, `docs/realism/realism-report.md`
@@ -1123,7 +1125,70 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `WEIGHTS: Record<GateKey, number>`. `loss` and `meanMetrics` cover `GATE_KEYS`, `tune` returns `Record<GateKey, number>` detail, and there are new knobs `marking_weight` and `support_dist`.
+- Produces: `Params.shape: { width; depth; defLineM; defDepth }` (defaults 0 and 1) and an `anchorFor` spread argument with optional `defLineM`/`defDepth`; `WEIGHTS: Record<GateKey, number>`. `loss` and `meanMetrics` cover `GATE_KEYS`, `tune` returns `Record<GateKey, number>` detail, and there are new knobs `marking_weight` and `support_dist`.
+
+> **Controller ruling (2026-10-07, from the Task 4 "before" report):** the defensive line sits at 18.3 m from goal against 35.1 m in real matches (z −9.6), and the defending team is 45.3 m long against 32.2 m (z +8.2). The formation anchors cause this, not any Task 5–7 behaviour, and no knob moves it. Step 0 adds two shape parameters for the team without the ball so the tuner can reach C4. Their defaults keep the engine bit-identical.
+
+- [ ] **Step 0a: Write the failing test** (append inside `describe("team shape", ...)` in `packages/sim-core/test/shape.test.ts`)
+
+```ts
+  it("moves a team's shape without the ball by defLineM and defDepth, and leaves it alone with the ball", () => {
+    const style = STYLES.possession
+    const ball = { x: 0, y: 0 }
+    const spread = (defLineM: number, defDepth: number) => ({ width: 1, depth: 1, defLineM, defDepth })
+    // Centre back (slot 2): 10 m further upfield without the ball, mirrored for the away side.
+    expect(anchorFor("4-3-3", 2, "home", ball, style, false, spread(10, 1)).x - anchorFor("4-3-3", 2, "home", ball, style, false).x).toBeCloseTo(10, 9)
+    expect(anchorFor("4-3-3", 2, "away", ball, style, false, spread(10, 1)).x - anchorFor("4-3-3", 2, "away", ball, style, false).x).toBeCloseTo(-10, 9)
+    // Striker (slot 9, x = 6): distance from the team centre (x = -18) halves without the ball: 24 m -> 12 m.
+    expect(anchorFor("4-3-3", 9, "home", ball, style, false, spread(0, 0.5)).x - anchorFor("4-3-3", 9, "home", ball, style, false).x).toBeCloseTo(-12, 9)
+    // With the ball nothing changes.
+    expect(anchorFor("4-3-3", 2, "home", ball, style, true, spread(10, 0.5))).toEqual(anchorFor("4-3-3", 2, "home", ball, style, true))
+  })
+```
+
+Run: `pnpm --filter @touchline/sim-core exec vitest run test/shape.test.ts`
+Expected: FAIL (the offsets are ignored, so the differences are 0)
+
+- [ ] **Step 0b: Implement** (`shape.ts` `anchorFor`)
+
+Change the `spread` parameter type and default:
+
+```ts
+  spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number } = { width: 1, depth: 1 }
+```
+
+Replace the `sx` and `x` lines with:
+
+```ts
+  // Without the ball, defDepth squeezes the lines further and defLineM pushes the whole shape upfield (both identity by default).
+  const depth = spread.depth * (inPossession ? 1 : (spread.defDepth ?? 1))
+  const sx = -18 + (s.x + 18) * depth
+  const x = clamp(sx + slide * bx + line + (inPossession ? 0 : (spread.defLineM ?? 0)), -PITCH.halfL + 4, PITCH.halfL - 3)
+```
+
+In `params.ts`, change the `shape` field in the `Params` interface to:
+
+```ts
+  /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball a line push upfield (m) and extra depth squeeze. */
+  readonly shape: { readonly width: number; readonly depth: number; readonly defLineM: number; readonly defDepth: number }
+```
+
+and the default to `shape: { width: 1, depth: 1, defLineM: 0, defDepth: 1 },`.
+
+Add to `KNOBS` in `packages/calibrate/src/knobs.ts`:
+
+```ts
+  { name: "def_line", what: "metres a team without the ball pushes its shape upfield (defensive line height)", init: 0, min: 0, max: 20, step: 2.5,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defLineM: v } }) },
+  { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: 1, min: 0.5, max: 1.2, step: 0.1,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) },
+```
+
+Run: `pnpm --filter @touchline/sim-core test && pnpm typecheck`
+Expected: PASS
+
+Run: `pnpm --filter @touchline/calibrate exec vitest run test/realism-gate.test.ts --disableConsoleIntercept`
+Expected: PASS with `maxDrift: 0`. The defaults are the identity, so the engine is unchanged at this point.
 
 - [ ] **Step 1: Switch the behaviours on by default** (`params.ts` `DEFAULT_PARAMS`)
 
