@@ -71,6 +71,35 @@ describe("studio queue", () => {
     ), 180_000)
 })
 
+describe("studio and graphics streams", () => {
+  it("give a producer who joins late the queue so far, in their language", () =>
+    run(
+      Effect.gen(function* () {
+        const { studio, sessions, s, id } = yield* queued
+        const ticks = [...(yield* studio.watch(sessions, s.id, spanish).pipe(Stream.take(2), Stream.runCollect))]
+        expect(ticks[0]!.kind).toBe("playback")
+        const first = ticks[1]!
+        expect(first.kind === "queue" && [first.item.moment_id, first.item.status, first.item.points[0]]).toEqual([id, "pending", "Goal (analyst es)"])
+      })
+    ), 180_000)
+
+  it("put on the graphics output the scoreboard and only the cues the producer sent", () =>
+    run(
+      Effect.gen(function* () {
+        const { studio, sessions, s, id } = yield* queued
+        const out = yield* sessions.graphics(s.id, casual).pipe(Stream.takeUntil((t) => t.kind === "cue" && t.cue.moment_id !== null), Stream.runCollect, Effect.forkChild)
+        yield* until(() => Effect.succeed(false), 2) // a few seconds of play: scoreboards only
+        yield* studio.act(s, id, "send")
+        yield* until(() => Effect.sync(() => out.pollUnsafe() !== undefined), 30)
+        const ticks = [...(yield* Fiber.join(out))]
+        expect(ticks.some((t) => t.kind === "frame")).toBe(false) // graphics go over the broadcast picture: no pitch
+        expect(ticks.filter((t) => t.kind === "cue" && t.cue.moment_id === null).length).toBeGreaterThan(0) // scoreboards
+        const aired = ticks.at(-1)!
+        expect(aired.kind === "cue" && [aired.cue.moment_id, aired.cue.segment]).toEqual([id, casual])
+      })
+    ), 180_000)
+})
+
 describe("queue items", () => {
   const entry = (): QueueEntry => ({
     moment_id: "mo-1", frame: 100, clock: "01:00", status: "approved", cues: lib.cues.filter((c) => c.moment_id === `mo-${lib.goals[0]!.id}`), facts: ["Cause: clear chance converted"]

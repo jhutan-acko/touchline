@@ -80,6 +80,20 @@ describe("API over WebSocket", () => {
     expect(recap.cards).toHaveLength(goal.period === "first_half" ? 0 : 1)
   }, 120_000)
 
+  it("serves the studio console and refuses actions on moments not queued", async () => {
+    const goal = lib.goals[0]!
+    const { first, lost } = await client((c) =>
+      Effect.gen(function* () {
+        const s = yield* c.StartSession({ match_id: MATCH_ID, speed: 4, from_minute: Math.floor(goal.frame_id / 600), live: false })
+        const first = yield* c.StudioWatch({ session_id: s.session_id, segment: { mode: "casual", lang: "en", club: null } }).pipe(Stream.take(1), Stream.runCollect)
+        const lost = yield* Effect.exit(c.StudioAct({ session_id: s.session_id, moment_id: "nope", action: "send" }))
+        return { first: [...first], lost }
+      })
+    )
+    expect(first[0]!.kind).toBe("playback")
+    expect(Exit.isFailure(lost) && JSON.stringify(lost.cause)).toContain("NotQueued")
+  }, 120_000)
+
   it("refuses to watch an unknown session", async () => {
     const lost = await client((c) => Effect.exit(Stream.runDrain(c.Watch({ session_id: "nope", segment: { mode: "casual", lang: "en", club: null } }))))
     expect(Exit.isFailure(lost) && JSON.stringify(lost.cause)).toContain("SessionNotFound")

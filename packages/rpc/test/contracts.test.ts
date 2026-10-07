@@ -26,7 +26,7 @@ describe("API contracts", () => {
   })
 
   it("offer the endpoints of spec §5.7", () => {
-    expect([...TouchlineRpcs.requests.keys()].sort()).toEqual(["Control", "GetEvidence", "GetMatch", "GetRecap", "ListMatches", "StartSession", "Watch"])
+    expect([...TouchlineRpcs.requests.keys()].sort()).toEqual(["Control", "GetEvidence", "GetMatch", "GetRecap", "ListMatches", "StartSession", "StudioAct", "StudioWatch", "Watch", "WatchGraphics"])
   })
 
   it("refuse playback speeds out of range", () => {

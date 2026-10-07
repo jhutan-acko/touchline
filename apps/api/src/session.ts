@@ -228,24 +228,52 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
       }
     }
 
-    /** The session's ticks for one segment, from now until the session closes; the session stops when nobody watches. */
-    const watch = (id: string, segment: Segment) =>
+    /**
+     * What a session's bus brings one viewer, mapped by `map`, after `open` (what to send first, given playback now),
+     * until the session closes. A viewer counts as a watcher (the session stops when nobody watches) and its segment
+     * gets live cues.
+     */
+    const follow = <A>(
+      id: string,
+      segment: Segment,
+      open: (s: Session, now: Playback) => Effect.Effect<ReadonlyArray<A>>,
+      map: (s: Session) => (b: BusBeat) => ReadonlyArray<A>
+    ) =>
       Stream.unwrap(
         Effect.gen(function* () {
           const s = yield* get(id)
           // Subscribe before looking at `closed`, so the closing beat cannot slip between the two.
           const sub = yield* PubSub.subscribe(s.bus)
-          const now = yield* Ref.get(s.playback)
-          if (yield* Ref.get(s.closed)) return Stream.make({ kind: "playback", playback: now } as Tick)
+          const first = yield* open(s, yield* Ref.get(s.playback))
+          if (yield* Ref.get(s.closed)) return Stream.fromIterable(first)
           yield* Ref.update(s.watchers, (n) => n + 1)
           yield* Ref.update(s.segments, (m) => new Map([...m, [segmentKey(segment), segment]]))
           const leave = Ref.updateAndGet(s.watchers, (n) => n - 1).pipe(Effect.flatMap((n) => (n > 0 ? Effect.void : stopIfIdle(s))), Effect.asVoid)
-          return Stream.make({ kind: "playback", playback: now } as Tick).pipe(
-            Stream.concat(Stream.fromSubscription(sub).pipe(Stream.takeUntil((b) => b.kind === "closed"), Stream.map(toTicks(s, segment)), Stream.flattenIterable)),
+          return Stream.fromIterable(first).pipe(
+            Stream.concat(Stream.fromSubscription(sub).pipe(Stream.takeUntil((b) => b.kind === "closed"), Stream.map(map(s)), Stream.flattenIterable)),
             Stream.ensuring(leave)
           )
         })
       )
+
+    const playbackNow = (_: Session, now: Playback) => Effect.succeed([{ kind: "playback", playback: now } as Tick])
+
+    /** The session's ticks for one segment, from now until the session closes. */
+    const watch = (id: string, segment: Segment) => follow(id, segment, playbackNow, (s) => toTicks(s, segment))
+
+    /** The broadcast graphics output: the scoreboard and the cues the producer sent to air (picked for the segment), no pitch. */
+    const graphics = (id: string, segment: Segment) =>
+      follow(id, segment, playbackNow, (s) => (b): Tick[] => {
+        switch (b.kind) {
+          case "board":
+          case "end":
+            return toTicks(s, segment)(b)
+          case "air":
+            return pickCues(b.cues, segment).map((cue) => ({ kind: "cue" as const, cue }))
+          default:
+            return []
+        }
+      })
 
     const control = (id: string, action: "play" | "pause" | "speed", speed: number | null) =>
       Effect.gen(function* () {
@@ -255,7 +283,7 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         return yield* Ref.updateAndGet(s.playback, (p): Playback => (p.state === "ended" ? p : { ...p, state: c.paused ? "paused" : "playing", speed: c.speed }))
       })
 
-    return { library, start, get, watch, control, stop, count: () => sessions.size } as const
+    return { library, start, get, follow, watch, graphics, control, stop, count: () => sessions.size } as const
   })
 
 export type Sessions = Effect.Success<ReturnType<typeof makeSessions>>

@@ -5,11 +5,11 @@
  * against: no model writes them, so every number in them is already verified.
  */
 import { Effect, PubSub, Ref } from "effect"
-import { NotQueued, type QueueItem, type QueueStatus, type StudioAction } from "@touchline/rpc"
+import { NotQueued, type QueueItem, type QueueStatus, type StudioAction, type StudioTick } from "@touchline/rpc"
 import type { Segment } from "@touchline/schema"
 import { pickCues } from "./cues.js"
 import type { makeEvidence } from "./evidence.js"
-import type { BusBeat, QueueEntry, Session } from "./session.js"
+import type { BusBeat, QueueEntry, Session, Sessions } from "./session.js"
 
 /** The analyst text as talking points (one per sentence), then the checked facts. */
 export const talkingPoints = (text: { readonly headline: string; readonly body: string } | null, facts: ReadonlyArray<string>): string[] => [
@@ -83,5 +83,29 @@ export const makeStudio = (ev: ReturnType<typeof makeEvidence>) => {
       return { moment_id: momentId, status }
     })
 
-  return { record, act } as const
+  /** The studio console's stream: playback and the queue so far, then each queue change, every agent cue as it arrives (raw feed) and the end. */
+  const watch = (sessions: Sessions, id: string, segment: Segment) =>
+    sessions.follow(
+      id,
+      segment,
+      (s, now) =>
+        Effect.map(Ref.get(s.queue), (q): StudioTick[] => [
+          { kind: "playback", playback: now },
+          ...[...q.values()].sort((a, b) => a.frame - b.frame).map((e) => ({ kind: "queue" as const, item: queueItem(e, segment) }))
+        ]),
+      (s) => (b): StudioTick[] => {
+        switch (b.kind) {
+          case "queue":
+            return [{ kind: "queue", item: queueItem(b.entry, segment) }]
+          case "cues":
+            return b.cues.map((cue) => ({ kind: "cue" as const, cue }))
+          case "end":
+            return [{ kind: "playback", playback: { state: "ended", frame: b.frame, speed: 0, live: s.live } }]
+          default:
+            return []
+        }
+      }
+    )
+
+  return { record, act, watch } as const
 }

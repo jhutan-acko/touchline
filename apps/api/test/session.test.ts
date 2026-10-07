@@ -71,6 +71,11 @@ describe("sessions", () => {
         const sessions = yield* makeSessions(library())
         const s = yield* sessions.start(match, { speed: 1, fromMinute: 0, live: false })
         const w = yield* sessions.watch(s.id, home).pipe(Stream.runDrain, Effect.forkChild)
+        // Let playback start first (it reads the run's files before its first frame), however slow the machine.
+        for (let t = 0; t < 300_000 && (yield* Ref.get(s.playback)).frame === 0; t += 50) {
+          yield* Effect.promise(() => new Promise((r) => setImmediate(r)))
+          yield* TestClock.adjust("50 millis")
+        }
         yield* advance(10)
         const p = yield* sessions.control(s.id, "pause", null)
         expect(p.state).toBe("paused")

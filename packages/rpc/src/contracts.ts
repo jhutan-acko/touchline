@@ -225,7 +225,17 @@ export class TouchlineRpcs extends RpcGroup.make(
     payload: { session_id: Schema.String, kind: Schema.Literals(["half_time", "full_time"]), segment: Segment },
     success: RecapView,
     error: Schema.Union([SessionNotFound, MatchNotFound])
-  })
+  }),
+  /** The studio console's stream for one producer segment: the queue so far, then every change, raw cues and playback. */
+  Rpc.make("StudioWatch", { payload: { session_id: Schema.String, segment: Segment }, success: StudioTick, error: SessionNotFound, stream: true }),
+  /** A producer's decision on a queued moment; every studio console of the session sees the change. */
+  Rpc.make("StudioAct", {
+    payload: { session_id: Schema.String, moment_id: Schema.String, action: StudioAction },
+    success: Schema.Struct({ moment_id: Id, status: QueueStatus }),
+    error: Schema.Union([SessionNotFound, NotQueued])
+  }),
+  /** The broadcast graphics output for a segment: the scoreboard and the cues the producer sent, nothing else. */
+  Rpc.make("WatchGraphics", { payload: { session_id: Schema.String, segment: Segment }, success: Tick, error: SessionNotFound, stream: true })
 ) {}
 
 export const decodeTick = Schema.decodeUnknownSync(Tick)
