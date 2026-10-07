@@ -205,6 +205,19 @@ def touchline_events(domain_jsonl: Path) -> list[dict]:
     return out
 
 
+def touchline_spatial_frames(run_dir: Path, fps: float):
+    """Touchline tracking.jsonl as spatial_metrics frames; possession from ball.poss_team_id."""
+    home_id = json.loads((run_dir / "meta.json").read_text())["teams"]["home"]["id"]
+    offset = {"first_half": 0.0, "second_half": 10_000.0}
+    with (run_dir / "tracking.jsonl").open() as fh:
+        for line in fh:
+            f = json.loads(line)
+            pid = f["ball"].get("poss_team_id")
+            poss = None if pid is None else ("home" if pid == home_id else "away")
+            teams = {s: [(p["x"], p["y"]) for p in f["teams"][s]["players"]] for s in ("home", "away")}
+            yield f["period"], offset[f["period"]] + f["frame_id"] / fps, bool(f["ball"].get("status")), poss, (f["ball"]["x"], f["ball"]["y"]), teams
+
+
 def touchline_metrics(run_dir: Path, fps: float = 10.0) -> dict:
     m = event_metrics(touchline_events(run_dir / "domain.jsonl"))
     meta = json.loads((run_dir / "meta.json").read_text())
@@ -219,6 +232,7 @@ def touchline_metrics(run_dir: Path, fps: float = 10.0) -> dict:
                 yield f["period"], offset[f["period"]] + f["frame_id"] / fps, bool(f["ball"].get("status")), players
 
     m.update(tracking_metrics(frames()))
+    m.update(spatial_metrics(touchline_spatial_frames(run_dir, fps)))
     return m
 
 

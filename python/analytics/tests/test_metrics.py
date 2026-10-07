@@ -109,3 +109,20 @@ def test_spatial_metrics_follow_each_period_attack_direction_and_skip_unusable_f
 def test_spatial_metrics_with_no_usable_frames_are_nan():
     m = spatial_metrics([])
     assert all(math.isnan(m[k]) for k in m)
+
+
+def test_touchline_spatial_frames_reads_possession_ball_and_teams(tmp_path):
+    import json
+
+    from touchline_analytics.metrics import touchline_spatial_frames
+
+    (tmp_path / "meta.json").write_text(json.dumps({"teams": {"home": {"id": "h"}, "away": {"id": "a"}}}))
+    line = {
+        "frame_id": 30, "period": "second_half",
+        "teams": {"home": {"players": [{"id": "h1", "x": 1.0, "y": 2.0}]}, "away": {"players": [{"id": "a1", "x": -1.0, "y": -2.0}]}},
+        "ball": {"x": 3.0, "y": 4.0, "z": 0.0, "status": True, "poss_team_id": "a"},
+    }
+    (tmp_path / "tracking.jsonl").write_text(json.dumps(line) + "\n")
+    [(period, t, live, poss, ball, teams)] = list(touchline_spatial_frames(tmp_path, 10.0))
+    assert (period, t, live, poss, ball) == ("second_half", 10_003.0, True, "away", (3.0, 4.0))
+    assert teams == {"home": [(1.0, 2.0)], "away": [(-1.0, -2.0)]}

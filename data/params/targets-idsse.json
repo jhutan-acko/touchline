@@ -3,9 +3,9 @@
   "dataset": "IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
   "licence": "CC-BY-4.0",
   "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
-  "fitted_at": "2026-10-05",
-  "version": "targets-2026-10-05",
-  "scope": "events: 7 matches; tracking: 1 match(es) (J03WPY)"
+  "fitted_at": "2026-10-07",
+  "version": "targets-2026-10-07",
+  "scope": "events: 7 matches; tracking: 1 match(es) (J03WPY); spatial: 7 matches"
  },
  "metrics": {
   "passes": {
@@ -102,6 +102,41 @@
    "mean": 27.9435,
    "sd": 0.0,
    "n": 1
+  },
+  "width_poss_m": {
+   "mean": 45.9136,
+   "sd": 4.2915,
+   "n": 7
+  },
+  "width_def_m": {
+   "mean": 37.0229,
+   "sd": 2.216,
+   "n": 7
+  },
+  "length_def_m": {
+   "mean": 32.155,
+   "sd": 1.1631,
+   "n": 7
+  },
+  "line_height_def_m": {
+   "mean": 35.1143,
+   "sd": 1.4956,
+   "n": 7
+  },
+  "ball_pressure_m": {
+   "mean": 5.1217,
+   "sd": 0.4995,
+   "n": 7
+  },
+  "support_15m": {
+   "mean": 2.1009,
+   "sd": 0.1361,
+   "n": 7
+  },
+  "free_space_m": {
+   "mean": 6.0338,
+   "sd": 0.4749,
+   "n": 7
   }
  },
  "distributions": {

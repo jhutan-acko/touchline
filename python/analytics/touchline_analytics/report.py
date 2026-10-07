@@ -34,6 +34,13 @@ LABELS = {
     "in_play_share": ("Ball in play, share of match time", "{:.1%}"),
     "distance_km_median": ("Distance per full-match outfielder (km)", "{:.2f}"),
     "peak_speed_kmh_median": ("Peak speed per player, median (km/h)", "{:.1f}"),
+    "width_poss_m": ("Team width in possession (m)", "{:.1f}"),
+    "width_def_m": ("Team width out of possession (m)", "{:.1f}"),
+    "length_def_m": ("Defending team length, keeper excluded (m)", "{:.1f}"),
+    "line_height_def_m": ("Defensive line height from own goal (m)", "{:.1f}"),
+    "ball_pressure_m": ("Nearest defender to the ball (m)", "{:.1f}"),
+    "support_15m": ("Teammates within 15 m of the ball", "{:.2f}"),
+    "free_space_m": ("Off-ball attacker to nearest defender (m)", "{:.1f}"),
 }
 
 
