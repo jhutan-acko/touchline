@@ -21,7 +21,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { assignMarks, markTarget, supportSpot } from "./offball.js"
+import { assignMarks, markTarget, shieldTarget, steerCarry, supportSpot } from "./offball.js"
 import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
@@ -995,7 +995,13 @@ const moveTarget = (
   }
   const pos = w.possession
   if (pos.kind === "owned" && pos.playerId === pl.id) {
-    if (pl.intent.kind === "carry" && w.tick < pl.intentUntil) return { target: clampToPitch(add(pl.pos, scale(pl.intent.dir, 5)), 1), speedCap: pl.intent.speed }
+    const opps = w.active(other(pl.side))
+    if (pl.intent.kind === "carry" && w.tick < pl.intentUntil) {
+      const dir = steerCarry(pl.intent.dir, pl.pos, opps, w.p.carry.avoidM)
+      return { target: clampToPitch(add(pl.pos, scale(dir, 5)), 1), speedCap: pl.intent.speed }
+    }
+    const shield = pl.role === "GK" ? null : shieldTarget(pl.pos, opps, w.p.carry.shieldM)
+    if (shield) return { target: shield, speedCap: w.p.carry.shieldSpeed }
     return { target: pl.pos, speedCap: 1 }
   }
   if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id && pl.intent.kind === "chase")

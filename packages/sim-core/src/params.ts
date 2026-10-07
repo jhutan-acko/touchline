@@ -159,7 +159,11 @@ export interface Params {
     readonly fumbleShare: number
   }
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
-  readonly carry: { readonly speed: number; readonly durationS: readonly [number, number] }
+  /**
+   * Carries: speed and duration; opponents ahead within avoidM bend the heading away (0 = off); a holding carrier with an
+   * opponent within shieldM moves away from them at shieldSpeed instead of standing still (0 = off).
+   */
+  readonly carry: { readonly speed: number; readonly durationS: readonly [number, number]; readonly avoidM: number; readonly shieldM: number; readonly shieldSpeed: number }
   readonly runs: { readonly runInBehindRatePerS: number }
   /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
   readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
@@ -315,7 +319,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
-  carry: { speed: 5.5, durationS: [0.8, 2.0] },
+  carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 0, shieldM: 0, shieldSpeed: 1.5 },
   runs: { runInBehindRatePerS: 0.12 },
   support: { count: 0, distM: 12, speedShare: 0.8 },
   marking: { weight: 0, radiusM: 10, goalSideM: 1.5 },

@@ -1,5 +1,5 @@
 import { defendersInLane } from "./decide.js"
-import { add, clampToPitch, dirOf, dist, norm, PITCH, scale, sub, type Side, type Vec2 } from "./geometry.js"
+import { add, clampToPitch, dirOf, dist, len, norm, PITCH, scale, sub, type Side, type Vec2 } from "./geometry.js"
 import type { PlayerState } from "./types.js"
 
 /** Directions a supporter can offer around the carrier: every 45 degrees. */
@@ -58,4 +58,37 @@ export const markTarget = (anchor: Vec2, attacker: Vec2, defSide: Side, goalSide
   const ownGoal = { x: -dirOf(defSide) * PITCH.halfL, y: 0 }
   const spot = add(attacker, scale(norm(sub(ownGoal, attacker)), goalSideM))
   return add(anchor, scale(sub(spot, anchor), weight))
+}
+
+/** A carry heading bent sideways, away from opponents ahead within avoidM (closer pushes harder); unit length. */
+export const steerCarry = (dir: Vec2, pos: Vec2, opponents: ReadonlyArray<PlayerState>, avoidM: number): Vec2 => {
+  if (avoidM <= 0) return dir
+  let push: Vec2 = { x: 0, y: 0 }
+  for (const o of opponents) {
+    if (o.sentOff) continue
+    const rel = sub(o.pos, pos)
+    const d = len(rel)
+    if (d < 1e-6 || d > avoidM || rel.x * dir.x + rel.y * dir.y <= 0) continue
+    // Sidestep perpendicular to the heading, to the side away from the opponent.
+    const away = dir.x * rel.y - dir.y * rel.x > 0 ? -1 : 1
+    push = add(push, scale({ x: -dir.y * away, y: dir.x * away }, (avoidM - d) / avoidM))
+  }
+  return push.x === 0 && push.y === 0 ? dir : norm(add(dir, push))
+}
+
+/** Where a holding carrier goes when the nearest opponent is within shieldM: 2 m straight away from them, on the pitch. */
+export const shieldTarget = (pos: Vec2, opponents: ReadonlyArray<PlayerState>, shieldM: number): Vec2 | null => {
+  if (shieldM <= 0) return null
+  let near: PlayerState | null = null
+  let nd = Infinity
+  for (const o of opponents) {
+    if (o.sentOff) continue
+    const d = dist(pos, o.pos)
+    if (d < nd) {
+      nd = d
+      near = o
+    }
+  }
+  if (!near || nd > shieldM) return null
+  return clampToPitch(add(pos, scale(norm(sub(pos, near.pos)), 2)), 1)
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { assignMarks, DEFAULT_PARAMS, dist, initMatch, isFinished, markTarget, PITCH, step, supportSpot, type DomainEvent, type Frame, type MatchConfig, type Params, type PlayerState } from "../src/index.js"
+import { assignMarks, DEFAULT_PARAMS, dist, initMatch, isFinished, markTarget, PITCH, shieldTarget, step, steerCarry, supportSpot, type DomainEvent, type Frame, type MatchConfig, type Params, type PlayerState } from "../src/index.js"
 import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
 
 const play = (cfg: MatchConfig) => {
@@ -76,5 +76,38 @@ describe("marking", () => {
     const off = freeSpace(play(withParams((p) => p)).frames)
     const on = freeSpace(play(withParams((p) => ({ ...p, marking: { ...p.marking, weight: 0.6 } }))).frames)
     expect(on).toBeLessThan(off - 0.3)
+  })
+})
+
+describe("on the ball", () => {
+  it("bends a carry away from an opponent ahead, and ignores opponents behind", () => {
+    const d = steerCarry({ x: 1, y: 0 }, { x: 0, y: 0 }, [opp(3, 1)], 6)
+    expect(d.y).toBeLessThan(0)
+    expect(Math.hypot(d.x, d.y)).toBeCloseTo(1, 9)
+    expect(steerCarry({ x: 1, y: 0 }, { x: 0, y: 0 }, [opp(-3, 0)], 6)).toEqual({ x: 1, y: 0 })
+    expect(steerCarry({ x: 1, y: 0 }, { x: 0, y: 0 }, [opp(3, 1)], 0)).toEqual({ x: 1, y: 0 })
+  })
+  it("shields away from a close opponent, never off the pitch, and not when switched off", () => {
+    expect(shieldTarget({ x: 0, y: 0 }, [opp(1, 0)], 3)).toEqual({ x: -2, y: 0 })
+    expect(shieldTarget({ x: 0, y: 0 }, [opp(5, 0)], 3)).toBeNull()
+    expect(shieldTarget({ x: 0, y: 0 }, [opp(1, 0)], 0)).toBeNull()
+    const edge = shieldTarget({ x: 0, y: PITCH.halfW - 0.5 }, [opp(0, PITCH.halfW - 1.5)], 3)!
+    expect(edge.y).toBeLessThanOrEqual(PITCH.halfW - 1)
+  })
+  it("keeps a pressed carrier moving when switched on", () => {
+    const moving = (frames: Frame[]) => {
+      let n = 0
+      for (const f of frames) {
+        const all = [...f.home, ...f.away]
+        const c = all.find((p) => p.intent === "on_ball")
+        if (!c) continue
+        const opps = (f.home.includes(c) ? f.away : f.home)
+        if (Math.min(...opps.map((o) => Math.hypot(o.x - c.x, o.y - c.y))) <= 3 && c.vel > 0.5) n++
+      }
+      return n
+    }
+    const off = moving(play(withParams((p) => p)).frames)
+    const on = moving(play(withParams((p) => ({ ...p, carry: { ...p.carry, shieldM: 3, avoidM: 6 } }))).frames)
+    expect(on).toBeGreaterThan(off)
   })
 })
