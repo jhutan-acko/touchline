@@ -6,6 +6,8 @@ import { t, type Lang } from "./i18n.js"
 import { Overlays, useNow } from "./Overlays.js"
 import { Pitch } from "./Pitch.js"
 import { ProfileBar } from "./ProfileBar.js"
+import { RecapPanel } from "./RecapPanel.js"
+import { WhyDrawer } from "./WhyDrawer.js"
 import { segmentOf, type Profile } from "./profile.js"
 import { TopBar } from "./TopBar.js"
 import { usePane } from "./usePane.js"
@@ -34,6 +36,17 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
         <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
       </div>
       {pane.playback?.state === "ended" && <p className="text-center font-semibold">{t(lang, "ended")}</p>}
+      {pane.feed.length > 0 && (
+        <ol aria-label="feed" className="flex max-h-40 flex-col gap-1 overflow-y-auto text-sm">
+          {pane.feed.map((c) => (
+            <li key={c.cue_id} lang={c.segment.lang} className="flex items-center gap-2 rounded bg-slate-900 px-2 py-1">
+              <span className="tabular-nums text-slate-400">{c.anchor.clock}</span>
+              <span className="truncate">{c.text?.headline}</span>
+              {onWhy && <button type="button" className="ml-auto rounded bg-slate-800 px-2 text-xs" onClick={() => onWhy(c)}>{t(lang, "why")}</button>}
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   )
 }
@@ -48,6 +61,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
   onBack: () => void
 }) => {
   const lang: Lang = profile.lang
+  const [why, setWhy] = useState<Cue | null>(null)
   const [playback, setPlayback] = useState<Pick<Playback, "state" | "speed">>({ state: "playing", speed: 4 })
   const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback)
   return (
@@ -64,7 +78,9 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
           </select>
         </label>
       </div>
-      <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} />
+      <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} />
+      <RecapPanel client={client} matchId={match.match_id} segment={segmentOf(profile)} lang={lang} />
+      {why && <WhyDrawer client={client} matchId={match.match_id} cue={why} lang={lang} onClose={() => setWhy(null)} />}
     </div>
   )
 }

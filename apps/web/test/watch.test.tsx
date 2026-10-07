@@ -37,7 +37,7 @@ describe("watching a match", () => {
     await userEvent.selectOptions(screen.getByLabelText("Speed"), "16")
     expect(client.calls.slice(1)).toEqual(["control pause", "control play", "control speed 16"])
     act(() => client.push({ kind: "playback", playback: { state: "ended", frame: 58000, speed: 16, live: false } }))
-    expect(screen.getByText("Full-time")).toBeTruthy()
+    expect(screen.getByText("Full-time", { selector: "p" })).toBeTruthy()
     await userEvent.click(screen.getByRole("button", { name: /Back to matches/ }))
     expect(client.watchers).toEqual([])
     expect(await screen.findByRole("listitem")).toBeTruthy()

@@ -53,6 +53,6 @@ describe("profiles while watching", () => {
     await userEvent.selectOptions(screen.getByLabelText("Club"), "northwick")
     expect(client.watchers.map((w) => w.segment)).toEqual([{ mode: "analyst", lang: "es", club: "northwick" }])
     act(() => client.push({ kind: "cue", cue: cue({ slot: "side_panel", seg: { mode: "analyst", lang: "es", club: "northwick" }, text: { headline: "Golpe para Northwick", body: "Un remate certero." } }) }))
-    expect(screen.getByText("Golpe para Northwick")).toBeTruthy()
+    expect(document.querySelector('[data-slot="side_panel"]')!.textContent).toContain("Golpe para Northwick")
   })
 })
