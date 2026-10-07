@@ -6,9 +6,10 @@ the stats tools for more; the fallback is a template explanation per moment type
 way every number is a value the stats server returned, never one the agent computed.
 """
 
+import json
 from dataclasses import dataclass
 
-from agent_framework import Agent, BaseChatClient
+from agent_framework import Agent, BaseChatClient, FunctionTool, tool
 
 from .config import Settings
 from .contracts import Analysis, Claim, Moment, Signal
@@ -47,7 +48,8 @@ Rules:
   value; kind "event" for an event you rely on; kind "score" with quote "home-away"; kind "better_option" with
   event_id and receiver_id only when a decision record ranks another pass first (chosen_rank > 1).
 - `quote` is the number as a viewer would read it (shares as percentages such as "27%"); `sentence` is 0.
-- Never invent ids or values. You may call the stats tools for anything the pack lacks."""
+- Never invent ids or values. You may call the stats tools for anything the pack lacks; they answer as of the
+  moment's frame (INPUT at_frame) at most, never later."""
 
 
 def _claim(kind: str, at_frame: int, **kw) -> Claim:
@@ -108,6 +110,51 @@ async def evidence(stats: StatsClient, moment: Moment, signals: list[Signal]) ->
         "decisions": decisions,
         "at_frame": at,
     }
+
+
+def capped_tools(stats: StatsClient, latest: int) -> list[FunctionTool]:
+    """The stats tools a model may call, each answering as of `latest` at most: a model cannot read past the moment
+    whatever frame it asks for ("no answer sees the future")."""
+
+    def cap(frame: int | None) -> int:
+        return latest if frame is None else min(frame, latest)
+
+    async def ask(name: str, **args) -> str:
+        try:
+            return json.dumps(await stats.call(name, **args))
+        except StatsError as e:
+            return f"error: {e}"
+
+    @tool(name="match_info", description="Teams, players, the score and the clock as of a frame (at most the moment's).")
+    async def match_info(at_frame: int | None = None) -> str:
+        return await ask("match_info", at_frame=cap(at_frame))
+
+    @tool(name="list_metrics", description="Every metric id with its unit, subjects and window.")
+    async def list_metrics() -> str:
+        return await ask("list_metrics")
+
+    @tool(name="get_metric", description="A metric's value for a subject (\"match\", a team id or a player id) as of a frame.")
+    async def get_metric(metric_id: str, subject: str, at_frame: int | None = None, window_s: float | None = None) -> str:
+        return await ask("get_metric", metric_id=metric_id, subject=subject, at_frame=cap(at_frame), window_s=window_s)
+
+    @tool(name="rank_players", description="Players ranked by a player metric, optionally for one team.")
+    async def rank_players(metric_id: str, team_id: str | None = None, at_frame: int | None = None, top: int = 5) -> str:
+        return await ask("rank_players", metric_id=metric_id, team_id=team_id, at_frame=cap(at_frame), top=top)
+
+    @tool(name="get_events", description="Events between two frames with their values and qualifiers (ids usable as evidence).")
+    async def get_events(from_frame: int | None = None, to_frame: int | None = None, types: list[str] | None = None,
+                         team_id: str | None = None, player_id: str | None = None, limit: int = 50) -> str:
+        return await ask("get_events", from_frame=from_frame, to_frame=cap(to_frame), types=types, team_id=team_id, player_id=player_id, limit=limit)
+
+    @tool(name="get_signals", description="Signals the stats engine raised between two frames.")
+    async def get_signals(from_frame: int | None = None, to_frame: int | None = None, limit: int = 50) -> str:
+        return await ask("get_signals", from_frame=from_frame, to_frame=cap(to_frame), limit=limit)
+
+    @tool(name="get_decision", description="The decision record of an event: options ranked best first and the rank chosen.")
+    async def get_decision(event_id: str) -> str:
+        return await ask("get_decision", event_id=event_id, at_frame=latest)
+
+    return [match_info, list_metrics, get_metric, rank_players, get_events, get_signals, get_decision]
 
 
 def _metric_claim(m: dict) -> Claim:
@@ -231,7 +278,7 @@ class Analyst:
 
     async def analyze(self, stats: StatsClient, moment: Moment, signals: list[Signal]) -> AnalystResult:
         pack = await evidence(stats, moment, signals)
-        agent = Agent(client=self.client, name="tactical_analyst", instructions=INSTRUCTIONS, tools=[stats.tool], default_options=agent_options(self.settings))
+        agent = Agent(client=self.client, name="tactical_analyst", instructions=INSTRUCTIONS, tools=capped_tools(stats, moment.frame_to), default_options=agent_options(self.settings))
         out = await run_structured(
             agent, "analyze", pack, Analysis, timeout_s=self.settings.timeout("analyst"),
             fallback=lambda: template_analysis(pack), accept=lambda a: acceptable(a, moment.moment_id),

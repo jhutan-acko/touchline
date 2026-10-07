@@ -47,6 +47,8 @@ class Settings:
     mcp_allowed_hosts: frozenset[str]
     checkpoint_dir: Path | None
     reasoning_effort: Effort = DEFAULT_EFFORT
+    # Seconds the service may spend on one request before every remaining agent uses its fallback (live runs).
+    request_budget_s: float | None = None
     # Kept out of repr so the key never reaches a log line or a test report.
     openai_api_key: str | None = field(default=None, repr=False)
 
@@ -96,6 +98,11 @@ def load_settings(env: Mapping[str, str] | None = None, env_file: Path | None = 
     effort = merged.get("TOUCHLINE_REASONING", DEFAULT_EFFORT)
     if effort not in ("low", "medium", "high"):
         raise SettingsError(f'TOUCHLINE_REASONING must be low, medium or high, not "{effort}"')
+    budget = merged.get("TOUCHLINE_REQUEST_BUDGET_S")
+    try:
+        budget_s = float(budget) if budget else None
+    except ValueError:
+        raise SettingsError("TOUCHLINE_REQUEST_BUDGET_S must be a number of seconds") from None
     hosts = merged.get("TOUCHLINE_MCP_HOSTS", "127.0.0.1,localhost,::1")
     cp = merged.get("TOUCHLINE_CHECKPOINTS")
     return Settings(
@@ -106,5 +113,6 @@ def load_settings(env: Mapping[str, str] | None = None, env_file: Path | None = 
         mcp_allowed_hosts=frozenset(h.strip() for h in hosts.split(",") if h.strip()),
         checkpoint_dir=Path(cp) if cp else None,
         reasoning_effort=effort,
+        request_budget_s=budget_s,
         openai_api_key=key,
     )

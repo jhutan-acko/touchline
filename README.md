@@ -80,9 +80,9 @@ uv run --project services/agents touchline-eval suite --suite ci            # sc
 uv run --project services/agents pytest -m live                             # the few tests that call the real model
 ```
 
-A real model takes about 5 s per call, so a moment takes about 30 s end to end: real-model runs are recorded runs (the cached cues replay against the match; spec §6), and a live run with `--budget-ms 4000` falls back to templates wherever a model is late.
+A real model takes about 5 s per call, so a moment takes about 30 s end to end: real-model runs are recorded runs (the cached cues replay against the match; spec §6). For a live run, give the service a budget below the gateway's (`TOUCHLINE_REQUEST_BUDGET_S=3` with `pnpm agents --budget-ms 4000`): once the budget is spent every remaining agent uses its template, so cues arrive in time; the gateway also keeps any cues that arrived before a request timed out.
 
-Known limits: the Fact-Checker rejects rostered players who were not in the play, but not a name that is outside the roster altogether; Hindi is checked for Devanagari and Spanish only for not copying the English draft, so fluency needs a human spot-check; checkpoints are written after every step but a restarted service starts each match afresh.
+Known limits: the checks reject rostered players who were not in the play (in any letter case), but not a name outside the roster altogether, nor a rostered name transliterated into Devanagari; numbers written as words ("two goals") are not checked, so the agents are told never to write them; Hindi must be mostly Devanagari and Spanish must not read as English, but fluency needs a human spot-check; checkpoints are written after every step but a restarted service starts each match afresh.
 
 ## Packages
 

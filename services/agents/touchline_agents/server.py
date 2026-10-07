@@ -8,6 +8,7 @@ recap cards ("cue"). Sessions are per match; requests for one match run one at a
 import argparse
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -23,6 +24,7 @@ from starlette.applications import Starlette
 
 from .config import Settings, load_settings
 from .contracts import RecapRequest, SignalsRequest, dump, parse_request
+from .llm import deadline
 from .session import Agents, MatchSession
 from .stats import StatsError
 from .workflow import build, run_moments, run_recap
@@ -52,14 +54,30 @@ def agent_card(url: str) -> AgentCard:
 class Sessions:
     """Match sessions by match id, each with its workflow and a lock so its requests run in order."""
 
-    def __init__(self, settings: Settings, agents: Agents | None = None) -> None:
+    def __init__(self, settings: Settings, agents: Agents | None = None, idle_s: float = 1800.0) -> None:
         self.settings = settings
         self.agents = agents
+        self.idle_s = idle_s
         self._open: dict[str, tuple[MatchSession, object, asyncio.Lock]] = {}
+        self._used: dict[str, float] = {}
         self._guard = asyncio.Lock()
 
-    async def get(self, req: SignalsRequest | RecapRequest) -> tuple[MatchSession, object, asyncio.Lock]:
+    async def evict_idle(self, now: float | None = None) -> None:
+        """Close matches not asked about for `idle_s` (a gateway that died, a full-time recap that never came)."""
+        now = time.monotonic() if now is None else now
         async with self._guard:
+            for match_id in [m for m, t in self._used.items() if now - t > self.idle_s]:
+                entry = self._open.pop(match_id, None)
+                self._used.pop(match_id, None)
+                if entry is not None and not entry[2].locked():
+                    await entry[0].close()
+                elif entry is not None:
+                    self._open[match_id] = entry  # still running: keep it
+
+    async def get(self, req: SignalsRequest | RecapRequest) -> tuple[MatchSession, object, asyncio.Lock]:
+        await self.evict_idle()
+        async with self._guard:
+            self._used[req.match_id] = time.monotonic()
             entry = self._open.get(req.match_id)
             if entry is None or entry[0].stats.url != req.mcp_url:
                 if entry is not None:
@@ -79,6 +97,7 @@ class Sessions:
             return
         async with self._guard:
             entry = self._open.pop(req.match_id, None)
+            self._used.pop(req.match_id, None)
             if entry is not None:
                 await entry[0].close()
 
@@ -109,23 +128,26 @@ class TouchlineExecutor(AgentExecutor):
         await up.start_work(new_text_message(f"{req.kind} for {req.match_id}", context_id=task.context_id, task_id=task.id))
         try:
             async with lock:
-                if isinstance(req, SignalsRequest):
-                    async for result in run_moments(workflow, list(req.signals)):
-                        for cue in result.cues:
+                with deadline(self.sessions.settings.request_budget_s):
+                    if isinstance(req, SignalsRequest):
+                        async for result in run_moments(workflow, list(req.signals)):
+                            for cue in result.cues:
+                                await up.add_artifact([new_data_part(dump(cue), JSON)], artifact_id=cue.cue_id, name="cue", last_chunk=True)
+                            trace = result.trace
+                            await up.add_artifact([new_data_part(dump(trace), JSON)], artifact_id=f"{trace.moment.moment_id}-trace", name="trace", last_chunk=True)
+                    else:
+                        r = await run_recap(session, req.recap, req.at_frame)
+                        await up.add_artifact([new_data_part(dump(r.recap), JSON)], artifact_id=r.recap.recap_id, name="recap", last_chunk=True)
+                        for cue in r.cues:
                             await up.add_artifact([new_data_part(dump(cue), JSON)], artifact_id=cue.cue_id, name="cue", last_chunk=True)
-                        trace = result.trace
-                        await up.add_artifact([new_data_part(dump(trace), JSON)], artifact_id=f"{trace.moment.moment_id}-trace", name="trace", last_chunk=True)
-                else:
-                    r = await run_recap(session, req.recap, req.at_frame)
-                    await up.add_artifact([new_data_part(dump(r.recap), JSON)], artifact_id=r.recap.recap_id, name="recap", last_chunk=True)
-                    for cue in r.cues:
-                        await up.add_artifact([new_data_part(dump(cue), JSON)], artifact_id=cue.cue_id, name="cue", last_chunk=True)
-            if isinstance(req, RecapRequest):
-                await self.sessions.finish(req)
         except Exception as e:  # the task fails with the reason; the service keeps serving
             log.exception("%s for %s failed", req.kind, req.match_id)
             await up.failed(new_text_message(f"{req.kind} failed: {type(e).__name__}: {e}", context_id=task.context_id, task_id=task.id))
             return
+        finally:
+            # The full-time whistle ends the match, whether or not its recap could be made.
+            if isinstance(req, RecapRequest):
+                await self.sessions.finish(req)
         await up.complete()
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:

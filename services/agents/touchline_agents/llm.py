@@ -6,6 +6,8 @@ path (prompt, structured output, tool calls over MCP) and is reproducible.
 """
 
 import asyncio
+import contextlib
+import contextvars
 import json
 import logging
 import re
@@ -132,6 +134,21 @@ def agent_options(settings: Settings) -> dict[str, Any]:
     return {} if settings.provider == "stub" else {"reasoning": {"effort": settings.reasoning_effort}}
 
 
+# When the current request must be answered by (time.monotonic()); None: no limit.
+_DEADLINE: contextvars.ContextVar[float | None] = contextvars.ContextVar("touchline_deadline", default=None)
+
+
+@contextlib.contextmanager
+def deadline(seconds: float | None):
+    """Within this block every agent call ends by `seconds` from now: a late model gives the fallback, and once the
+    time is up no model is called at all, so a live request is answered in time with template output."""
+    token = _DEADLINE.set(None if seconds is None else time.monotonic() + seconds)
+    try:
+        yield
+    finally:
+        _DEADLINE.reset(token)
+
+
 @dataclass(frozen=True)
 class Outcome[T]:
     value: T
@@ -155,6 +172,10 @@ async def run_structured[T: BaseModel](
     `fallback()` instead (spec §6: every agent has a deterministic fallback, so the match never goes silent)."""
     t0 = time.perf_counter()
     reason: str | None = None
+    if (end := _DEADLINE.get()) is not None:
+        timeout_s = min(timeout_s, end - time.monotonic())
+        if timeout_s <= 0.05:
+            return Outcome(fallback(), True, "deadline", 0.0)
     try:
         r = await asyncio.wait_for(agent.run(envelope(task, payload), options={"response_format": output}), timeout_s)
         value = r.value

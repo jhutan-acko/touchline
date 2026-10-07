@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from .config import Settings
 from .contracts import Claim, Draft, SentenceCheck, Verdict
 from .llm import agent_options, run_structured, stub_responder
-from .numbers import matches, numbers_in
+from .numbers import matches, numbers_in, read
 from .stats import StatsClient, StatsError
 
 
@@ -67,6 +67,8 @@ class FactChecker:
         """None when the claim holds, else the reason it does not."""
         if c.at_frame > latest:
             return f"claims frame {c.at_frame}, after the moment (frame {latest})"
+        if c.kind in ("event", "better_option") and numbers_in(c.quote):
+            return f'an {c.kind} claim states no number, but quotes "{c.quote}"'
         try:
             if c.kind == "metric":
                 if c.metric_id is None or c.value is None:
@@ -88,14 +90,18 @@ class FactChecker:
                 if c.quote and not matches(c.quote, c.value, lang):
                     return f'"{c.quote}" does not round {c.value}'
             elif c.kind == "score":
-                s = (await stats.match_info(c.at_frame))["score"]
+                # The score as it stands at the moment (a recap: at the whistle), home first.
+                s = (await stats.match_info(latest))["score"]
                 said = [int(x) for x in re.findall(r"\d+", c.quote)]
-                if sorted(said) != sorted([s["home"], s["away"]]) or len(said) != 2:
-                    return f"the score at frame {c.at_frame} is {s['home']}-{s['away']}, not {c.quote}"
+                if said != [s["home"], s["away"]]:
+                    return f"the score is {s['home']}-{s['away']} (home-away), not {c.quote}"
             elif c.kind == "minute":
                 minute = int(clock.split(":")[0])
                 if c.value is None or not (minute <= c.value <= minute + 1):
                     return f"the moment is in minute {minute + 1}, not {c.value}"
+                tokens = numbers_in(c.quote)
+                if c.quote and (len(tokens) != 1 or read(tokens[0], lang)[0] != c.value):
+                    return f'"{c.quote}" is not minute {c.value:g}'
             elif c.kind == "event":
                 found = await stats.call("get_events", ids=[c.event_id], to_frame=latest) if c.event_id else {"events": []}
                 if not found["events"]:
@@ -145,7 +151,7 @@ class FactChecker:
         for c in claims:
             if c.sentence >= len(draft.sentences):
                 continue
-            if c.quote and c.quote not in draft.sentences[c.sentence]:
+            if c.quote and not quoted(c.quote, draft.sentences[c.sentence]):
                 reasons[c.sentence].append(f'"{c.quote}" is not in the sentence')
                 continue
             why = await self.check_claim(stats, c, draft.lang, latest, clock)
@@ -160,7 +166,7 @@ class FactChecker:
                 undeclared += 1
                 reasons[i].append(f'"{token}" is not declared as a claim')
             for name in others:
-                if re.search(rf"\b{re.escape(name)}\b", sentence):
+                if re.search(rf"\b{re.escape(name)}\b", sentence, re.I):
                     reasons[i].append(f"names {name}, who was not involved")
             if SUPERLATIVES.search(sentence) and not any(c.kind in ("metric", "better_option") for c in mine):
                 reasons[i].append(f'"{SUPERLATIVES.search(sentence)[0]}" needs a metric claim')
@@ -174,8 +180,15 @@ class FactChecker:
         return Check(v, extracted, draft.model_copy(update={"claims": claims}), fallback, (time.perf_counter() - t0) * 1000)
 
 
+def quoted(quote: str, text: str) -> bool:
+    """Whether `text` says `quote`: the words as written, and each of its numbers as a whole number of the text."""
+    return quote in text and set(numbers_in(quote)) <= set(numbers_in(text))
+
+
 def _undeclared(sentence: str, claims: list[Claim]) -> list[str]:
-    return [t for t in numbers_in(sentence) if not any(t in c.quote for c in claims if c.quote)]
+    """Numbers in the sentence that no claim quotes as a whole number ("7" is not declared by "27%")."""
+    declared = {t for c in claims if c.quote for t in numbers_in(c.quote)}
+    return [t for t in numbers_in(sentence) if t not in declared]
 
 
 def other_names(roster: dict, involved: set[str]) -> list[str]:

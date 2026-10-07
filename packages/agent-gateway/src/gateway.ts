@@ -79,13 +79,16 @@ export const timeline = (plan: MatchPlan, opts: GatewayOptions): AgentRequest[] 
 
 const frameOf = (req: AgentRequest) => (req.kind === "signals" ? req.now_frame : req.at_frame)
 
-interface Received {
+/** What a request has received so far; the caller keeps it, so cues that arrived before a timeout are not lost. */
+export interface Received {
   readonly cues: Cue[]
   readonly traces: MomentTrace[]
   readonly recaps: Recap[]
   late: number
   unverified: number
 }
+
+export const received = (): Received => ({ cues: [], traces: [], recaps: [], late: 0, unverified: 0 })
 
 const decode = <A>(name: string, f: (u: unknown) => A, data: unknown): A => {
   try {
@@ -95,12 +98,11 @@ const decode = <A>(name: string, f: (u: unknown) => A, data: unknown): A => {
   }
 }
 
-/** One request: stream its artifacts, validate each, drop late and unverified cues. */
-export const exchange = (send: Sender, req: AgentRequest, budgetMs: number) => {
+/** One request: stream its artifacts into `got`, validating each and dropping late and unverified cues. */
+export const exchange = (send: Sender, req: AgentRequest, budgetMs: number, got: Received = received()) => {
   const run = Effect.tryPromise({
     try: async (signal) => {
       const t0 = performance.now()
-      const got: Received = { cues: [], traces: [], recaps: [], late: 0, unverified: 0 }
       for await (const a of send(req, signal)) {
         if (a.name === "cue") {
           const cue = decode("cue", decodeCue, a.data)
@@ -139,7 +141,8 @@ export const runGateway = (send: Sender, plan: MatchPlan, opts: GatewayOptions =
         continue
       }
       const t0 = performance.now()
-      const r = yield* Effect.result(exchange(send, req, opts.budgetMs))
+      const got = received()
+      const r = yield* Effect.result(exchange(send, req, opts.budgetMs, got))
       if (r._tag === "Success") {
         failures = 0
         cues.push(...r.success.cues)
@@ -150,7 +153,12 @@ export const runGateway = (send: Sender, plan: MatchPlan, opts: GatewayOptions =
       }
       const e = r.failure
       const outcome: Outcome = e._tag === "TimeoutError" ? "timeout" : e._tag === "AgentFailed" ? "failed" : e._tag === "InvalidArtifact" ? "invalid" : "unavailable"
-      requests.push({ ...base, outcome, ms: performance.now() - t0, cues: 0, late: 0, unverified: 0, reason: "reason" in e ? e.reason : e.message })
+      // A late request still publishes what it delivered in time (each cue was validated as it arrived).
+      const kept = outcome === "timeout" ? got : received()
+      cues.push(...kept.cues)
+      traces.push(...kept.traces)
+      recaps.push(...kept.recaps)
+      requests.push({ ...base, outcome, ms: performance.now() - t0, cues: kept.cues.length, late: kept.late, unverified: kept.unverified, reason: "reason" in e ? e.reason : e.message })
       if (++failures >= opts.breaker.failures) {
         failures = 0
         skip = opts.breaker.cooldown

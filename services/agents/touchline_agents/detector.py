@@ -59,7 +59,8 @@ class DetectorState:
 
     def cooling(self, s: Signal) -> bool:
         last = self.last.get((s.type, s.team_id))
-        return last is not None and s.frame_id - last < COOLDOWN_S[s.type] * self.fps
+        # An earlier frame (a match replayed on a reused session) is not inside the cooldown.
+        return last is not None and 0 <= s.frame_id - last < COOLDOWN_S[s.type] * self.fps
 
 
 def candidates(signals: list[Signal], state: DetectorState) -> list[Signal]:

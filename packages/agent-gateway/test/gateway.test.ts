@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { TaskFailed } from "../src/a2a.js"
+import { TaskFailed, type Sender } from "../src/a2a.js"
 import { DEFAULT_OPTIONS, runGateway, timeline } from "../src/gateway.js"
 import { parseSegments, SegmentError } from "../src/segments.js"
 import { CUE, fake, plan, RECAP, TRACE } from "./fakes.js"
@@ -43,6 +43,20 @@ describe("gateway", () => {
   it("times out a request over budget", async () => {
     const r = await run(fake(() => ok(), 300), plan([100]), { budgetMs: 50 })
     expect(r.requests[0]!.outcome).toBe("timeout")
+  })
+
+  it("keeps the cues that arrived before a timeout", async () => {
+    const send = fake((req) => (req.kind === "signals" ? [{ name: "cue", data: CUE }, { name: "cue", data: { ...CUE, cue_id: "late-one" } }] : []), 0)
+    const slowSecond: Sender = async function* (req, signal) {
+      let n = 0
+      for await (const a of send(req, signal)) {
+        if (n++ === 1) await new Promise((r) => setTimeout(r, 400))
+        yield a
+      }
+    }
+    const r = await run(slowSecond, plan([100]), { budgetMs: 100 })
+    expect(r.requests[0]).toMatchObject({ outcome: "timeout", cues: 1 })
+    expect(r.cues.map((c) => c.cue_id)).toEqual([CUE.cue_id])
   })
 
   it("retries an unreachable service once, but not a failed task", async () => {

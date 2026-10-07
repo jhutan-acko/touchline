@@ -21,7 +21,7 @@ Write `sentences`: sentence 0 is a headline of at most 8 words; then one or two 
 Use names, never ids. State only numbers that appear in the Analyst's claims, and for every number you write add
 that claim to `claims` with `sentence` set to the sentence it is in and `quote` set to the number exactly as you
 wrote it (e.g. "27%", "0.24", "2-1"). Keep the claim's other fields as the Analyst gave them. No other digits:
-write the minute in words or leave it out. `lang` is "en"; `moment_id` comes from INPUT."""
+leave the minute out, and never write a number as a word. `lang` is "en"; `moment_id` comes from INPUT."""
 
 MAX_HEADLINE_WORDS = 8
 

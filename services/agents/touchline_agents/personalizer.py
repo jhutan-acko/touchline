@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from .config import Settings
 from .contracts import Claim, Cue, Draft, Moment, Segment, segment_key
 from .llm import agent_options, run_structured, stub_responder
+from .factchecker import SUPERLATIVES, quoted
 from .numbers import format_metric, matches, numbers_in
 from .templates import CONTEXT, FRAMING, LABELS, NEGATIVE, headline, headline_key
 
@@ -33,9 +34,12 @@ Hindi: Devanagari script, Western digits), not a word-for-word translation.
 - analyst: numbers first, precise, up to three numbers, comparisons only if a claim supports them.
 State only numbers from INPUT's claims. For each number you write, add {"claim": <index>, "quote": <the number
 exactly as you wrote it>} to `numbers`; write numbers in the language's style (Spanish decimal comma: 0,24).
-Use names, never ids, and no players other than those in `names`."""
+Use names, never ids, and no players other than those in `names`; keep every name exactly as given, in Latin
+script, even in Hindi."""
 
 DEVANAGARI = re.compile(r"[\u0900-\u097F]")
+ENGLISH = {"the", "and", "of", "with", "to", "in", "is", "was", "they", "their", "from", "for", "on", "at", "his", "her", "it", "after", "into", "has", "have"}
+SPANISH = {"el", "la", "los", "las", "de", "del", "que", "y", "en", "con", "un", "una", "por", "para", "su", "sus", "al", "es", "se", "tras", "ha"}
 MAX_NUMBERS = {"casual": 1, "analyst": 4}
 MAX_CHARS = {"casual": 160, "analyst": 320}
 @dataclass(frozen=True)
@@ -135,23 +139,37 @@ def check_variant(v: Variant, payload: dict, others: list[str]) -> list[str]:
             problems.append(f"no claim {u.claim}")
             continue
         c = claims[u.claim]
-        if u.quote not in text:
+        if not quoted(u.quote, text):
             problems.append(f'"{u.quote}" is not in the text')
         elif c.kind == "metric" and (c.value is None or not matches(u.quote, c.value, lang)):
             problems.append(f'"{u.quote}" does not round claim {u.claim}')
-        elif c.kind == "score" and sorted(re.findall(r"\d+", u.quote)) != sorted(re.findall(r"\d+", c.quote)):
+        elif c.kind == "score" and re.findall(r"\d+", u.quote) != re.findall(r"\d+", c.quote):
             problems.append(f'"{u.quote}" is not the score {c.quote}')
         elif c.kind not in ("metric", "score"):
             problems.append(f"claim {u.claim} has no number to quote")
+    declared = {t for u in v.numbers for t in numbers_in(u.quote)}
     for t in tokens:
-        if not any(t in u.quote for u in v.numbers):
+        if t not in declared:
             problems.append(f'"{t}" is not one of the verified claims')
-    if lang == "hi" and not DEVANAGARI.search(text):
+    if (m := SUPERLATIVES.search(text)) and not any(0 <= u.claim < len(claims) and claims[u.claim].kind == "metric" for u in v.numbers):
+        problems.append(f'"{m[0]}" needs a metric claim')
+    # The language itself, names aside: Hindi mostly in Devanagari, Spanish not English.
+    bare = text
+    for n in payload["names"].values():
+        bare = re.sub(re.escape(n), " ", bare, flags=re.I)
+    letters = [ch for ch in bare if ch.isalpha()]
+    deva = sum(1 for ch in letters if DEVANAGARI.match(ch))
+    if lang == "hi" and not deva:
         problems.append("Hindi text must be in Devanagari")
+    elif lang == "hi" and deva < len(letters) / 2:
+        problems.append("mostly Latin script (not written in hi)")
+    words = re.findall(r"[a-záéíóúñü]+", bare.lower())
+    if lang == "es" and sum(w in ENGLISH for w in words) > sum(w in SPANISH for w in words):
+        problems.append("reads as English (not written in es)")
     if lang != "en" and any(len(s) >= 12 and s in text for s in payload["draft"]):
         problems.append(f"copies the English draft instead of writing in {lang}")
     for name in others:
-        if re.search(rf"\b{re.escape(name)}\b", text):
+        if re.search(rf"\b{re.escape(name)}\b", text, re.I):
             problems.append(f"names {name}, who was not involved")
     return problems
 

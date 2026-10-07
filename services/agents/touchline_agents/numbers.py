@@ -20,7 +20,7 @@ DECIMALS: dict[str, int] = {"m": 0, "km/h": 1, "xG": 2, "xT": 2, "index": 2, "pa
 # A number as written: digits with separators, an optional percent sign or ordinal suffix; not part of an id such
 # as "p-iro-09". Scores are matched separately.
 NUMBER = re.compile(r"(?<![\w.,-])\d+(?:[.,]\d+)*(?:\s?%|st|nd|rd|th|º|ª|'|′)?")
-SCORE = re.compile(r"(?<![\w.,-])(\d+)\s?[-–]\s?(\d+)(?![\w.,])")
+SCORE = re.compile(r"(?<![\w.,-])(\d+)\s?[-–]\s?(\d+)(?![\w,]|[.,]\d)")
 
 
 def _group(digits: str, sep: str) -> str:

@@ -29,6 +29,7 @@ def test_finds_numbers_and_scores():
     assert numbers_in("Ironmoor lead 2-1 after 67 minutes, with 27% of the ball.") == ["2-1", "67", "27%"]
     assert numbers_in("No numbers here, p-iro-09 is an id") == []
     assert numbers_in("Ganan 2–0 con un 0,24 de xG") == ["2–0", "0,24"]
+    assert numbers_in("The score is now 1-0.") == ["1-0"]
 
 
 def test_rounding_must_be_faithful():
