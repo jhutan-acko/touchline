@@ -141,6 +141,21 @@ describe("sessions", () => {
       })
     ), 120_000)
 
+  it("measure how long each goal takes to reach the scoreboard", () =>
+    run(
+      Effect.gen(function* () {
+        const sessions = yield* makeSessions(library())
+        const goal = lib.goals[0]!
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: Math.floor(goal.frame_id / 600), live: false })
+        const scored = (t: Tick) => t.kind === "cue" && t.cue.display.template === "scoreboard" && (t.cue.data["score.home"] ?? 0) + (t.cue.data["score.away"] ?? 0) > 0
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.takeUntil(scored), Stream.runDrain, Effect.forkChild)
+        yield* settle(w)
+        expect(s.metrics.stats.length).toBe(1)
+        expect(s.metrics.stats[0]!).toBeGreaterThanOrEqual(0)
+        expect(s.metrics.stats[0]!).toBeLessThan(250) // the spec's stats-overlay budget
+      })
+    ), 120_000)
+
   it("start the second half from minute 45 and on", () => {
     const ht = startFrame(match, 45)
     expect(startFrame(match, 50) - ht).toBe(3000)

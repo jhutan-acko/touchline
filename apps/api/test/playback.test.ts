@@ -36,6 +36,13 @@ describe("timeline", () => {
     }
   })
 
+  it("puts a goal on the scoreboard at once, not at the next whole second", () => {
+    const boards = all.flatMap((b) => (b.kind === "board" ? [b.board] : []))
+    const changes = boards.filter((b, i) => i > 0 && b.score.home + b.score.away > boards[i - 1]!.score.home + boards[i - 1]!.score.away)
+    expect(changes.length).toBe(match.info.score.home + match.info.score.away)
+    for (const [i, goal] of lib.goals.entries()) expect(Math.abs(changes[i]!.frame - goal.frame_id)).toBeLessThanOrEqual(1)
+  })
+
   it("passes on the stats engine's signals (goals among them) for live agents", () => {
     const signals = all.flatMap((b) => (b.kind === "signals" ? b.signals : []))
     expect(signals.filter((s) => s.type === "goal")).toHaveLength(match.info.score.home + match.info.score.away)

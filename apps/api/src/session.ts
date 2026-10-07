@@ -26,6 +26,12 @@ export const frameStep = (speed: number, fps: number): number => Math.max(1, Mat
 /** What a session's bus carries: the timeline, then `closed` once nothing more will come (live agents included). */
 export type BusBeat = Beat | { readonly kind: "closed" }
 
+/** What a session measures for the ops view (wall-clock milliseconds). */
+export interface Metrics {
+  /** Each goal: the frame it was scored in played, to the new score on the bus (the stats-overlay latency). */
+  readonly stats: number[]
+}
+
 /** What a live session's agents have written so far: its cues, the traces behind them and its recaps. */
 export interface LiveStore {
   readonly cues: Cue[]
@@ -71,6 +77,7 @@ export interface Session {
   readonly closed: Ref.Ref<boolean>
   /** What the live agents wrote (empty for a recorded session). */
   readonly agents: LiveStore
+  readonly metrics: Metrics
   readonly watchers: Ref.Ref<number>
   /** The segments watched so far (live agents write cues for these). */
   readonly segments: Ref.Ref<ReadonlyMap<string, Segment>>
@@ -116,15 +123,23 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         const segments = yield* Ref.make<ReadonlyMap<string, Segment>>(new Map())
         const closed = yield* Ref.make(false)
         const ended = yield* Deferred.make<void>()
-        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, watchers, segments }
+        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [] }, watchers, segments }
         const end = (frame: number) =>
           Ref.update(playback, (p): Playback => ({ ...p, state: "ended", frame })).pipe(Effect.andThen(PubSub.publish(bus, { kind: "end", frame })))
         // A live session shows the agents' cues as they are written, never the cache's.
         const timeline = beats(o.live ? { ...match, cues: [] } : match, from)
+        let playedAt = 0 // when the latest frame was played
+        let goals = -1 // goals on the latest scoreboard (-1: none yet)
         const play = paced(timeline, control, fps).pipe(
           Stream.runForEach((b) =>
             Effect.gen(function* () {
+              if (b.kind === "board") {
+                const now = b.board.score.home + b.board.score.away
+                if (goals >= 0 && now > goals) s.metrics.stats.push(performance.now() - playedAt)
+                goals = now
+              }
               if (b.kind === "frame") {
+                playedAt = performance.now()
                 yield* Ref.update(playback, (p) => ({ ...p, frame: b.frame.frame }))
                 // Watchers get at most about FRAMES_PER_S frames a second, however fast the session plays.
                 if (b.frame.frame % frameStep((yield* SubscriptionRef.get(control)).speed, fps) !== 0) return

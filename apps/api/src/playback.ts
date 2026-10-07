@@ -62,7 +62,11 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
       const { home, away } = run.info
       const score = { home: 0, away: 0 }
       let next = 0
-      let last = 0
+      let last = -1
+      const board = (tick: number, clock: string): Beat => {
+        const mom = engine.value("team.mom", home.id, { at: tick })
+        return { kind: "board", board: { frame: tick, clock, score: { ...score }, momentum: mom === null ? null : { home: r3(mom), away: r3(1 - mom) } } }
+      }
       const due = (frame: number): Beat[] => {
         const out: Beat[] = []
         while (next < groups.length && groups[next]!.frame <= frame) {
@@ -75,9 +79,15 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
         const signals = engine.ingest(input)
         if (input.kind === "event") {
           // Events raise most signals (goals, cards, big chances), frames the rest (pressure, momentum, sprints).
-          if (input.event.type === "goal") input.event.team_id === home.id ? score.home++ : score.away++
+          const out: Beat[] = []
+          if (input.event.type === "goal") {
+            input.event.team_id === home.id ? score.home++ : score.away++
+            // The hot path (spec §2: under 250 ms from the event): a goal reaches the scoreboard at once.
+            if (last >= fromFrame) out.push(board(last, engine.clockAt(last)))
+          }
           const at = signals[0]?.frame_id ?? 0
-          return signals.length && at >= fromFrame ? [{ kind: "signals", frame: at, signals }] : []
+          if (signals.length && at >= fromFrame) out.push({ kind: "signals", frame: at, signals })
+          return out
         }
         const f = input.frame
         last = f.tick
@@ -86,10 +96,7 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
           const clock = engine.clockAt(f.tick)
           out.push({ kind: "frame", frame: toFrame(f, clock) })
           if (signals.length) out.push({ kind: "signals", frame: f.tick, signals })
-          if (f.tick % every === 0) {
-            const mom = engine.value("team.mom", home.id, { at: f.tick })
-            out.push({ kind: "board", board: { frame: f.tick, clock, score: { ...score }, momentum: mom === null ? null : { home: r3(mom), away: r3(1 - mom) } } })
-          }
+          if (f.tick % every === 0) out.push(board(f.tick, clock))
         }
         return [...out, ...due(f.tick)]
       }
@@ -99,8 +106,9 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
         Stream.concat(
           Stream.suspend(() => {
             const signals = engine.finish()
-            const tail: Beat[] = signals.length && last >= fromFrame ? [{ kind: "signals", frame: last, signals }] : []
-            return Stream.fromIterable([...tail, ...due(Number.MAX_SAFE_INTEGER), { kind: "end", frame: last } as Beat])
+            const end = Math.max(0, last)
+            const tail: Beat[] = signals.length && end >= fromFrame ? [{ kind: "signals", frame: end, signals }] : []
+            return Stream.fromIterable([...tail, ...due(Number.MAX_SAFE_INTEGER), { kind: "end", frame: end } as Beat])
           })
         )
       )
