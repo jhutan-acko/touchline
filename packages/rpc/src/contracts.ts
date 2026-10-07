@@ -129,6 +129,75 @@ export class MatchNotFound extends Schema.TaggedError<MatchNotFound>()("MatchNot
 export class SessionNotFound extends Schema.TaggedError<SessionNotFound>()("SessionNotFound", { session_id: Schema.String }) {}
 export class EvidenceNotFound extends Schema.TaggedError<EvidenceNotFound>()("EvidenceNotFound", { cue_id: Schema.String }) {}
 
+/** Where a moment stands in the producer's queue: approved puts it in the presenter's talking points, on air sends it to graphics. */
+export const QueueStatus = Schema.Literals(["pending", "approved", "held", "on_air"])
+export type QueueStatus = typeof QueueStatus.Type
+
+/** A moment in the studio queue (spec §5.6 studio console), as one producer's segment sees it. */
+export const QueueItem = Schema.Struct({
+  moment_id: Id,
+  /** The frame the moment ends on, and its clock. */
+  frame: Count,
+  clock: Schema.String,
+  status: QueueStatus,
+  /** The variant that airs for the producer's segment (null when the agents wrote none for it). */
+  cue: Schema.NullOr(Cue),
+  /** Presenter talking points: the analyst text in the segment's language, then each checked fact. */
+  points: Schema.Array(Schema.String),
+  /** How many segment variants the agents wrote. */
+  variants: Count
+})
+export type QueueItem = typeof QueueItem.Type
+
+/** What the studio console receives: the queue (each change to an item), every agent cue as it arrives, and playback. */
+export const StudioTick = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("queue"), item: QueueItem }),
+  Schema.Struct({ kind: Schema.Literal("cue"), cue: Cue }),
+  Schema.Struct({ kind: Schema.Literal("playback"), playback: Playback })
+])
+export type StudioTick = typeof StudioTick.Type
+
+export const StudioAction = Schema.Literals(["approve", "hold", "send"])
+export type StudioAction = typeof StudioAction.Type
+
+/** Percentiles of a set of measurements in milliseconds (null when there are none). */
+export const Percentiles = Schema.Struct({ n: Count, p50: Schema.NullOr(Schema.Finite), p95: Schema.NullOr(Schema.Finite), max: Schema.NullOr(Schema.Finite) })
+export type Percentiles = typeof Percentiles.Type
+
+/** Measurements against a latency budget (spec §2: p95 under the budget); `ok` is null with no measurements. */
+export const Budget = Schema.Struct({ ...Percentiles.fields, budget_ms: Schema.Finite, ok: Schema.NullOr(Schema.Boolean) })
+export type Budget = typeof Budget.Type
+
+/** The ops view (spec §5.6): what the agents did for a session so far, and how fast the hot path and the agents were. */
+export const OpsReport = Schema.Struct({
+  session_id: Id,
+  live: Schema.Boolean,
+  /** Everything below is as of this frame. */
+  frame: Count,
+  models: Schema.Array(Schema.String),
+  moments: Count,
+  cues: Count,
+  /** Fact-Checker verdicts (a retried draft counts once as retry, then as pass or drop). */
+  fact_check: Schema.Struct({ pass: Count, retry: Count, drop: Count }),
+  /** Agents that used their deterministic fallback, by agent. */
+  fallbacks: Schema.Record(Schema.String, Count),
+  /** Time each agent took per moment. */
+  agents: Schema.Array(Schema.Struct({ agent: Schema.String, ...Percentiles.fields })),
+  /** Requests to the agent service by outcome. */
+  requests: Schema.Record(Schema.String, Count),
+  late_cues: Count,
+  unverified_cues: Count,
+  latency: Schema.Struct({
+    /** Event to scoreboard on the bus (budget 250 ms). */
+    stats: Budget,
+    /** Live: signal played to cue on the bus; recorded: request time when the cache was made (budget 4 s). */
+    insight: Schema.Struct({ ...Budget.fields, source: Schema.Literals(["live", "recorded"]) })
+  })
+})
+export type OpsReport = typeof OpsReport.Type
+
+export class NotQueued extends Schema.TaggedError<NotQueued>()("NotQueued", { moment_id: Schema.String }) {}
+
 export const MIN_SPEED = 0.25
 export const MAX_SPEED = 64
 const Speed = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(MIN_SPEED), Schema.isLessThanOrEqualTo(MAX_SPEED))
@@ -160,3 +229,4 @@ export class TouchlineRpcs extends RpcGroup.make(
 ) {}
 
 export const decodeTick = Schema.decodeUnknownSync(Tick)
+export const decodeStudioTick = Schema.decodeUnknownSync(StudioTick)
