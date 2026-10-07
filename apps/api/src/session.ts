@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Cause, Deferred, Effect, Fiber, PubSub, Ref, Stream, SubscriptionRef } from "effect"
-import { SessionNotFound, type Playback, type Tick } from "@touchline/rpc"
+import { SessionNotFound, type Playback, type QueueStatus, type Tick } from "@touchline/rpc"
 import { segmentKey, type Cue, type MomentTrace, type Recap, type Segment } from "@touchline/schema"
 import { pickCues } from "./cues.js"
 import type { LibraryMatch } from "./library.js"
@@ -23,8 +23,26 @@ export const FRAMES_PER_S = 25
 /** Which frames a session at `speed` sends: every `frameStep`th. */
 export const frameStep = (speed: number, fps: number): number => Math.max(1, Math.floor((speed * fps) / FRAMES_PER_S))
 
-/** What a session's bus carries: the timeline, then `closed` once nothing more will come (live agents included). */
-export type BusBeat = Beat | { readonly kind: "closed" }
+/** A moment (or recap) in the session's studio queue: all its segment variants, and the facts its claims were checked against. */
+export interface QueueEntry {
+  readonly moment_id: string
+  readonly frame: number
+  readonly clock: string
+  readonly status: QueueStatus
+  readonly cues: ReadonlyArray<Cue>
+  /** Talking points from the evidence ("Cause: …", "Pressure index (Larkspur City): 0.71"), in English. */
+  readonly facts: ReadonlyArray<string>
+}
+
+/**
+ * What a session's bus carries: the timeline; studio queue changes and cues sent to air; then `closed` once nothing
+ * more will come (live agents included).
+ */
+export type BusBeat =
+  | Beat
+  | { readonly kind: "queue"; readonly entry: QueueEntry }
+  | { readonly kind: "air"; readonly frame: number; readonly cues: ReadonlyArray<Cue> }
+  | { readonly kind: "closed" }
 
 /** What a session measures for the ops view (wall-clock milliseconds). */
 export interface Metrics {
@@ -78,6 +96,8 @@ export interface Session {
   /** What the live agents wrote (empty for a recorded session). */
   readonly agents: LiveStore
   readonly metrics: Metrics
+  /** The studio queue, by moment. */
+  readonly queue: Ref.Ref<ReadonlyMap<string, QueueEntry>>
   readonly watchers: Ref.Ref<number>
   /** The segments watched so far (live agents write cues for these). */
   readonly segments: Ref.Ref<ReadonlyMap<string, Segment>>
@@ -92,8 +112,11 @@ export interface StartOptions {
 /** Runs alongside a live session's playback (Task 7: live agents); receives the session. */
 export type Companion = (s: Session) => Effect.Effect<void>
 
+/** Runs for every session's life, reading its bus from before play starts (the studio queue). */
+export type Recorder = (s: Session, sub: PubSub.Subscription<BusBeat>) => Effect.Effect<void>
+
 /** The sessions of one API process. Their fibers live in `scope`. */
-export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options: { readonly companion?: Companion } = {}) =>
+export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options: { readonly companion?: Companion; readonly studio?: Recorder } = {}) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const sessions = new Map<string, Session>()
@@ -122,8 +145,9 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         const watchers = yield* Ref.make(0)
         const segments = yield* Ref.make<ReadonlyMap<string, Segment>>(new Map())
         const closed = yield* Ref.make(false)
+        const queue = yield* Ref.make<ReadonlyMap<string, QueueEntry>>(new Map())
         const ended = yield* Deferred.make<void>()
-        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [] }, watchers, segments }
+        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [] }, queue, watchers, segments }
         const end = (frame: number) =>
           Ref.update(playback, (p): Playback => ({ ...p, state: "ended", frame })).pipe(Effect.andThen(PubSub.publish(bus, { kind: "end", frame })))
         // A live session shows the agents' cues as they are written, never the cache's.
@@ -159,7 +183,13 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
               Effect.raceFirst(Deferred.await(ended).pipe(Effect.andThen(Effect.sleep(`${LIVE_GRACE_S} seconds`))))
             )
           : Effect.void
-        const main = Effect.all([play, agents], { concurrency: "unbounded", discard: true }).pipe(
+        // The studio subscribes before play starts, so it sees every moment; it stops when the session closes.
+        const studio = Effect.gen(function* () {
+          const sub = yield* PubSub.subscribe(bus)
+          if (options.studio) yield* Effect.forkScoped(options.studio(s, sub))
+          yield* Effect.all([play, agents], { concurrency: "unbounded", discard: true })
+        }).pipe(Effect.scoped)
+        const main = studio.pipe(
           Effect.andThen(Ref.set(closed, true)),
           Effect.andThen(PubSub.publish(bus, { kind: "closed" })),
           Effect.andThen(Effect.sleep("60 seconds")), // let late requests (evidence, recap) see the ended session
@@ -189,6 +219,8 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         case "cues":
           return pickCues(b.cues, segment).map((cue) => ({ kind: "cue" as const, cue }))
         case "signals":
+        case "queue":
+        case "air":
         case "closed":
           return []
         case "end":
