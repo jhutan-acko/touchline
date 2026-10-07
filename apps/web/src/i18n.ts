@@ -41,7 +41,20 @@ const en = {
   lost: "Connection lost — trying again…",
   gone: "This session has ended.",
   notYet: "Not yet: the recap comes at the whistle.",
-  startFailed: "Could not start the match. Try again."
+  startFailed: "Could not start the match. Try again.",
+  studio: "Studio console",
+  queue: "Queue",
+  emptyQueue: "No moments yet.",
+  approve: "Approve",
+  hold: "Hold",
+  send: "Send to graphics",
+  pending: "Pending",
+  approved: "Approved",
+  held: "Held",
+  onAir: "On air",
+  talkingPoints: "Talking points",
+  noPoints: "Approve a moment to add its talking points.",
+  rawFeed: "Raw cue feed"
 } as const
 
 export type Key = keyof typeof en
@@ -88,7 +101,20 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     lost: "Conexión perdida; reintentando…",
     gone: "Esta sesión ha terminado.",
     notYet: "Todavía no: el resumen llega con el silbato.",
-    startFailed: "No se pudo iniciar el partido. Inténtalo de nuevo."
+    startFailed: "No se pudo iniciar el partido. Inténtalo de nuevo.",
+    studio: "Consola de estudio",
+    queue: "Cola",
+    emptyQueue: "Aún no hay momentos.",
+    approve: "Aprobar",
+    hold: "Retener",
+    send: "Enviar a gráficos",
+    pending: "Pendiente",
+    approved: "Aprobado",
+    held: "Retenido",
+    onAir: "En antena",
+    talkingPoints: "Puntos para el presentador",
+    noPoints: "Aprueba un momento para añadir sus puntos.",
+    rawFeed: "Flujo de cues sin filtrar"
   },
   hi: {
     title: "Touchline",
@@ -130,7 +156,20 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     lost: "कनेक्शन टूट गया — फिर से कोशिश हो रही है…",
     gone: "यह सत्र समाप्त हो गया है।",
     notYet: "अभी नहीं: सारांश सीटी बजने पर आएगा।",
-    startFailed: "मैच शुरू नहीं हो सका। फिर से कोशिश करें।"
+    startFailed: "मैच शुरू नहीं हो सका। फिर से कोशिश करें।",
+    studio: "स्टूडियो कंसोल",
+    queue: "कतार",
+    emptyQueue: "अभी कोई पल नहीं।",
+    approve: "मंज़ूर करें",
+    hold: "रोकें",
+    send: "ग्राफ़िक्स पर भेजें",
+    pending: "बाकी",
+    approved: "मंज़ूर",
+    held: "रोका गया",
+    onAir: "ऑन एयर",
+    talkingPoints: "प्रस्तुतकर्ता के बिंदु",
+    noPoints: "बिंदु जोड़ने के लिए कोई पल मंज़ूर करें।",
+    rawFeed: "सभी क्यू की फ़ीड"
   }
 }
 

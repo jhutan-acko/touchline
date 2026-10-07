@@ -10,6 +10,7 @@ import { RecapPanel } from "./RecapPanel.js"
 import { WhyDrawer } from "./WhyDrawer.js"
 import { segmentOf, type Profile } from "./profile.js"
 import { TopBar } from "./TopBar.js"
+import { routeHash } from "./route.js"
 import { usePane } from "./usePane.js"
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32]
@@ -76,6 +77,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
           {playback.state === "paused" ? t(lang, "play") : t(lang, "pause")}
         </button>
         <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={toggleSplit}>{second ? t(lang, "single") : t(lang, "split")}</button>
+        <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "studio", session: sessionId, segment: segmentOf(profile) })}>{t(lang, "studio")}</a>
         <label className="text-sm">
           {t(lang, "speed")}{" "}
           <select aria-label={t(lang, "speed")} className="rounded bg-slate-800 px-2 py-1" value={playback.speed} onChange={(e) => control("speed", Number(e.target.value))}>
