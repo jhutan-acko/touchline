@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect, Fiber, PubSub, Ref, Scope, Stream, SubscriptionRef } from "effect"
 import { SessionNotFound, type Playback, type Tick } from "@touchline/rpc"
-import type { Cue, Segment } from "@touchline/schema"
+import { segmentKey, type Cue, type Segment } from "@touchline/schema"
 import { pickCues } from "./cues.js"
 import type { LibraryMatch } from "./library.js"
 import { beats, paced, type Beat, type Board, type Control } from "./playback.js"
@@ -51,6 +51,8 @@ export interface Session {
   readonly bus: PubSub.PubSub<Beat>
   readonly playback: Ref.Ref<Playback>
   readonly watchers: Ref.Ref<number>
+  /** The segments watched so far (live agents write cues for these). */
+  readonly segments: Ref.Ref<ReadonlyMap<string, Segment>>
 }
 
 export interface StartOptions {
@@ -85,8 +87,11 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         const bus = yield* PubSub.unbounded<Beat>()
         const playback = yield* Ref.make<Playback>({ state: "playing", frame: from, speed: o.speed, live: o.live })
         const watchers = yield* Ref.make(0)
-        const s: Session = { id, match, live: o.live, control, bus, playback, watchers }
-        const play = paced(beats(match, from), control, match.info.fps).pipe(
+        const segments = yield* Ref.make<ReadonlyMap<string, Segment>>(new Map())
+        const s: Session = { id, match, live: o.live, control, bus, playback, watchers, segments }
+        // A live session shows the agents' cues as they are written, never the cache's.
+        const timeline = beats(o.live ? { ...match, cues: [] } : match, from)
+        const play = paced(timeline, control, match.info.fps).pipe(
           Stream.runForEach((b) =>
             Effect.gen(function* () {
               if (b.kind === "frame") yield* Ref.update(playback, (p) => ({ ...p, frame: b.frame.frame }))
@@ -127,6 +132,7 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
           const s = yield* get(id)
           const now = yield* Ref.get(s.playback)
           yield* Ref.update(s.watchers, (n) => n + 1)
+          yield* Ref.update(s.segments, (m) => new Map([...m, [segmentKey(segment), segment]]))
           const leave = Ref.updateAndGet(s.watchers, (n) => n - 1).pipe(
             Effect.flatMap((n) =>
               n > 0 ? Effect.void : Effect.forkIn(Effect.sleep(`${IDLE_STOP_S} seconds`).pipe(Effect.andThen(Ref.get(s.watchers)), Effect.flatMap((m) => (m === 0 ? stop(id) : Effect.void))), scope)
