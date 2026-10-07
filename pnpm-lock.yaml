@@ -32,6 +32,9 @@ importers:
       '@touchline/agent-gateway':
         specifier: workspace:*
         version: link:../../packages/agent-gateway
+      '@touchline/mcp-stats':
+        specifier: workspace:*
+        version: link:../../packages/mcp-stats
       '@touchline/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc

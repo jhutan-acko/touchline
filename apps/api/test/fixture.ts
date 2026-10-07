@@ -63,7 +63,7 @@ export const makeLibrary = async (): Promise<TestLibrary> => {
         { kind: "metric", sentence: 0, quote: "60%", metric_id: "team.mom", subject: g.team_id, value: 0.6, at_frame: g.frame_id, window_s: null, event_id: null, receiver_id: null },
         { kind: "event", sentence: 0, quote: "", metric_id: null, subject: g.player_id, value: null, at_frame: g.frame_id, window_s: null, event_id: g.id, receiver_id: null }
       ] },
-      draft: { ...trace0.draft, moment_id: momentId },
+      draft: { moment_id: momentId, lang: "en", sentences: ["Goal!", "A finish from close range."], claims: [] },
       verdicts: [{ ...trace0.verdicts[0]!, moment_id: momentId }],
       cue_ids: cues.filter((c) => c.moment_id === momentId).map((c) => c.cue_id)
     }))
