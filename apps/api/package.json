@@ -10,6 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p .",
     "serve": "tsx src/main.ts",
+    "dev": "tsx src/main.ts",
     "library": "tsx src/library-cli.ts"
   },
   "dependencies": {

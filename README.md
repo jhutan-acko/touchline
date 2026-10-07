@@ -84,6 +84,24 @@ A real model takes about 5 s per call, so a moment takes about 30 s end to end: 
 
 Known limits: the checks reject rostered players who were not in the play (in any letter case), but not a name outside the roster altogether, nor a rostered name transliterated into Devanagari; numbers written as words ("two goals") are not checked, so the agents are told never to write them; Hindi must be mostly Devanagari and Spanish must not read as English, but fluency needs a human spot-check; checkpoints are written after every step but a restarted service starts each match afresh.
 
+## Fan app and API
+
+`apps/api` (Effect RPC over WebSocket at `/rpc`) plays matches from a library of run folders. A session plays one match at a speed on the cue bus. Every viewer gets the frames, a scoreboard each second from the stats engine and the agents' cues for their own segment (spec §5.5), in the same match time. Cues come from the run's cue cache (recorded, no model calls), or, with **Live agents** ticked, from the agent service as the match plays. `apps/web` (React, Vite, Tailwind) is the fan app:
+- the 2D pitch in the clubs' kit colours;
+- the overlays: lower third for casual viewers, side panel for analysts, recap cards;
+- a profile switcher and builder (mode, language, club);
+- the "Why?" drawer: cause, checked facts, five-minute history, events;
+- half-time and full-time recaps;
+- a split-screen demo mode, with two profiles on one match.
+
+```bash
+uv run --project services/agents touchline-agents &   # the agent service (stub model unless TOUCHLINE_LLM=openai)
+pnpm library                                           # simulate the six scenarios and cache their cues for twelve segments (out/library)
+pnpm dev                                               # API on :8787 and the fan app on http://localhost:5173
+```
+
+`pnpm library --no-agents true` builds a stats-only library without the agent service. The API alone: `pnpm api [--library DIR] [--port 8787]`. Live sessions need the agent service running; with a real model, set `TOUCHLINE_REQUEST_BUDGET_S` on the service below the API's `--budget-ms` (see Agents).
+
 ## Packages
 
 | Package | What it does |
@@ -95,6 +113,9 @@ Known limits: the checks reject rostered players who were not in the play (in an
 | `packages/stats` | Stats engine: metrics and signals on the domain stream, replay of run folders, `pnpm stats` |
 | `packages/advisor` | What-if sessions rebuilt from run folders, better-option explainer, positioning advisor |
 | `packages/mcp-stats` | MCP server exposing the stats tools to agents (stdio or Streamable HTTP) |
+| `packages/rpc` | The API's RPC contracts (Effect RPC group), shared by the API and the fan app |
+| `apps/api` | Match library, playback sessions on the cue bus, live agents, evidence and recaps over RPC; `pnpm api`, `pnpm library` |
+| `apps/web` | The fan app (React, Vite, Tailwind): pitch, overlays, profiles, "Why?" drawer, recaps, split screen |
 | `packages/agent-gateway` | A2A client of the agent service: signal batches, recaps, time budget, retry, circuit breaker, cue cache |
 | `services/agents` | The six agents, their workflow, the A2A server and the ground-truth evaluation harness (`evals/`) |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |

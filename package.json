@@ -6,6 +6,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "turbo run test",
+    "dev": "turbo run dev --filter=@touchline/api --filter=@touchline/web",
     "typecheck": "turbo run typecheck",
     "sim": "pnpm --filter @touchline/sim run sim",
     "league": "pnpm --filter @touchline/league run generate",

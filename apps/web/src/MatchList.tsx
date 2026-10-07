@@ -10,7 +10,7 @@ export const MatchList = ({ matches, lang, onWatch }: { matches: ReadonlyArray<M
         <li key={m.match_id} className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
           <div className="flex items-center justify-between gap-2 text-lg font-semibold">
             <span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-full" style={{ background: m.home.kit.primary }} />{m.home.name}</span>
-            <span className="tabular-nums">{m.score.home}–{m.score.away}</span>
+            <span className="shrink-0 whitespace-nowrap tabular-nums">{m.score.home}–{m.score.away}</span>
             <span className="flex items-center gap-2">{m.away.name}<span className="inline-block h-3 w-3 rounded-full" style={{ background: m.away.kit.primary }} /></span>
           </div>
           <div className="mt-2 flex items-center justify-between text-sm text-slate-400">

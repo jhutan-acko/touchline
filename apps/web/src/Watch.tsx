@@ -62,6 +62,9 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
 }) => {
   const lang: Lang = profile.lang
   const [why, setWhy] = useState<Cue | null>(null)
+  // Demo mode (spec §5.6): a second profile on the same session, side by side; by default the other mode, in Spanish.
+  const [second, setSecond] = useState<Profile | null>(null)
+  const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [] })
   const [playback, setPlayback] = useState<Pick<Playback, "state" | "speed">>({ state: "playing", speed: 4 })
   const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback)
   return (
@@ -71,6 +74,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
         <button type="button" className="rounded bg-emerald-600 px-3 py-1 text-white" onClick={() => control(playback.state === "paused" ? "play" : "pause")}>
           {playback.state === "paused" ? t(lang, "play") : t(lang, "pause")}
         </button>
+        <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={toggleSplit}>{second ? t(lang, "single") : t(lang, "split")}</button>
         <label className="text-sm">
           {t(lang, "speed")}{" "}
           <select aria-label={t(lang, "speed")} className="rounded bg-slate-800 px-2 py-1" value={playback.speed} onChange={(e) => control("speed", Number(e.target.value))}>
@@ -78,7 +82,10 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
           </select>
         </label>
       </div>
-      <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} />
+      <div className={second ? "grid gap-4 lg:grid-cols-2" : ""}>
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={setWhy} label="B" />}
+      </div>
       <RecapPanel client={client} matchId={match.match_id} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} matchId={match.match_id} cue={why} lang={lang} onClose={() => setWhy(null)} />}
     </div>

@@ -3,6 +3,7 @@
   "agentGuidance": false,
   "tasks": {
     "typecheck": {},
+    "dev": { "cache": false, "persistent": true },
     "test": {
       "outputs": [],
       "inputs": [
