@@ -42,4 +42,16 @@ describe("team shape", () => {
       expect(kickoffAnchor("4-3-3", slot, "away", STYLES.high_press).x).toBeGreaterThan(0)
     }
   })
+  it("moves a team's shape without the ball by defLineM and defDepth, and leaves it alone with the ball", () => {
+    const style = STYLES.possession
+    const ball = { x: 0, y: 0 }
+    const spread = (defLineM: number, defDepth: number) => ({ width: 1, depth: 1, defLineM, defDepth })
+    // Centre back (slot 2): 10 m further upfield without the ball, mirrored for the away side.
+    expect(anchorFor("4-3-3", 2, "home", ball, style, false, spread(10, 1)).x - anchorFor("4-3-3", 2, "home", ball, style, false).x).toBeCloseTo(10, 9)
+    expect(anchorFor("4-3-3", 2, "away", ball, style, false, spread(10, 1)).x - anchorFor("4-3-3", 2, "away", ball, style, false).x).toBeCloseTo(-10, 9)
+    // Striker (slot 9, x = 6): distance from the team centre (x = -18) halves without the ball: 24 m -> 12 m.
+    expect(anchorFor("4-3-3", 9, "home", ball, style, false, spread(0, 0.5)).x - anchorFor("4-3-3", 9, "home", ball, style, false).x).toBeCloseTo(-12, 9)
+    // With the ball nothing changes.
+    expect(anchorFor("4-3-3", 2, "home", ball, style, true, spread(10, 0.5))).toEqual(anchorFor("4-3-3", 2, "home", ball, style, true))
+  })
 })

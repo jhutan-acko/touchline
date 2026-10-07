@@ -171,8 +171,8 @@ export interface Params {
   readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   readonly movement: { readonly shapeSpeedShare: number }
-  /** Team shape spread: width (fully in possession, partly without) and depth between lines. */
-  readonly shape: { readonly width: number; readonly depth: number }
+  /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball a line push upfield (m) and extra depth squeeze. */
+  readonly shape: { readonly width: number; readonly depth: number; readonly defLineM: number; readonly defDepth: number }
   /**
    * Energy (1 fresh .. 0 exhausted) drains per second by (drainBase + drainSpeed2 x speed^2) x (1 + staminaSlope x (0.5 - stamina));
    * players recover halfTimeRecovery at the break; tiredness widens execution error by up to executionK.
@@ -324,7 +324,7 @@ export const DEFAULT_PARAMS: Params = {
   support: { count: 0, distM: 12, speedShare: 0.8 },
   marking: { weight: 0, radiusM: 10, goalSideM: 1.5 },
   movement: { shapeSpeedShare: 0.7 },
-  shape: { width: 1, depth: 1 },
+  shape: { width: 1, depth: 1, defLineM: 0, defDepth: 1 },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },

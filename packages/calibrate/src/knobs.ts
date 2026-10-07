@@ -77,7 +77,11 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "pass_arrive", what: "ground passes are struck to arrive at this speed (m/s): faster passes are intercepted less but run out more", init: DEFAULT_PARAMS.pass.arriveSpeed, min: 5, max: 12, step: 1,
     apply: (p, v) => ({ ...p, pass: { ...p.pass, arriveSpeed: v } }) },
   { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
-    apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) }
+    apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) },
+  { name: "def_line", what: "metres a team without the ball pushes its shape upfield (defensive line height)", init: 0, min: 0, max: 20, step: 2.5,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defLineM: v } }) },
+  { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: 1, min: 0.5, max: 1.2, step: 0.1,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>
