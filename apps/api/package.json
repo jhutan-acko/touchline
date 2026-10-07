@@ -1,0 +1,25 @@
+{
+  "name": "@touchline/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "serve": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.1",
+    "@touchline/agent-gateway": "workspace:*",
+    "@touchline/rpc": "workspace:*",
+    "@touchline/schema": "workspace:*",
+    "@touchline/sim": "workspace:*",
+    "@touchline/stats": "workspace:*",
+    "effect": "4.0.1"
+  },
+  "devDependencies": {
+    "@touchline/league": "workspace:*",
+    "@touchline/sim-core": "workspace:*"
+  }
+}
