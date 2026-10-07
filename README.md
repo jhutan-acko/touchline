@@ -102,6 +102,13 @@ pnpm dev                                               # API on :8787 and the fa
 
 `pnpm library --no-agents true` builds a stats-only library without the agent service. The API alone: `pnpm api [--library DIR] [--port 8787]`. Live sessions need the agent service running; with a real model, set `TOUCHLINE_REQUEST_BUDGET_S` on the service below the API's `--budget-ms` (see Agents).
 
+### Studio console, graphics output and ops view
+
+Each session in the fan app links to three more pages, each in its own tab:
+- **Studio console** (`#/studio/<session>?seg=…`): every moment the agents explain joins a producer's queue. **Approve** adds it to the presenter's talking points (the analyst text in the producer's language, then the facts its claims were checked against: no model writes them). **Hold** keeps it off air. **Send to graphics** airs it. Every console on the session sees each decision. A raw feed lists every agent cue as it arrives.
+- **Graphics output** (`#/graphics/<session>?seg=…&match=…`): a transparent page for a vision mixer or OBS, with the scoreboard and only the cues the producer sent.
+- **Ops view** (`#/ops/<session>`): Fact-Checker pass/retry/drop counts, fallbacks, time per agent, requests by outcome, and latency against the spec's budgets: goal to scoreboard under 250 ms, and, live, signal to cue under 4 s (p95). A recorded session reports the request times measured when its cache was made.
+
 ## Packages
 
 | Package | What it does |
@@ -114,8 +121,8 @@ pnpm dev                                               # API on :8787 and the fa
 | `packages/advisor` | What-if sessions rebuilt from run folders, better-option explainer, positioning advisor |
 | `packages/mcp-stats` | MCP server exposing the stats tools to agents (stdio or Streamable HTTP) |
 | `packages/rpc` | The API's RPC contracts (Effect RPC group), shared by the API and the fan app |
-| `apps/api` | Match library, playback sessions on the cue bus, live agents, evidence and recaps over RPC; `pnpm api`, `pnpm library` |
-| `apps/web` | The fan app (React, Vite, Tailwind): pitch, overlays, profiles, "Why?" drawer, recaps, split screen |
+| `apps/api` | Match library, playback sessions on the cue bus, live agents, evidence and recaps, studio queue, graphics output and ops report over RPC; `pnpm api`, `pnpm library` |
+| `apps/web` | The fan app (React, Vite, Tailwind): pitch, overlays, profiles, "Why?" drawer, recaps, split screen; the studio console, graphics output and ops view |
 | `packages/agent-gateway` | A2A client of the agent service: signal batches, recaps, time budget, retry, circuit breaker, cue cache |
 | `services/agents` | The six agents, their workflow, the A2A server and the ground-truth evaluation harness (`evals/`) |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
