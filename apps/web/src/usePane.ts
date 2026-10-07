@@ -10,8 +10,11 @@ export type Connection = "ok" | "retrying" | "gone"
 /** Watch attempts after a lost connection (1 s, 2 s, 4 s, 8 s, 16 s apart) before the pane gives up. */
 export const RETRIES = 5
 
-/** A pane's state for one segment of a session, updated by every tick; a broken watch is retried with backoff. */
-export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment): PaneState & { readonly connection: Connection } => {
+/**
+ * A pane's state for one segment of a session, updated by every tick; a broken watch is retried with backoff.
+ * `source` picks the stream: the fan view (`watch`) or the broadcast graphics output (`graphics`).
+ */
+export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection } => {
   const [state, dispatch] = useReducer((s: PaneState, t: Tick) => reduce(s, t, Date.now()), EMPTY)
   const [connection, setConnection] = useState<Connection>("ok")
   const key = `${segment.mode}.${segment.lang}.${segment.club ?? ""}`
@@ -21,7 +24,7 @@ export const usePane = (client: TouchlineClient, sessionId: string, segment: Seg
     let timer: ReturnType<typeof setTimeout> | undefined
     let stop = () => {}
     const start = () => {
-      stop = client.watch(
+      stop = client[source](
         sessionId,
         segment,
         (t) => {
@@ -43,6 +46,6 @@ export const usePane = (client: TouchlineClient, sessionId: string, segment: Seg
       clearTimeout(timer)
       stop()
     }
-  }, [client, sessionId, key])
+  }, [client, sessionId, key, source])
   return { ...state, connection }
 }

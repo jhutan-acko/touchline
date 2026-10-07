@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react"
+import type { MatchSummary } from "@touchline/rpc"
 import { App } from "./App.js"
 import type { TouchlineClient } from "./client.js"
+import { Graphics } from "./Graphics.js"
 import { parseRoute, type Route } from "./route.js"
 import { Studio } from "./Studio.js"
+
+/** The graphics output once the match (its teams) is known. */
+const GraphicsPage = ({ client, route }: { client: TouchlineClient; route: Extract<Route, { page: "graphics" }> }) => {
+  const [match, setMatch] = useState<MatchSummary | null>(null)
+  useEffect(() => {
+    client.listMatches().then((ms) => setMatch(ms.find((m) => m.match_id === route.match) ?? null), () => setMatch(null))
+  }, [client, route.match])
+  return match && <Graphics client={client} session={route.session} segment={route.segment} match={match} />
+}
 
 /** The page the URL hash names (see route.ts), following hash changes. */
 export const Root = ({ client }: { client: TouchlineClient }) => {
@@ -13,6 +24,8 @@ export const Root = ({ client }: { client: TouchlineClient }) => {
     return () => window.removeEventListener("hashchange", on)
   }, [])
   switch (route.page) {
+    case "graphics":
+      return <GraphicsPage client={client} route={route} />
     case "studio":
       return <Studio client={client} session={route.session} segment={route.segment} />
     default:

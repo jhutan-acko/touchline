@@ -54,7 +54,8 @@ const en = {
   onAir: "On air",
   talkingPoints: "Talking points",
   noPoints: "Approve a moment to add its talking points.",
-  rawFeed: "Raw cue feed"
+  rawFeed: "Raw cue feed",
+  graphicsOut: "Graphics output"
 } as const
 
 export type Key = keyof typeof en
@@ -114,7 +115,8 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     onAir: "En antena",
     talkingPoints: "Puntos para el presentador",
     noPoints: "Aprueba un momento para añadir sus puntos.",
-    rawFeed: "Flujo de cues sin filtrar"
+    rawFeed: "Flujo de cues sin filtrar",
+    graphicsOut: "Salida de gráficos"
   },
   hi: {
     title: "Touchline",
@@ -169,7 +171,8 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     onAir: "ऑन एयर",
     talkingPoints: "प्रस्तुतकर्ता के बिंदु",
     noPoints: "बिंदु जोड़ने के लिए कोई पल मंज़ूर करें।",
-    rawFeed: "सभी क्यू की फ़ीड"
+    rawFeed: "सभी क्यू की फ़ीड",
+    graphicsOut: "ग्राफ़िक्स आउटपुट"
   }
 }
 
