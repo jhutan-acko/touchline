@@ -3,6 +3,7 @@ import type { Playback, QueueItem, QueueStatus, StudioAction } from "@touchline/
 import type { Cue, Segment } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
 import { t, type Key } from "./i18n.js"
+import { RETRIES, type Connection } from "./usePane.js"
 
 const STATUS: Record<QueueStatus, { key: Key; style: string }> = {
   pending: { key: "pending", style: "bg-slate-700" },
@@ -23,16 +24,40 @@ export const Studio = ({ client, session, segment }: { client: TouchlineClient; 
   const [queue, setQueue] = useState<ReadonlyMap<string, QueueItem>>(new Map())
   const [feed, setFeed] = useState<ReadonlyArray<Cue>>([])
   const [playback, setPlayback] = useState<Playback | null>(null)
+  const [connection, setConnection] = useState<Connection>("ok")
   const upsert = (item: QueueItem) => setQueue((q) => new Map([...q, [item.moment_id, item]]))
-  useEffect(
-    () =>
-      client.studio(session, segment, (tick) => {
-        if (tick.kind === "queue") upsert(tick.item)
-        else if (tick.kind === "cue") setFeed((f) => [tick.cue, ...f].slice(0, RAW_FEED_SIZE))
-        else setPlayback(tick.playback)
-      }),
-    [client, session, segment.mode, segment.lang, segment.club]
-  )
+  // Follow the session; a lost connection is retried with backoff (the server resends the queue), keeping what is on screen.
+  useEffect(() => {
+    let alive = true
+    let attempt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let stop = () => {}
+    const start = () => {
+      stop = client.studio(
+        session,
+        segment,
+        (tick) => {
+          attempt = 0
+          setConnection("ok")
+          if (tick.kind === "queue") upsert(tick.item)
+          else if (tick.kind === "cue") setFeed((f) => [tick.cue, ...f].slice(0, RAW_FEED_SIZE))
+          else setPlayback(tick.playback)
+        },
+        (error) => {
+          if (!alive || error === null) return
+          if (error.includes("SessionNotFound") || attempt >= RETRIES) return setConnection("gone")
+          setConnection("retrying")
+          timer = setTimeout(start, 1000 * 2 ** attempt++)
+        }
+      )
+    }
+    start()
+    return () => {
+      alive = false
+      clearTimeout(timer)
+      stop()
+    }
+  }, [client, session, segment.mode, segment.lang, segment.club])
   const decide = (item: QueueItem, action: StudioAction) => {
     upsert({ ...item, status: AFTER[action] }) // shown at once; the stream confirms it for everyone
     client.act(session, item.moment_id, action).then(
@@ -49,6 +74,7 @@ export const Studio = ({ client, session, segment }: { client: TouchlineClient; 
         <span className="rounded bg-slate-800 px-2 py-0.5 text-sm">{`${segment.mode}.${segment.lang}.${segment.club ?? "neutral"}`}</span>
         {playback && <span className="text-sm text-slate-400">{playback.state} · ×{playback.speed}</span>}
       </header>
+      {connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm lg:col-span-3">{t(lang, connection === "gone" ? "gone" : "lost")}</p>}
       <section className="flex flex-col gap-2">
         <h2 className="font-semibold">{t(lang, "queue")}</h2>
         {items.length === 0 && <p className="text-slate-400">{t(lang, "emptyQueue")}</p>}

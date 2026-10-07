@@ -76,7 +76,11 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
           s.agents.recaps.push(...got.recaps)
           const now = (yield* Ref.get(s.playback)).frame
           yield* publish(now, got.cues)
-          if (job.kind === "signals" && got.cues.length) s.metrics.insight.push(performance.now() - job.since)
+          if (job.kind === "signals") {
+            // An answer is timed from its earliest signal; a request that failed or timed out is an insight that never came.
+            if (r._tag === "Failure") s.metrics.lost.push(performance.now() - job.since)
+            else if (got.cues.length) s.metrics.insight.push(performance.now() - job.since)
+          }
         }
       }
     })

@@ -25,8 +25,12 @@ export interface FakeClient extends TouchlineClient {
   fail(error: string | null): void
   /** How many times watch was called. */
   watchCount(): number
-  readonly studios: Array<{ segment: Segment; onTick: (t: StudioTick) => void }>
+  readonly studios: Array<{ segment: Segment; onTick: (t: StudioTick) => void; onEnd?: (error: string | null) => void }>
   pushStudio(t: StudioTick): void
+  /** End every studio stream with an error (null: the session closed normally). */
+  failStudio(error: string | null): void
+  /** How many times studio was called. */
+  studioCount(): number
   readonly outputs: Array<{ segment: Segment; onTick: (t: Tick) => void }>
   pushGraphics(t: Tick): void
 }
@@ -42,6 +46,7 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
   const calls: string[] = []
   let playback: Playback = { state: "playing", frame: 0, speed: 4, live: false }
   let watched = 0
+  let studied = 0
   return {
     watchers,
     calls,
@@ -50,9 +55,14 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
     watchCount: () => watched,
     studios,
     pushStudio: (t) => studios.forEach((w) => w.onTick(t)),
+    failStudio: (error) => studios.splice(0).forEach((w) => w.onEnd?.(error)),
+    studioCount: () => studied,
     outputs,
     pushGraphics: (t) => outputs.forEach((w) => w.onTick(t)),
-    studio: (_id, segment, onTick) => follow(studios, { segment, onTick }),
+    studio: (_id, segment, onTick, onEnd) => {
+      studied++
+      return follow(studios, { segment, onTick, ...(onEnd ? { onEnd } : {}) })
+    },
     act: async (_id, momentId, action) => {
       calls.push(`act ${momentId} ${action}`)
       return { moment_id: momentId, status: action === "approve" ? "approved" : action === "hold" ? "held" : "on_air" }

@@ -27,6 +27,8 @@ describe("percentiles", () => {
     expect(percentiles(Array.from({ length: 100 }, (_, i) => 100 - i))).toEqual({ n: 100, p50: 50, p95: 95, max: 100 })
     expect(budget([100, 300], 250)).toMatchObject({ p95: 300, budget_ms: 250, ok: false })
     expect(budget([], 250).ok).toBeNull()
+    expect(budget([100], 4000, 1)).toMatchObject({ n: 1, missed: 1, ok: false }) // an insight that never came is a miss
+    expect(budget([], 4000, 2)).toMatchObject({ n: 0, p95: null, missed: 2, ok: false })
   })
 })
 
@@ -46,7 +48,7 @@ describe("ops report", () => {
         expect(after.models).toEqual([lib.traces[0]!.model])
         expect(after.agents.map((a) => a.agent)).toEqual(Object.keys(lib.traces[0]!.timings_ms).sort())
         expect(after.requests).toEqual({ ok: 1 }) // the fixture's one request, at frame 100
-        expect(after.latency.insight).toMatchObject({ source: "recorded", n: 1, p95: 1, budget_ms: 4000, ok: true })
+        expect(after.latency.insight).toMatchObject({ source: "recorded", n: 1, p95: 1, missed: 0, budget_ms: 4000, ok: true })
         expect(after.latency.stats).toMatchObject({ n: 0, budget_ms: 250, ok: null })
       })
     ), 120_000)
@@ -60,7 +62,8 @@ describe("ops report", () => {
         s.agents.traces.push(trace)
         s.agents.cues.push(...lib.cues.filter((c) => c.moment_id === trace.moment.moment_id))
         s.metrics.stats.push(3, 5)
-        s.metrics.insight.push(3000, 5000)
+        s.metrics.insight.push(3000, 3500)
+        s.metrics.lost.push(4000)
         s.metrics.requests.push({ kind: "signals", frame: 10, outcome: "ok", ms: 2900, cues: 3, late: 0, unverified: 0 }, { kind: "signals", frame: 20, outcome: "timeout", ms: 4000, cues: 0, late: 1, unverified: 0 })
         const r = ops.report(s, match.info.frames)
         expect([r.live, r.moments, r.cues, r.models]).toEqual([true, 1, 3, ["openai:gpt-6.1-sol"]])
@@ -69,7 +72,7 @@ describe("ops report", () => {
         expect(r.requests).toEqual({ ok: 1, timeout: 1 })
         expect(r.late_cues).toBe(1)
         expect(r.latency.stats).toMatchObject({ n: 2, p95: 5, ok: true })
-        expect(r.latency.insight).toMatchObject({ source: "live", n: 2, p95: 5000, ok: false }) // over the 4 s budget
+        expect(r.latency.insight).toMatchObject({ source: "live", n: 2, p95: 3500, missed: 1, ok: false }) // a timed-out batch is a miss
       })
     ), 120_000)
 })

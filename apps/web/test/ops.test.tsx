@@ -12,8 +12,8 @@ const report = (over: Partial<OpsReport> = {}): OpsReport => ({
   agents: [{ agent: "analyst", n: 9, p50: 4800, p95: 6100, max: 6300 }, { agent: "narrator", n: 9, p50: 2100, p95: 2900, max: 3000 }],
   requests: { ok: 14, timeout: 2 }, late_cues: 3, unverified_cues: 0,
   latency: {
-    stats: { n: 3, p50: 0.4, p95: 1.2, max: 1.2, budget_ms: 250, ok: true },
-    insight: { n: 9, p50: 3100, p95: 5200, max: 5600, budget_ms: 4000, ok: false, source: "live" }
+    stats: { n: 3, p50: 0.4, p95: 1.2, max: 1.2, missed: 0, budget_ms: 250, ok: true },
+    insight: { n: 9, p50: 3100, p95: 5200, max: 5600, missed: 0, budget_ms: 4000, ok: false, source: "live" }
   },
   ...over
 })
@@ -23,7 +23,7 @@ const tile = (name: string) => screen.getByRole("region", { name })
 describe("ops view", () => {
   it("shows latency against the spec's budgets, fact-check verdicts, time per agent and requests", async () => {
     render(<Ops client={fakeClient({ ops: report() })} session="s1" lang="en" />)
-    const stats = await screen.findByRole("region", { name: "Stats overlay: event to screen" })
+    const stats = await screen.findByRole("region", { name: "Stats overlay: goal to scoreboard" })
     expect(within(stats).getByText("Within budget")).toBeTruthy()
     expect(within(stats).getByText("p95 1.2 ms / 250 ms")).toBeTruthy()
     const insight = tile("AI insight: signal to cue")
@@ -39,10 +39,18 @@ describe("ops view", () => {
   })
 
   it("says when there are no measurements yet, and labels recorded request times as such", async () => {
-    const quiet = report({ live: false, latency: { stats: { n: 0, p50: null, p95: null, max: null, budget_ms: 250, ok: null }, insight: { n: 0, p50: null, p95: null, max: null, budget_ms: 4000, ok: null, source: "recorded" } } })
+    const quiet = report({ live: false, latency: { stats: { n: 0, p50: null, p95: null, max: null, missed: 0, budget_ms: 250, ok: null }, insight: { n: 0, p50: null, p95: null, max: null, missed: 0, budget_ms: 4000, ok: null, source: "recorded" } } })
     render(<Ops client={fakeClient({ ops: quiet })} session="s1" lang="en" />)
-    expect(await within(await screen.findByRole("region", { name: "Stats overlay: event to screen" })).findByText("No measurements yet")).toBeTruthy()
+    expect(await within(await screen.findByRole("region", { name: "Stats overlay: goal to scoreboard" })).findByText("No measurements yet")).toBeTruthy()
     expect(within(tile("AI insight: signal to cue")).getByText("recorded request time")).toBeTruthy()
+  })
+
+  it("counts insights that never came as a miss, even with no measurements", async () => {
+    const lost = report({ latency: { ...report().latency, insight: { n: 0, p50: null, p95: null, max: null, missed: 3, budget_ms: 4000, ok: false, source: "live" } } })
+    render(<Ops client={fakeClient({ ops: lost })} session="s1" lang="en" />)
+    const insight = await screen.findByRole("region", { name: "AI insight: signal to cue" })
+    expect(within(insight).getByText("Over budget")).toBeTruthy()
+    expect(within(insight).getByText("3 missed (failed or timed out)")).toBeTruthy()
   })
 
   it("refreshes every two seconds, and says when the session is gone", async () => {

@@ -45,12 +45,33 @@ export type BusBeat =
   | { readonly kind: "air"; readonly frame: number; readonly cues: ReadonlyArray<Cue> }
   | { readonly kind: "closed" }
 
+/**
+ * Times each goal from its frame being played to its scoreboard on the bus (the stats-overlay latency, spec §2), however
+ * late that scoreboard comes. Remembers when the last `keep` frames were played.
+ */
+export const statsMeter = (keep = 3000) => {
+  const played = new Map<number, number>()
+  return {
+    played: (frame: number, at: number) => {
+      played.set(frame, at)
+      played.delete(frame - keep)
+    },
+    /** Milliseconds from the goal's frame being played to `at`, or null for a frame it never saw played. */
+    scored: (goalFrame: number, at: number): number | null => {
+      const t = played.get(goalFrame)
+      return t === undefined ? null : at - t
+    }
+  }
+}
+
 /** What a session measures for the ops view (wall-clock milliseconds). */
 export interface Metrics {
-  /** Each goal: the frame it was scored in played, to the new score on the bus (the stats-overlay latency). */
+  /** Each goal: its frame played, to the new score on the bus (the stats-overlay latency). */
   readonly stats: number[]
   /** Live: each batch that brought cues, from its earliest signal played to its cues on the bus (the insight latency). */
   readonly insight: number[]
+  /** Live: each batch whose request failed or timed out, the time it waited (insights that never came). */
+  readonly lost: number[]
   /** Live: every request to the agent service. */
   readonly requests: RequestLog[]
 }
@@ -103,6 +124,8 @@ export interface Session {
   readonly metrics: Metrics
   /** The studio queue, by moment. */
   readonly queue: Ref.Ref<ReadonlyMap<string, QueueEntry>>
+  /** The latest scoreboard on the bus (sent first to every new viewer, so nobody starts at 0-0 mid-match). */
+  readonly board: Ref.Ref<Board | null>
   readonly watchers: Ref.Ref<number>
   /** The segments watched so far (live agents write cues for these). */
   readonly segments: Ref.Ref<ReadonlyMap<string, Segment>>
@@ -151,24 +174,26 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         const segments = yield* Ref.make<ReadonlyMap<string, Segment>>(new Map())
         const closed = yield* Ref.make(false)
         const queue = yield* Ref.make<ReadonlyMap<string, QueueEntry>>(new Map())
+        const latest = yield* Ref.make<Board | null>(null)
         const ended = yield* Deferred.make<void>()
-        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [], insight: [], requests: [] }, queue, watchers, segments }
+        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [], insight: [], lost: [], requests: [] }, queue, board: latest, watchers, segments }
         const end = (frame: number) =>
           Ref.update(playback, (p): Playback => ({ ...p, state: "ended", frame })).pipe(Effect.andThen(PubSub.publish(bus, { kind: "end", frame })))
         // A live session shows the agents' cues as they are written, never the cache's.
         const timeline = beats(o.live ? { ...match, cues: [] } : match, from)
-        let playedAt = 0 // when the latest frame was played
-        let goals = -1 // goals on the latest scoreboard (-1: none yet)
+        const meter = statsMeter()
         const play = paced(timeline, control, fps).pipe(
           Stream.runForEach((b) =>
             Effect.gen(function* () {
               if (b.kind === "board") {
-                const now = b.board.score.home + b.board.score.away
-                if (goals >= 0 && now > goals) s.metrics.stats.push(performance.now() - playedAt)
-                goals = now
+                yield* Ref.set(latest, b.board)
+                yield* PubSub.publish(bus, b)
+                const ms = b.goal === undefined ? null : meter.scored(b.goal, performance.now())
+                if (ms !== null) s.metrics.stats.push(ms)
+                return
               }
               if (b.kind === "frame") {
-                playedAt = performance.now()
+                meter.played(b.frame.frame, performance.now())
                 yield* Ref.update(playback, (p) => ({ ...p, frame: b.frame.frame }))
                 // Watchers get at most about FRAMES_PER_S frames a second, however fast the session plays.
                 if (b.frame.frame % frameStep((yield* SubscriptionRef.get(control)).speed, fps) !== 0) return
@@ -261,14 +286,16 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         })
       )
 
-    const playbackNow = (_: Session, now: Playback) => Effect.succeed([{ kind: "playback", playback: now } as Tick])
+    /** What a new viewer gets first: playback now and the latest scoreboard (so a paused or ended match shows its score). */
+    const opening = (segment: Segment) => (s: Session, now: Playback) =>
+      Effect.map(Ref.get(s.board), (b): Tick[] => [{ kind: "playback", playback: now }, ...(b ? [{ kind: "cue" as const, cue: boardCue(s.match.info.match_id, b, segment) }] : [])])
 
     /** The session's ticks for one segment, from now until the session closes. */
-    const watch = (id: string, segment: Segment) => follow(id, segment, playbackNow, (s) => toTicks(s, segment))
+    const watch = (id: string, segment: Segment) => follow(id, segment, opening(segment), (s) => toTicks(s, segment))
 
     /** The broadcast graphics output: the scoreboard and the cues the producer sent to air (picked for the segment), no pitch. */
     const graphics = (id: string, segment: Segment) =>
-      follow(id, segment, playbackNow, (s) => (b): Tick[] => {
+      follow(id, segment, opening(segment), (s) => (b): Tick[] => {
         switch (b.kind) {
           case "board":
           case "end":

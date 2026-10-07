@@ -3,7 +3,7 @@ import { TestClock } from "effect/testing"
 import { beforeAll, describe, expect, it } from "vitest"
 import type { Tick } from "@touchline/rpc"
 import { readMatch, type LibraryMatch } from "../src/library.js"
-import { IDLE_STOP_S, makeSessions, startFrame } from "../src/session.js"
+import { IDLE_STOP_S, makeSessions, startFrame, statsMeter } from "../src/session.js"
 import { league, makeLibrary, MATCH_ID, type TestLibrary } from "./fixture.js"
 
 let lib: TestLibrary
@@ -143,6 +143,33 @@ describe("sessions", () => {
         const tb = [...(yield* Fiber.join(b))]
         expect(tb).toHaveLength(1)
         expect(tb[0]).toMatchObject({ kind: "playback", playback: { state: "ended" } })
+      })
+    ), 120_000)
+
+  it("time a goal from its frame being played to the score on the bus, however late the scoreboard comes", () => {
+    const meter = statsMeter()
+    for (let f = 100; f <= 110; f++) meter.played(f, (f - 100) * 100) // ten frames, 100 ms apart
+    expect(meter.scored(100, 1000)).toBe(1000) // a scoreboard a second late is a second late
+    expect(meter.scored(105, 520)).toBe(20)
+    expect(meter.scored(99, 1000)).toBeNull() // a frame it never saw played
+  })
+
+  it("give a viewer who joins a paused match the score so far, not 0-0", () =>
+    run(
+      Effect.gen(function* () {
+        const sessions = yield* makeSessions(library())
+        const goal = lib.goals[0]!
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: Math.floor(goal.frame_id / 600), live: false })
+        const scored = (t: Tick) => t.kind === "cue" && t.cue.display.template === "scoreboard" && (t.cue.data["score.home"] ?? 0) + (t.cue.data["score.away"] ?? 0) > 0
+        yield* settle(yield* sessions.watch(s.id, home).pipe(Stream.takeUntil(scored), Stream.runDrain, Effect.forkChild))
+        yield* sessions.control(s.id, "pause", null)
+        for (const follow of [sessions.watch, sessions.graphics]) {
+          const late = yield* follow(s.id, home).pipe(Stream.take(2), Stream.runCollect, Effect.forkChild)
+          yield* advance(2)
+          expect(late.pollUnsafe()).toBeDefined()
+          const [, board] = [...(yield* Fiber.join(late))]
+          expect(board!.kind === "cue" && (board!.cue.data["score.home"] ?? 0) + (board!.cue.data["score.away"] ?? 0)).toBeGreaterThan(0)
+        }
       })
     ), 120_000)
 

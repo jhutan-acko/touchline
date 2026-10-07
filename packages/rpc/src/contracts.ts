@@ -164,8 +164,11 @@ export type StudioAction = typeof StudioAction.Type
 export const Percentiles = Schema.Struct({ n: Count, p50: Schema.NullOr(Schema.Finite), p95: Schema.NullOr(Schema.Finite), max: Schema.NullOr(Schema.Finite) })
 export type Percentiles = typeof Percentiles.Type
 
-/** Measurements against a latency budget (spec §2: p95 under the budget); `ok` is null with no measurements. */
-export const Budget = Schema.Struct({ ...Percentiles.fields, budget_ms: Schema.Finite, ok: Schema.NullOr(Schema.Boolean) })
+/**
+ * Measurements against a latency budget (spec §2: p95 under the budget). `missed` counts answers that never came (a
+ * request that failed or timed out): any miss is over budget. `ok` is null with neither measurements nor misses.
+ */
+export const Budget = Schema.Struct({ ...Percentiles.fields, missed: Count, budget_ms: Schema.Finite, ok: Schema.NullOr(Schema.Boolean) })
 export type Budget = typeof Budget.Type
 
 /** The ops view (spec §5.6): what the agents did for a session so far, and how fast the hot path and the agents were. */

@@ -23,7 +23,8 @@ export interface Board {
 
 export type Beat =
   | { readonly kind: "frame"; readonly frame: PitchFrame }
-  | { readonly kind: "board"; readonly board: Board }
+  /** `goal`: on the first scoreboard after a goal, the frame the goal was scored in (to time the stats overlay). */
+  | { readonly kind: "board"; readonly board: Board; readonly goal?: number }
   /** The variants of one moment or recap, all segments: each watcher picks its own. */
   | { readonly kind: "cues"; readonly frame: number; readonly cues: ReadonlyArray<Cue> }
   | { readonly kind: "signals"; readonly frame: number; readonly signals: ReadonlyArray<Signal> }
@@ -63,9 +64,12 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
       const score = { home: 0, away: 0 }
       let next = 0
       let last = -1
+      let goal: number | null = null // a goal not yet on a scoreboard: its frame
       const board = (tick: number, clock: string): Beat => {
         const mom = engine.value("team.mom", home.id, { at: tick })
-        return { kind: "board", board: { frame: tick, clock, score: { ...score }, momentum: mom === null ? null : { home: r3(mom), away: r3(1 - mom) } } }
+        const b: Beat = { kind: "board", board: { frame: tick, clock, score: { ...score }, momentum: mom === null ? null : { home: r3(mom), away: r3(1 - mom) } }, ...(goal !== null ? { goal } : {}) }
+        goal = null
+        return b
       }
       const due = (frame: number): Beat[] => {
         const out: Beat[] = []
@@ -82,6 +86,7 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
           const out: Beat[] = []
           if (input.event.type === "goal") {
             input.event.team_id === home.id ? score.home++ : score.away++
+            if (last >= fromFrame) goal = Math.min(input.event.frame_id, last)
             // The hot path (spec §2: under 250 ms from the event): a goal reaches the scoreboard at once.
             if (last >= fromFrame) out.push(board(last, engine.clockAt(last)))
           }

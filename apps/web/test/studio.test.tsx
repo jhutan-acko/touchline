@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
 import type { QueueItem } from "@touchline/rpc"
@@ -55,6 +55,20 @@ describe("studio console", () => {
     act(() => client.pushStudio({ kind: "cue", cue: cue("mo-1", "Wylford scores") }))
     const feed = screen.getByRole("list", { name: "Raw cue feed" })
     expect(within(feed).getByText(/casual\.en\.neutral · lower_third/)).toBeTruthy()
+  })
+
+  it("says when the connection is lost, follows the session again and keeps the queue; says when the session is gone", async () => {
+    const client = fakeClient()
+    render(<Studio client={client} session="s1" segment={segment} />)
+    act(() => client.pushStudio({ kind: "queue", item: item("mo-1", "Wylford scores") }))
+    act(() => client.failStudio("Socket closed"))
+    expect(screen.getByRole("status").textContent).toBe("Connection lost — trying again…")
+    expect(row("Wylford scores")).toBeTruthy() // the queue stays on screen meanwhile
+    await waitFor(() => expect(client.studioCount()).toBe(2), { timeout: 3000 })
+    act(() => client.pushStudio({ kind: "playback", playback: { state: "playing", frame: 10, speed: 4, live: false } }))
+    expect(screen.queryByRole("status")).toBeNull()
+    act(() => client.failStudio("SessionNotFound: s1"))
+    expect(screen.getByRole("status").textContent).toBe("This session has ended.")
   })
 
   it("opens from a session in the fan app, for the viewer's segment", async () => {

@@ -57,7 +57,7 @@ const en = {
   rawFeed: "Raw cue feed",
   graphicsOut: "Graphics output",
   opsView: "Ops view",
-  statsLatency: "Stats overlay: event to screen",
+  statsLatency: "Stats overlay: goal to scoreboard",
   insightLatency: "AI insight: signal to cue",
   recordedRequests: "recorded request time",
   withinBudget: "Within budget",
@@ -75,7 +75,8 @@ const en = {
   unverifiedCues: "Unverified cues",
   moments: "Moments",
   cues: "Cues",
-  none: "None"
+  none: "None",
+  missed: "missed (failed or timed out)"
 } as const
 
 export type Key = keyof typeof en
@@ -138,7 +139,7 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     rawFeed: "Flujo de cues sin filtrar",
     graphicsOut: "Salida de gráficos",
     opsView: "Vista de operaciones",
-    statsLatency: "Estadísticas: del evento a la pantalla",
+    statsLatency: "Estadísticas: del gol al marcador",
     insightLatency: "Análisis IA: de la señal al cue",
     recordedRequests: "tiempo de petición grabado",
     withinBudget: "Dentro del límite",
@@ -156,7 +157,8 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     unverifiedCues: "Cues sin verificar",
     moments: "Momentos",
     cues: "Cues",
-    none: "Ninguno"
+    none: "Ninguno",
+    missed: "perdidos (fallaron o expiraron)"
   },
   hi: {
     title: "Touchline",
@@ -214,7 +216,7 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     rawFeed: "सभी क्यू की फ़ीड",
     graphicsOut: "ग्राफ़िक्स आउटपुट",
     opsView: "ऑप्स व्यू",
-    statsLatency: "आंकड़े: घटना से स्क्रीन तक",
+    statsLatency: "आंकड़े: गोल से स्कोरबोर्ड तक",
     insightLatency: "एआई विश्लेषण: संकेत से क्यू तक",
     recordedRequests: "रिकॉर्ड किया गया अनुरोध समय",
     withinBudget: "सीमा के भीतर",
@@ -232,7 +234,8 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     unverifiedCues: "असत्यापित क्यू",
     moments: "पल",
     cues: "क्यू",
-    none: "कोई नहीं"
+    none: "कोई नहीं",
+    missed: "छूटे (विफल या समय समाप्त)"
   }
 }
 

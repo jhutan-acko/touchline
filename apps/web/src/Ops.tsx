@@ -21,8 +21,13 @@ const Latency = ({ name, b, note, lang }: { name: string; b: Budget; note?: stri
     ) : (
       <>
         <p className={`inline-block rounded px-2 py-0.5 text-sm font-semibold ${b.ok ? "bg-emerald-700" : "bg-red-700"}`}>{t(lang, b.ok ? "withinBudget" : "overBudget")}</p>
-        <p className="mt-2 text-2xl font-bold tabular-nums">{`p95 ${b.p95} ms / ${b.budget_ms} ms`}</p>
-        <p className="text-sm tabular-nums text-slate-400">{`n ${b.n} · p50 ${b.p50} ms · max ${b.max} ms`}</p>
+        {b.p95 !== null && (
+          <>
+            <p className="mt-2 text-2xl font-bold tabular-nums">{`p95 ${b.p95} ms / ${b.budget_ms} ms`}</p>
+            <p className="text-sm tabular-nums text-slate-400">{`n ${b.n} · p50 ${b.p50} ms · max ${b.max} ms`}</p>
+          </>
+        )}
+        {b.missed > 0 && <p className="mt-1 text-sm font-semibold text-red-300">{`${b.missed} ${t(lang, "missed")}`}</p>}
       </>
     )}
     {note && <p className="mt-1 text-xs text-slate-400">{note}</p>}

@@ -1,7 +1,7 @@
 import { Effect, Fiber, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { beforeAll, describe, expect, it } from "vitest"
-import type { Artifact, Sender } from "@touchline/agent-gateway"
+import { TaskFailed, type Artifact, type Sender } from "@touchline/agent-gateway"
 import type { Tick } from "@touchline/rpc"
 import type { AgentRequest, Cue, MomentTrace, Recap } from "@touchline/schema"
 import { makeEvidence } from "../src/evidence.js"
@@ -110,6 +110,24 @@ describe("live agents", () => {
         const ev = makeEvidence(new Map([[MATCH_ID, match]]))
         const view = yield* ev.recap(MATCH_ID, "full_time", home, { frame: match.info.frames, live: s.agents })
         expect([view.recap?.kind, view.cards.length]).toEqual(["full_time", 1])
+      })
+    ), 120_000)
+
+  it("count a batch whose request fails as an insight that never came", () =>
+    run(
+      Effect.gen(function* () {
+        const failing: Sender = async function* () {
+          throw new TaskFailed("model unavailable")
+        }
+        const sessions = yield* makeSessions(new Map([[MATCH_ID, match]]), { companion: liveAgents({ agentsUrl: "", budgetMs: 0, send: failing, mcp: fakeMcp }) })
+        const goal = lib.goals[0]!
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: Math.floor(goal.frame_id / 600), live: true })
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.runDrain, Effect.forkChild)
+        for (let t = 0; t < 300_000 && s.metrics.requests.length === 0; t += 50) yield* advance(0.05)
+        expect(s.metrics.requests[0]!.outcome).toBe("failed")
+        expect(s.metrics.lost.length).toBeGreaterThan(0)
+        expect(s.metrics.insight).toEqual([])
+        yield* Fiber.interrupt(w)
       })
     ), 120_000)
 

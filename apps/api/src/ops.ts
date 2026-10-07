@@ -25,10 +25,10 @@ export const percentiles = (xs: ReadonlyArray<number>): Percentiles => {
   return { n: s.length, p50: at(50), p95: at(95), max: r1(s.at(-1)!) }
 }
 
-/** Percentiles against a budget: within it when the p95 is (null with no measurements). */
-export const budget = (xs: ReadonlyArray<number>, budgetMs: number): Budget => {
+/** Percentiles against a budget: within it when the p95 is and nothing was missed (null with neither measurements nor misses). */
+export const budget = (xs: ReadonlyArray<number>, budgetMs: number, missed = 0): Budget => {
   const p = percentiles(xs)
-  return { ...p, budget_ms: budgetMs, ok: p.p95 === null ? null : p.p95 <= budgetMs }
+  return { ...p, missed, budget_ms: budgetMs, ok: p.p95 === null && missed === 0 ? null : missed === 0 && p.p95! <= budgetMs }
 }
 
 const count = (xs: ReadonlyArray<string>): Record<string, number> => Object.fromEntries([...new Set(xs)].sort().map((x) => [x, xs.filter((y) => y === x).length]))
@@ -63,8 +63,8 @@ export const makeOps = () => {
     const timings = new Map<string, number[]>()
     for (const t of traces) for (const [agent, ms] of Object.entries(t.timings_ms)) timings.set(agent, [...(timings.get(agent) ?? []), ms])
     const insight = s.live
-      ? { ...budget(s.metrics.insight, INSIGHT_BUDGET_MS), source: "live" as const }
-      : { ...budget(requests.filter((q) => q.outcome === "ok").map((q) => q.ms), INSIGHT_BUDGET_MS), source: "recorded" as const }
+      ? { ...budget(s.metrics.insight, INSIGHT_BUDGET_MS, s.metrics.lost.length), source: "live" as const }
+      : { ...budget(requests.filter((q) => q.outcome === "ok").map((q) => q.ms), INSIGHT_BUDGET_MS, requests.filter((q) => q.outcome !== "ok").length), source: "recorded" as const }
     return {
       session_id: s.id,
       live: s.live,

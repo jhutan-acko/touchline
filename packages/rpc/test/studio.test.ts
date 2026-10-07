@@ -31,7 +31,7 @@ describe("studio contracts", () => {
       session_id: "s", live: false, frame: 6000, models: ["stub"], moments: 4, cues: 48,
       fact_check: { pass: 4, retry: 1, drop: 0 }, fallbacks: { narrator: 1 }, agents: [{ agent: "analyst", ...p }],
       requests: { ok: 9 }, late_cues: 0, unverified_cues: 0,
-      latency: { stats: { ...p, budget_ms: 250, ok: true }, insight: { n: 0, p50: null, p95: null, max: null, budget_ms: 4000, ok: null, source: "recorded" } }
+      latency: { stats: { ...p, missed: 0, budget_ms: 250, ok: true }, insight: { n: 0, p50: null, p95: null, max: null, missed: 2, budget_ms: 4000, ok: false, source: "recorded" } }
     }
     expect(Schema.decodeUnknownSync(OpsReport)(report)).toEqual(report)
   })

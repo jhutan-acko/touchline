@@ -43,6 +43,12 @@ describe("timeline", () => {
     for (const [i, goal] of lib.goals.entries()) expect(Math.abs(changes[i]!.frame - goal.frame_id)).toBeLessThanOrEqual(1)
   })
 
+  it("marks the first scoreboard after each goal with the goal's frame, so its latency can be timed", () => {
+    const marked = all.flatMap((b) => (b.kind === "board" && b.goal !== undefined ? [b.goal] : []))
+    expect(marked.length).toBe(match.info.score.home + match.info.score.away)
+    for (const [i, goal] of lib.goals.entries()) expect(Math.abs(marked[i]! - goal.frame_id)).toBeLessThanOrEqual(1)
+  })
+
   it("passes on the stats engine's signals (goals among them) for live agents", () => {
     const signals = all.flatMap((b) => (b.kind === "signals" ? b.signals : []))
     expect(signals.filter((s) => s.type === "goal")).toHaveLength(match.info.score.home + match.info.score.away)
