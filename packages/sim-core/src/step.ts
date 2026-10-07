@@ -21,7 +21,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { supportSpot } from "./offball.js"
+import { assignMarks, markTarget, supportSpot } from "./offball.js"
 import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
@@ -1031,6 +1031,8 @@ const moveTarget = (
       }
     }
   }
+  const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
+  if (mark) return { target: mark, speedCap: vmax * w.p.movement.shapeSpeedShare }
   if (pos.kind === "owned" && possSide === pl.side && (pl.role === "ST" || pl.role === "W" || pl.role === "AM")) {
     if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
     const owner = w.player(pos.playerId)
@@ -1055,14 +1057,31 @@ const moveTarget = (
   return shape()
 }
 
+/** This tick's marking targets for `defSide`: outfield defenders who are not pressing, paired with attackers other than the carrier. */
+const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => {
+  const team = teamOf(w.cfg, defSide)
+  const ownerId = w.possession.kind === "owned" ? w.possession.playerId : null
+  const defenders = w
+    .active(defSide)
+    .filter((x) => x.role !== "GK" && !(x.intent.kind === "press" && w.tick < x.intentUntil))
+    .map((x) => ({ id: x.id, anchor: anchorFor(team.formation, x.slot, defSide, ballFlat, team.style, false, w.p.shape) }))
+  const anchors = new Map(defenders.map((d) => [d.id, d.anchor]))
+  const attackers = w.active(other(defSide)).filter((x) => x.role !== "GK" && x.id !== ownerId)
+  const out = new Map<string, Vec2>()
+  for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
+    out.set(id, markTarget(anchors.get(id)!, a.pos, defSide, w.p.marking.goalSideM, w.p.marking.weight))
+  return out
+}
+
 const moveAll = (w: Work): void => {
   const ballFlat = { x: w.ball.pos.x, y: w.ball.pos.y }
   const possSide =
     w.possession.kind === "owned" ? w.player(w.possession.playerId).side : w.possession.kind === "in_flight" ? w.possession.flight.side : null
+  const marks = possSide !== null && w.p.marking.weight > 0 ? marksFor(w, other(possSide), ballFlat) : null
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, null)
+    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, marks)
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur.attrs, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)

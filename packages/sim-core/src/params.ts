@@ -163,6 +163,8 @@ export interface Params {
   readonly runs: { readonly runInBehindRatePerS: number }
   /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
   readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
+  /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
+  readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   readonly movement: { readonly shapeSpeedShare: number }
   /** Team shape spread: width (fully in possession, partly without) and depth between lines. */
@@ -316,6 +318,7 @@ export const DEFAULT_PARAMS: Params = {
   carry: { speed: 5.5, durationS: [0.8, 2.0] },
   runs: { runInBehindRatePerS: 0.12 },
   support: { count: 0, distM: 12, speedShare: 0.8 },
+  marking: { weight: 0, radiusM: 10, goalSideM: 1.5 },
   movement: { shapeSpeedShare: 0.7 },
   shape: { width: 1, depth: 1 },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
@@ -386,7 +389,7 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
 const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
-  "support.speedShare",
+  "support.speedShare", "marking.weight",
   "kinematics.reachMargin", "ball.bounce", "execution.mishitBase", "movement.shapeSpeedShare",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
