@@ -1,5 +1,5 @@
 /** A TouchlineClient for component tests: canned answers, and ticks the test pushes to every watcher. */
-import type { Evidence, MatchInfo, MatchSummary, Playback, RecapView, Tick } from "@touchline/rpc"
+import type { Evidence, MatchInfo, MatchSummary, OpsReport, Playback, RecapView, StudioTick, Tick } from "@touchline/rpc"
 import type { Segment } from "@touchline/schema"
 import type { TouchlineClient } from "../src/client.js"
 
@@ -25,10 +25,20 @@ export interface FakeClient extends TouchlineClient {
   fail(error: string | null): void
   /** How many times watch was called. */
   watchCount(): number
+  readonly studios: Array<{ segment: Segment; onTick: (t: StudioTick) => void }>
+  pushStudio(t: StudioTick): void
+  readonly outputs: Array<{ segment: Segment; onTick: (t: Tick) => void }>
+  pushGraphics(t: Tick): void
 }
 
-export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView } = {}): FakeClient => {
+export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport } = {}): FakeClient => {
   const watchers: FakeClient["watchers"] = []
+  const studios: FakeClient["studios"] = []
+  const outputs: FakeClient["outputs"] = []
+  const follow = <W,>(list: W[], w: W) => {
+    list.push(w)
+    return () => void list.splice(list.indexOf(w), 1)
+  }
   const calls: string[] = []
   let playback: Playback = { state: "playing", frame: 0, speed: 4, live: false }
   let watched = 0
@@ -38,6 +48,21 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
     push: (t) => watchers.forEach((w) => w.onTick(t)),
     fail: (error) => watchers.splice(0).forEach((w) => w.onEnd?.(error)),
     watchCount: () => watched,
+    studios,
+    pushStudio: (t) => studios.forEach((w) => w.onTick(t)),
+    outputs,
+    pushGraphics: (t) => outputs.forEach((w) => w.onTick(t)),
+    studio: (_id, segment, onTick) => follow(studios, { segment, onTick }),
+    act: async (_id, momentId, action) => {
+      calls.push(`act ${momentId} ${action}`)
+      return { moment_id: momentId, status: action === "approve" ? "approved" : action === "hold" ? "held" : "on_air" }
+    },
+    graphics: (_id, segment, onTick) => follow(outputs, { segment, onTick }),
+    ops: async (sessionId) => {
+      calls.push(`ops ${sessionId}`)
+      if (!o.ops) throw new Error("no ops")
+      return o.ops
+    },
     listMatches: async () => o.matches ?? [MATCH],
     startSession: async (id, s) => {
       calls.push(`start ${id} x${s.speed} live=${s.live}`)

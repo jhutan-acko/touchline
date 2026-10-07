@@ -3,7 +3,7 @@ import { createServer } from "node:net"
 import { Effect, Layer } from "effect"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { readMatch, serverLayer } from "@touchline/api"
-import type { Tick } from "@touchline/rpc"
+import type { StudioTick, Tick } from "@touchline/rpc"
 import { connect, type TouchlineClient } from "../src/client.js"
 import { league, makeLibrary, MATCH_ID, type TestLibrary } from "../../api/test/fixture.js"
 
@@ -50,6 +50,22 @@ describe("browser client", () => {
     expect((await client.control(session_id, "pause")).state).toBe("paused")
     const ev = await client.evidence(session_id, last.kind === "cue" ? last.cue.cue_id : "")
     expect(ev.events[0]!.id).toBe(goal.id)
+  })
+
+  it("follows a session's studio console, graphics output and ops numbers", async () => {
+    const { session_id } = await client.startSession(MATCH_ID, { speed: 4, fromMinute: 0, live: false })
+    const first = <T,>(follow: (on: (t: T) => void) => () => void) =>
+      new Promise<T>((done) => {
+        const stop = follow((t) => {
+          stop()
+          done(t)
+        })
+      })
+    const segment = { mode: "casual", lang: "en", club: null } as const
+    expect((await first<StudioTick>((on) => client.studio(session_id, segment, on))).kind).toBe("playback")
+    expect((await first<Tick>((on) => client.graphics(session_id, segment, on))).kind).toBe("playback")
+    expect((await client.ops(session_id)).session_id).toBe(session_id)
+    await expect(client.act(session_id, "nope", "send")).rejects.toThrow()
   })
 
   it("rejects calls for unknown matches", async () => {
