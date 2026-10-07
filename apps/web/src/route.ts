@@ -1,16 +1,17 @@
 /**
  * The app's pages, in the URL hash so each opens in its own tab or window: the fan app (`#/`), and for a session the
  * studio console (`#/studio/<session>?seg=…`), the broadcast graphics output (`#/graphics/<session>?seg=…&match=…`,
- * for a vision mixer or OBS; the match names the teams) and the ops view (`#/ops/<session>`). `seg` is a segment key:
+ * for a vision mixer or OBS; the match names the teams) and the ops view (`#/ops/<session>?lang=…`). `seg` is a segment key:
  * mode.lang.club, `neutral` for none.
  */
 import type { Segment } from "@touchline/schema"
+import type { Lang } from "./i18n.js"
 
 export type Route =
   | { readonly page: "fan" }
   | { readonly page: "studio"; readonly session: string; readonly segment: Segment }
   | { readonly page: "graphics"; readonly session: string; readonly segment: Segment; readonly match: string }
-  | { readonly page: "ops"; readonly session: string }
+  | { readonly page: "ops"; readonly session: string; readonly lang: Lang }
 
 const DEFAULT_SEGMENT: Segment = { mode: "casual", lang: "en", club: null }
 
@@ -28,8 +29,9 @@ export const parseRoute = (hash: string): Route => {
   const [, page, session] = path.split("/")
   if (!session) return { page: "fan" }
   const id = decodeURIComponent(session)
-  if (page === "ops") return { page, session: id }
   const q = new URLSearchParams(query)
+  const lang = q.get("lang")
+  if (page === "ops") return { page, session: id, lang: lang === "es" || lang === "hi" ? lang : "en" }
   if (page === "studio") return { page, session: id, segment: parseSegment(q.get("seg")) }
   const match = q.get("match")
   if (page === "graphics" && match) return { page, session: id, segment: parseSegment(q.get("seg")), match }
@@ -39,7 +41,7 @@ export const parseRoute = (hash: string): Route => {
 export const routeHash = (r: Route): string => {
   if (r.page === "fan") return "#/"
   const base = `#/${r.page}/${encodeURIComponent(r.session)}`
-  if (r.page === "ops") return base
+  if (r.page === "ops") return `${base}?lang=${r.lang}`
   const seg = `${base}?seg=${segmentParam(r.segment)}`
   return r.page === "graphics" ? `${seg}&match=${encodeURIComponent(r.match)}` : seg
 }

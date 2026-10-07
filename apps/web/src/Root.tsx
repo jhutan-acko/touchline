@@ -3,6 +3,7 @@ import type { MatchSummary } from "@touchline/rpc"
 import { App } from "./App.js"
 import type { TouchlineClient } from "./client.js"
 import { Graphics } from "./Graphics.js"
+import { Ops } from "./Ops.js"
 import { parseRoute, type Route } from "./route.js"
 import { Studio } from "./Studio.js"
 
@@ -26,6 +27,8 @@ export const Root = ({ client }: { client: TouchlineClient }) => {
   switch (route.page) {
     case "graphics":
       return <GraphicsPage client={client} route={route} />
+    case "ops":
+      return <Ops client={client} session={route.session} lang={route.lang} />
     case "studio":
       return <Studio client={client} session={route.session} segment={route.segment} />
     default:
