@@ -5,6 +5,6 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "calibrate": "tsx src/cli.ts", "realism": "tsx src/realism.ts" },
-  "dependencies": { "@touchline/league": "workspace:*", "@touchline/sim": "workspace:*", "@touchline/sim-core": "workspace:*", "effect": "4.0.0" },
+  "dependencies": { "@touchline/league": "workspace:*", "@touchline/sim": "workspace:*", "@touchline/sim-core": "workspace:*", "effect": "4.0.1" },
   "devDependencies": {}
 }

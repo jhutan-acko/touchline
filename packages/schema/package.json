@@ -5,6 +5,6 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "json": "tsx scripts/json.ts" },
-  "dependencies": { "effect": "4.0.0" },
+  "dependencies": { "effect": "4.0.1" },
   "devDependencies": { "@touchline/sim-core": "workspace:*" }
 }

@@ -18,7 +18,7 @@
     "@touchline/sim": "workspace:*",
     "@touchline/sim-core": "workspace:*",
     "@touchline/stats": "workspace:*",
-    "effect": "4.0.0",
+    "effect": "4.0.1",
     "zod": "4.6.5"
   },
   "devDependencies": {

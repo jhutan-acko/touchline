@@ -15,7 +15,7 @@
     "@touchline/schema": "workspace:*",
     "@touchline/sim": "workspace:*",
     "@touchline/sim-core": "workspace:*",
-    "effect": "4.0.0"
+    "effect": "4.0.1"
   },
   "devDependencies": {
     "@touchline/league": "workspace:*"
