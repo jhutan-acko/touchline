@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Cause, Deferred, Effect, Fiber, PubSub, Ref, Stream, SubscriptionRef } from "effect"
 import { SessionNotFound, type Playback, type QueueStatus, type Tick } from "@touchline/rpc"
+import type { RequestLog } from "@touchline/agent-gateway"
 import { segmentKey, type Cue, type MomentTrace, type Recap, type Segment } from "@touchline/schema"
 import { pickCues } from "./cues.js"
 import type { LibraryMatch } from "./library.js"
@@ -48,6 +49,10 @@ export type BusBeat =
 export interface Metrics {
   /** Each goal: the frame it was scored in played, to the new score on the bus (the stats-overlay latency). */
   readonly stats: number[]
+  /** Live: each batch that brought cues, from its earliest signal played to its cues on the bus (the insight latency). */
+  readonly insight: number[]
+  /** Live: every request to the agent service. */
+  readonly requests: RequestLog[]
 }
 
 /** What a live session's agents have written so far: its cues, the traces behind them and its recaps. */
@@ -147,7 +152,7 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
         const closed = yield* Ref.make(false)
         const queue = yield* Ref.make<ReadonlyMap<string, QueueEntry>>(new Map())
         const ended = yield* Deferred.make<void>()
-        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [] }, queue, watchers, segments }
+        const s: Session = { id, match, live: o.live, control, bus, playback, closed, agents: { cues: [], traces: [], recaps: [] }, metrics: { stats: [], insight: [], requests: [] }, queue, watchers, segments }
         const end = (frame: number) =>
           Ref.update(playback, (p): Playback => ({ ...p, state: "ended", frame })).pipe(Effect.andThen(PubSub.publish(bus, { kind: "end", frame })))
         // A live session shows the agents' cues as they are written, never the cache's.

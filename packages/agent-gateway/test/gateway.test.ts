@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 import { TaskFailed, type Sender } from "../src/a2a.js"
-import { DEFAULT_OPTIONS, runGateway, timeline } from "../src/gateway.js"
+import { AgentFailed, AgentUnavailable, DEFAULT_OPTIONS, InvalidArtifact, outcomeOf, runGateway, timeline } from "../src/gateway.js"
 import { parseSegments, SegmentError } from "../src/segments.js"
 import { CUE, fake, plan, RECAP, TRACE } from "./fakes.js"
 
@@ -72,6 +72,15 @@ describe("gateway", () => {
     const down = fake(() => new TaskFailed("down"))
     const r = await run(down, plan([100, 400, 700, 1000, 1300, 1600]), { breaker: { failures: 3, cooldown: 2 } })
     expect(r.requests.map((q) => q.outcome)).toEqual(["failed", "failed", "failed", "skipped", "skipped", "failed", "failed", "failed"])
+  })
+})
+
+describe("outcomes", () => {
+  it("name each way a request can fail", () => {
+    expect(outcomeOf(new AgentFailed({ reason: "x" }))).toBe("failed")
+    expect(outcomeOf(new AgentUnavailable({ reason: "x" }))).toBe("unavailable")
+    expect(outcomeOf(new InvalidArtifact({ name: "cue", reason: "x" }))).toBe("invalid")
+    expect(outcomeOf({ _tag: "TimeoutError" } as never)).toBe("timeout")
   })
 })
 

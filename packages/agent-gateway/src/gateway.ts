@@ -124,6 +124,10 @@ export const exchange = (send: Sender, req: AgentRequest, budgetMs: number, got:
   )
 }
 
+/** How a request failed, for the request log. */
+export const outcomeOf = (e: { readonly _tag: string }): Outcome =>
+  e._tag === "TimeoutError" ? "timeout" : e._tag === "AgentFailed" ? "failed" : e._tag === "InvalidArtifact" ? "invalid" : "unavailable"
+
 /** Run a match's timeline through the agent service. Never fails: every request's outcome is in `requests`. */
 export const runGateway = (send: Sender, plan: MatchPlan, opts: GatewayOptions = DEFAULT_OPTIONS) =>
   Effect.gen(function* () {
@@ -152,7 +156,7 @@ export const runGateway = (send: Sender, plan: MatchPlan, opts: GatewayOptions =
         continue
       }
       const e = r.failure
-      const outcome: Outcome = e._tag === "TimeoutError" ? "timeout" : e._tag === "AgentFailed" ? "failed" : e._tag === "InvalidArtifact" ? "invalid" : "unavailable"
+      const outcome = outcomeOf(e)
       // A late request still publishes what it delivered in time (each cue was validated as it arrived).
       const kept = outcome === "timeout" ? got : received()
       cues.push(...kept.cues)

@@ -91,6 +91,10 @@ describe("live agents", () => {
         const ev = makeEvidence(new Map([[MATCH_ID, match]]))
         const why = yield* ev.evidence(MATCH_ID, last.kind === "cue" ? last.cue.cue_id : "", { frame: goal.frame_id, live: s.agents })
         expect([why.cause, why.model]).toEqual(["written live", "live-model"]) // the live trace, not the cache's
+        expect(s.metrics.requests.length).toBeGreaterThan(0)
+        expect(s.metrics.requests.every((r) => r.outcome === "ok" && r.ms >= 0)).toBe(true)
+        expect(s.metrics.insight.length).toBeGreaterThan(0) // signal played → cue on the bus
+        expect(s.metrics.insight.every((ms) => ms >= 0)).toBe(true)
       })
     ), 120_000)
 
@@ -155,13 +159,13 @@ describe("batches", () => {
   it("merge while a request is under way; recaps keep their place", () => {
     const sig = (f: number) => ({ id: `s${f}`, frame_id: f }) as never
     const jobs = coalesce([
-      { kind: "signals", signals: [sig(1)], frame: 10 },
-      { kind: "signals", signals: [sig(2)], frame: 20 },
+      { kind: "signals", signals: [sig(1)], frame: 10, since: 1000 },
+      { kind: "signals", signals: [sig(2)], frame: 20, since: 2000 },
       { kind: "recap", recap: "half_time", frame: 25 },
-      { kind: "signals", signals: [sig(3)], frame: 30 },
+      { kind: "signals", signals: [sig(3)], frame: 30, since: 3000 },
       { kind: "stop" }
     ])
     expect(jobs.map((j) => j.kind)).toEqual(["signals", "recap", "signals", "stop"])
-    expect(jobs[0]).toMatchObject({ frame: 20, signals: [{ id: "s1" }, { id: "s2" }] })
+    expect(jobs[0]).toMatchObject({ frame: 20, signals: [{ id: "s1" }, { id: "s2" }], since: 1000 }) // latency counts from the earliest signal
   })
 })

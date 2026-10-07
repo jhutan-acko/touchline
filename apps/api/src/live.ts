@@ -5,7 +5,7 @@
  * is merged into the next, so slow models fall behind by at most one batch, never more.
  */
 import { Effect, PubSub, Queue, Ref } from "effect"
-import { a2aSender, exchange, received, startMcpStats, type McpServer, type Sender } from "@touchline/agent-gateway"
+import { a2aSender, exchange, outcomeOf, received, startMcpStats, type McpServer, type Sender } from "@touchline/agent-gateway"
 import type { AgentRequest, Cue, Segment, Signal } from "@touchline/schema"
 import type { Beat } from "./playback.js"
 import type { Companion, Session } from "./session.js"
@@ -23,7 +23,8 @@ export interface LiveOptions {
 const DEFAULT_SEGMENT: Segment = { mode: "casual", lang: "en", club: null }
 
 type Job =
-  | { readonly kind: "signals"; readonly signals: Signal[]; readonly frame: number }
+  /** `since`: when the batch's earliest signal was played (wall clock, ms), for the insight latency. */
+  | { readonly kind: "signals"; readonly signals: Signal[]; readonly frame: number; readonly since: number }
   | { readonly kind: "recap"; readonly recap: "half_time" | "full_time"; readonly frame: number }
   | { readonly kind: "stop" }
 
@@ -33,7 +34,7 @@ export const coalesce = (jobs: ReadonlyArray<Job>): Job[] => {
   const out: Job[] = []
   for (const j of jobs) {
     const prev = out.at(-1)
-    if (j.kind === "signals" && prev?.kind === "signals") out[out.length - 1] = { kind: "signals", signals: [...prev.signals, ...j.signals], frame: j.frame }
+    if (j.kind === "signals" && prev?.kind === "signals") out[out.length - 1] = { kind: "signals", signals: [...prev.signals, ...j.signals], frame: j.frame, since: Math.min(prev.since, j.since) }
     else out.push(j)
   }
   return out
@@ -63,13 +64,19 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
           const base = { match_id: s.match.info.match_id, mcp_url: mcp.url, segments: yield* segments }
           const req: AgentRequest = job.kind === "signals" ? { kind: "signals", ...base, now_frame: job.frame, signals: job.signals } : { kind: "recap", ...base, recap: job.recap, at_frame: job.frame }
           const got = received()
-          yield* Effect.exit(exchange(send, req, o.budgetMs, got)) // a failed or late request still publishes what arrived in time
+          const t0 = performance.now()
+          const r = yield* Effect.result(exchange(send, req, o.budgetMs, got)) // a failed or late request still publishes what arrived in time
+          s.metrics.requests.push({
+            kind: req.kind, frame: job.frame, outcome: r._tag === "Success" ? "ok" : outcomeOf(r.failure), ms: performance.now() - t0,
+            cues: got.cues.length, late: got.late, unverified: got.unverified
+          })
           // Kept for "Why?" and the recap panel: a live session answers from what its agents wrote.
           s.agents.cues.push(...got.cues)
           s.agents.traces.push(...got.traces)
           s.agents.recaps.push(...got.recaps)
           const now = (yield* Ref.get(s.playback)).frame
           yield* publish(now, got.cues)
+          if (job.kind === "signals" && got.cues.length) s.metrics.insight.push(performance.now() - job.since)
         }
       }
     })
@@ -77,6 +84,7 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
     // Feeder: cut the signals into batches as play passes each batch's end; recaps at the whistles.
     const feed = Effect.gen(function* () {
       let pending: Signal[] = []
+      let since = 0 // when the first pending signal was played
       let end = -1
       let half = false
       let first = true
@@ -85,6 +93,7 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
         const b = yield* PubSub.take(sub)
         if (b.kind === "signals") {
           if (end < 0) end = Math.floor(b.frame / width) * width + width
+          if (!pending.length) since = performance.now()
           pending = [...pending, ...b.signals]
         } else if (b.kind === "frame") {
           // A session that starts in the second half has no first half to recap.
@@ -92,19 +101,19 @@ export const liveAgents = (o: LiveOptions): Companion => (s: Session) =>
           first = false
           if (!half && b.frame.period === "second_half") {
             half = true
-            if (pending.length) yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: last })
+            if (pending.length) yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: last, since })
             pending = []
             end = -1
             yield* Queue.offer(jobs, { kind: "recap", recap: "half_time", frame: last })
           }
           last = b.frame.frame
           if (end >= 0 && last >= end && pending.length) {
-            yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: last })
+            yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: last, since })
             pending = []
             end = -1
           }
         } else if (b.kind === "end") {
-          if (pending.length) yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: b.frame })
+          if (pending.length) yield* Queue.offer(jobs, { kind: "signals", signals: pending, frame: b.frame, since })
           yield* Queue.offer(jobs, { kind: "recap", recap: "full_time", frame: b.frame })
           yield* Queue.offer(jobs, { kind: "stop" })
           return
