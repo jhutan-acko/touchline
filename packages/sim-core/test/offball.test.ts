@@ -64,6 +64,13 @@ describe("marking", () => {
     expect(markTarget(anchor, { x: -10, y: 0 }, "home", 1.5, 0.5)).toEqual({ x: -15.75, y: 0 })
     expect(markTarget(anchor, { x: -10, y: 0 }, "home", 1.5, 0)).toEqual(anchor)
   })
+  it("does not follow a wide attacker more than widthSlackM outside the marker's anchor", () => {
+    const t = markTarget({ x: -20, y: 10 }, { x: -10, y: 30 }, "home", 1.5, 1, 4)
+    expect(t.y).toBeCloseTo(14, 9)
+    expect(markTarget({ x: -20, y: -10 }, { x: -10, y: -30 }, "home", 1.5, 1, 4).y).toBeCloseTo(-14, 9)
+    // Inside the limit nothing changes.
+    expect(markTarget({ x: -20, y: 10 }, { x: -10, y: 12 }, "home", 1.5, 1, 4)).toEqual(markTarget({ x: -20, y: 10 }, { x: -10, y: 12 }, "home", 1.5, 1))
+  })
   it("leaves attackers less free space when switched on", () => {
     const freeSpace = (frames: Frame[]) => {
       const per: number[] = []

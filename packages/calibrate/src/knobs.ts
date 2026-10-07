@@ -82,6 +82,8 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, shape: { ...p.shape, defLineM: v } }) },
   { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: 1, min: 0.5, max: 1.2, step: 0.1,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) },
+  { name: "fwd_drop", what: "metres forwards drop back without the ball (defending team length)", init: 0, min: 0, max: 20, step: 2.5,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, fwdDropM: v } }) },
   { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: 0.5, min: 0, max: 1, step: 0.25,
     apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
   { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: 12, min: 8, max: 18, step: 2,

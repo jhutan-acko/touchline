@@ -61,7 +61,7 @@ export const meanMetrics = (ms: ReadonlyArray<MatchMetrics>): Record<GateKey, nu
 export const WEIGHTS: Readonly<Record<GateKey, number>> = {
   passes: 1, completion: 1, long_share: 1, pass_len_median: 1, shots: 1, on_target_share: 0.7, blocked_share: 0.7, save_rate: 0.7, goals: 1, penalties: 0.5, corners: 0.7,
   throw_ins: 1, goal_kicks: 0.7, free_kicks: 0.7, fouls: 1, cards: 0.5, in_play_share: 1, distance_km_median: 0.7, peak_speed_kmh_median: 0.7,
-  width_poss_m: 0.5, width_def_m: 0.5, length_def_m: 0.5, line_height_def_m: 0.5, ball_pressure_m: 0.5, support_15m: 0.5, free_space_m: 0.5
+  width_poss_m: 0.3, width_def_m: 0.3, length_def_m: 0.3, line_height_def_m: 0.3, ball_pressure_m: 0.3, support_15m: 0.3, free_space_m: 0.3
 }
 
 /** Scale for a z-score: the real between-match SD, but never below 5 % of the mean (tracking targets come from one match). */

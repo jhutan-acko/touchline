@@ -1075,7 +1075,7 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   const attackers = w.active(other(defSide)).filter((x) => x.role !== "GK" && x.id !== ownerId)
   const out = new Map<string, Vec2>()
   for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
-    out.set(id, markTarget(anchors.get(id)!, a.pos, defSide, w.p.marking.goalSideM, w.p.marking.weight))
+    out.set(id, markTarget(anchors.get(id)!, a.pos, defSide, w.p.marking.goalSideM, w.p.marking.weight, w.p.marking.widthSlackM))
   return out
 }
 

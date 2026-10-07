@@ -54,4 +54,15 @@ describe("team shape", () => {
     // With the ball nothing changes.
     expect(anchorFor("4-3-3", 2, "home", ball, style, true, spread(10, 0.5))).toEqual(anchorFor("4-3-3", 2, "home", ball, style, true))
   })
+  it("drops forwards (ST, W, AM) back by fwdDropM without the ball only", () => {
+    const style = STYLES.possession
+    const ball = { x: 0, y: 0 }
+    const drop = { width: 1, depth: 1, defLineM: 0, defDepth: 1, fwdDropM: 10 }
+    // 4-3-3: slot 9 is the striker, slot 8 a winger, slot 2 a centre back.
+    expect(anchorFor("4-3-3", 9, "home", ball, style, false, drop).x - anchorFor("4-3-3", 9, "home", ball, style, false).x).toBeCloseTo(-10, 9)
+    expect(anchorFor("4-3-3", 8, "home", ball, style, false, drop).x - anchorFor("4-3-3", 8, "home", ball, style, false).x).toBeCloseTo(-10, 9)
+    expect(anchorFor("4-3-3", 9, "away", ball, style, false, drop).x - anchorFor("4-3-3", 9, "away", ball, style, false).x).toBeCloseTo(10, 9)
+    expect(anchorFor("4-3-3", 2, "home", ball, style, false, drop)).toEqual(anchorFor("4-3-3", 2, "home", ball, style, false))
+    expect(anchorFor("4-3-3", 9, "home", ball, style, true, drop)).toEqual(anchorFor("4-3-3", 9, "home", ball, style, true))
+  })
 })

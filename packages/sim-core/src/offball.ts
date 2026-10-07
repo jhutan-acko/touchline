@@ -54,10 +54,13 @@ export const assignMarks = (
 }
 
 /** Where a marker stands: `weight` of the way from the shape anchor to a spot goalSideM goal-side of the attacker. */
-export const markTarget = (anchor: Vec2, attacker: Vec2, defSide: Side, goalSideM: number, weight: number): Vec2 => {
+export const markTarget = (anchor: Vec2, attacker: Vec2, defSide: Side, goalSideM: number, weight: number, widthSlackM?: number): Vec2 => {
   const ownGoal = { x: -dirOf(defSide) * PITCH.halfL, y: 0 }
   const spot = add(attacker, scale(norm(sub(ownGoal, attacker)), goalSideM))
-  return add(anchor, scale(sub(spot, anchor), weight))
+  const t = add(anchor, scale(sub(spot, anchor), weight))
+  if (widthSlackM === undefined) return t
+  const lim = Math.abs(anchor.y) + widthSlackM
+  return { x: t.x, y: Math.max(-lim, Math.min(lim, t.y)) }
 }
 
 /** A carry heading bent sideways, away from opponents ahead within avoidM (closer pushes harder); unit length. */

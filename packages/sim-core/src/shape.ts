@@ -74,7 +74,7 @@ export const anchorFor = (
   ball: Vec2,
   style: TeamStyle,
   inPossession: boolean,
-  spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number } = { width: 1, depth: 1 }
+  spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number; readonly fwdDropM?: number } = { width: 1, depth: 1 }
 ): Vec2 => {
   const s = FORMATIONS[formation][slot]!
   const d = dirOf(side)
@@ -93,7 +93,8 @@ export const anchorFor = (
   // Without the ball, defDepth squeezes the lines further and defLineM pushes the whole shape upfield (both identity by default).
   const depth = spread.depth * (inPossession ? 1 : (spread.defDepth ?? 1))
   const sx = -18 + (s.x + 18) * depth
-  const x = clamp(sx + slide * bx + line + (inPossession ? 0 : (spread.defLineM ?? 0)), -PITCH.halfL + 4, PITCH.halfL - 3)
+  const drop = !inPossession && (s.role === "ST" || s.role === "W" || s.role === "AM") ? (spread.fwdDropM ?? 0) : 0
+  const x = clamp(sx + slide * bx + line + (inPossession ? 0 : (spread.defLineM ?? 0)) - drop, -PITCH.halfL + 4, PITCH.halfL - 3)
   const y = clamp(s.y * compact * width + 0.35 * by, -PITCH.halfW + 1.5, PITCH.halfW - 1.5)
   return { x: x * d, y: y * d }
 }
