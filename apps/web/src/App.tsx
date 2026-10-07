@@ -3,11 +3,14 @@ import type { MatchInfo, MatchSummary } from "@touchline/rpc"
 import type { TouchlineClient } from "./client.js"
 import { LANG_NAMES, t, type Lang } from "./i18n.js"
 import { MatchList } from "./MatchList.js"
+import type { Profile } from "./profile.js"
 import { Watch } from "./Watch.js"
 
 /** The fan app: pick a match from the library, then watch it. */
 export const App = ({ client }: { client: TouchlineClient }) => {
-  const [lang, setLang] = useState<Lang>("en")
+  const [profile, setProfile] = useState<Profile>({ mode: "casual", lang: "en", clubs: [] })
+  const lang = profile.lang
+  const setLang = (l: Lang) => setProfile({ ...profile, lang: l })
   const [matches, setMatches] = useState<ReadonlyArray<MatchSummary> | null>(null)
   const [live, setLive] = useState(false)
   const [fromMinute, setFromMinute] = useState(0)
@@ -32,7 +35,7 @@ export const App = ({ client }: { client: TouchlineClient }) => {
         </label>
       </header>
       {session ? (
-        <Watch client={client} sessionId={session.id} match={session.match} segment={{ mode: "casual", lang, club: null }} lang={lang} onBack={() => setSession(null)} />
+        <Watch client={client} sessionId={session.id} match={session.match} profile={profile} onProfile={setProfile} onBack={() => setSession(null)} />
       ) : (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-4">
