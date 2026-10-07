@@ -3,14 +3,14 @@
  * Real data is measured in Python; synthetic data is measured here during tuning. A parity test
  * runs both on the same synthetic match, so the two definitions cannot drift apart.
  */
-import type { DomainEvent, Frame } from "@touchline/sim-core"
+import type { DomainEvent, Frame, Side } from "@touchline/sim-core"
 
 export const LONG_PASS_M = 32
 export const PASS_LEN_EDGES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 80, 120]
 export const SPEED_EDGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]
 const FULL_MATCH_SHARE = 0.95
 
-export interface MatchMetrics {
+export interface MatchMetrics extends Record<SpatialKey, number> {
   readonly passes: number
   readonly completion: number
   readonly long_share: number
@@ -39,6 +39,12 @@ export const SCALAR_KEYS = [
   "goal_kicks", "free_kicks", "fouls", "cards", "in_play_share", "distance_km_median", "peak_speed_kmh_median"
 ] as const
 export type ScalarKey = (typeof SCALAR_KEYS)[number]
+
+/** Team shape and space (port of spatial_metrics in metrics.py; same order). */
+export const SPATIAL_KEYS = ["width_poss_m", "width_def_m", "length_def_m", "line_height_def_m", "ball_pressure_m", "support_15m", "free_space_m"] as const
+export type SpatialKey = (typeof SPATIAL_KEYS)[number]
+export const SPATIAL_SAMPLE_S = 1
+export const SUPPORT_RADIUS_M = 15
 
 const hist = (values: ReadonlyArray<number>, edges: ReadonlyArray<number>): number[] => {
   const counts = new Array<number>(edges.length - 1).fill(0)
@@ -150,7 +156,58 @@ export const trackingMetrics = (frames: ReadonlyArray<Frame>, dt: number, smooth
   }
 }
 
+type Pt = readonly [number, number]
+
+/**
+ * Team shape and space, once a second, on live frames with a team in possession. Each team's attack
+ * direction per period comes from its mean x in that period's first frame.
+ */
+export const spatialMetrics = (frames: ReadonlyArray<Frame>, dt: number, halfLength = 52.5): Record<SpatialKey, number> => {
+  const offset: Record<string, number> = { first_half: 0, second_half: 10_000 }
+  const dirs = new Map<string, Record<Side, number>>()
+  const lastSec = new Map<string, number>()
+  const wPoss: number[] = [], wDef: number[] = [], length: number[] = [], line: number[] = [], press: number[] = [], support: number[] = [], space: number[] = []
+  const meanX = (pts: ReadonlyArray<Pt>) => pts.reduce((s, p) => s + p[0], 0) / pts.length
+  const spreadY = (pts: ReadonlyArray<Pt>) => Math.max(...pts.map((p) => p[1])) - Math.min(...pts.map((p) => p[1]))
+  const d = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1])
+  for (const f of frames) {
+    const teams: Record<Side, Pt[]> = { home: f.home.map((p) => [p.x, p.y] as const), away: f.away.map((p) => [p.x, p.y] as const) }
+    if (!dirs.has(f.period) && teams.home.length && teams.away.length)
+      dirs.set(f.period, { home: meanX(teams.home) < 0 ? 1 : -1, away: meanX(teams.away) < 0 ? 1 : -1 })
+    const poss = f.possession_side
+    const dir = dirs.get(f.period)
+    if (!f.ball_in_play || poss === null || !dir) continue
+    const sec = Math.floor((offset[f.period]! + f.frame_id * dt) / SPATIAL_SAMPLE_S + 1e-6)
+    if (lastSec.get(f.period) === sec) continue
+    lastSec.set(f.period, sec)
+    const defSide: Side = poss === "home" ? "away" : "home"
+    const att = teams[poss], def = teams[defSide]
+    if (att.length < 3 || def.length < 3) continue
+    wPoss.push(spreadY(att))
+    wDef.push(spreadY(def))
+    const u = def.map((p) => dir[defSide] * p[0]).sort((a, b) => a - b)
+    length.push(u[u.length - 1]! - u[1]!)
+    line.push(u[1]! + halfLength)
+    const ball: Pt = [f.ball.x, f.ball.y]
+    press.push(Math.min(...def.map((p) => d(p, ball))))
+    support.push(Math.max(0, att.filter((p) => d(p, ball) <= SUPPORT_RADIUS_M).length - 1))
+    let carrier = 0
+    for (let i = 1; i < att.length; i++) if (d(att[i]!, ball) < d(att[carrier]!, ball)) carrier = i
+    space.push(median(att.filter((_, i) => i !== carrier).map((p) => Math.min(...def.map((q) => d(p, q))))))
+  }
+  return {
+    width_poss_m: median(wPoss),
+    width_def_m: median(wDef),
+    length_def_m: median(length),
+    line_height_def_m: median(line),
+    ball_pressure_m: median(press),
+    support_15m: support.length ? support.reduce((a, b) => a + b, 0) / support.length : NaN,
+    free_space_m: median(space)
+  }
+}
+
 export const matchMetrics = (events: ReadonlyArray<DomainEvent>, frames: ReadonlyArray<Frame>, dt: number): MatchMetrics => ({
   ...eventMetrics(events),
-  ...trackingMetrics(frames, dt)
+  ...trackingMetrics(frames, dt),
+  ...spatialMetrics(frames, dt)
 })
