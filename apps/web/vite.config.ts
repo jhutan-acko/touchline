@@ -6,5 +6,5 @@ import { defineConfig } from "vitest/config"
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: { port: 5173, proxy: { "/rpc": { target: "ws://127.0.0.1:8787", ws: true } } },
-  test: { environment: "jsdom", setupFiles: ["test/setup.ts"], testTimeout: 120_000 }
+  test: { environment: "jsdom", globalSetup: ["../../vitest.tmp.ts"], setupFiles: ["test/setup.ts"], testTimeout: 120_000 }
 })

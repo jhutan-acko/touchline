@@ -1,3 +1,3 @@
 import { defineConfig } from "vitest/config"
 
-export default defineConfig({ test: { testTimeout: 120_000 } })
+export default defineConfig({ test: { globalSetup: ["../../vitest.tmp.ts"], testTimeout: 120_000 } })
