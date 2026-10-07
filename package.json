@@ -14,7 +14,8 @@
     "stats": "pnpm --filter @touchline/stats run stats",
     "mcp-stats": "pnpm --filter @touchline/mcp-stats run serve",
     "agents": "pnpm --filter @touchline/agent-gateway run agents",
-    "api": "pnpm --filter @touchline/api run serve"
+    "api": "pnpm --filter @touchline/api run serve",
+    "library": "pnpm --filter @touchline/api run library"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
