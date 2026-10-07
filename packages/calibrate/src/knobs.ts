@@ -81,7 +81,11 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "def_line", what: "metres a team without the ball pushes its shape upfield (defensive line height)", init: 0, min: 0, max: 20, step: 2.5,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, defLineM: v } }) },
   { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: 1, min: 0.5, max: 1.2, step: 0.1,
-    apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) }
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) },
+  { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: 0.5, min: 0, max: 1, step: 0.25,
+    apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
+  { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: 12, min: 8, max: 18, step: 2,
+    apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

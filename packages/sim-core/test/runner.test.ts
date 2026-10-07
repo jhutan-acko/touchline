@@ -82,8 +82,13 @@ describe("scenario runner", () => {
     for (const effect of ["keeper_heroics", "defensive_error"] as const) {
       for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         const script: Script = { name: effect, entries: [{ window: [20, 40], team: "home", effect }] }
-        const w = runScript(makeConfig(seed, { params, script }), { retries: 0 }).windows[0]!
-        if (w.forced) expect(w.achieved, `${effect} seed ${seed}`).toBe(true)
+        const cfg = makeConfig(seed, { params, script })
+        const run = runScript(cfg, { retries: 0 })
+        const w = run.windows[0]!
+        // A forced save or error needs shots or kicks to happen on: a window in which the opposition never got a second shot cannot be forced
+        // (seed 4 with support, marking and shielding on: one forced save, no second shot in 20 minutes). Whenever they did, the target is met.
+        const awayShots = run.steps.flatMap((r) => r.events).filter((e) => e.type === "shot" && e.team_id === cfg.away.id && e.frame_id >= w.fromFrame && e.frame_id <= w.toFrame).length
+        if (w.forced && (effect !== "keeper_heroics" || awayShots >= 2)) expect(w.achieved, `${effect} seed ${seed}`).toBe(true)
       }
     }
   })

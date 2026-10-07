@@ -6,7 +6,7 @@ import { CliError, cliOptions, exitOnUserError, positiveInteger } from "@touchli
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import type { Targets } from "./evaluate.js"
 import { applyKnobs, KNOBS } from "./knobs.js"
-import { SCALAR_KEYS } from "./metrics.js"
+import { GATE_KEYS } from "./gate.js"
 import { tune } from "./tune.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -70,8 +70,8 @@ const out = {
     evals: res.evals,
     loss: Number(res.loss.toFixed(3)),
     knobs: Object.fromEntries(KNOBS.map((k) => [k.name, res.knobs[k.name]])),
-    simulated: Object.fromEntries(SCALAR_KEYS.map((k) => [k, Number(res.detail[k].toFixed(4))])),
-    real: Object.fromEntries(SCALAR_KEYS.map((k) => [k, targets.metrics[k]?.mean ?? null]))
+    simulated: Object.fromEntries(GATE_KEYS.map((k) => [k, Number(res.detail[k].toFixed(4))])),
+    real: Object.fromEntries(GATE_KEYS.map((k) => [k, targets.metrics[k]?.mean ?? null]))
   }
 }
 writeFileSync(outPath, JSON.stringify(out, null, 1) + "\n")

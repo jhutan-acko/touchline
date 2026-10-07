@@ -18,7 +18,7 @@ const play = (cfg: MatchConfig) => {
 const runs = [1, 2, 3, 4, 5, 6].map((seed) => ({ cfg: makeConfig(seed, { params }), events: play(makeConfig(seed, { params })) }))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
-const inOwnBox = (side: "home" | "away", x: number, y: number) => attackX(side, x) < -(PITCH.halfL - PITCH.boxDepth) && Math.abs(y) < PITCH.boxHalfWidth
+const inOwnBox = (side: "home" | "away", x: number, y: number, inset = 0) => attackX(side, x) < -(PITCH.halfL - PITCH.boxDepth) - inset && Math.abs(y) < PITCH.boxHalfWidth - inset
 
 describe("high balls into the box", () => {
   it("keepers claim or punch some of them, in their own box, from crosses and set pieces", () => {
@@ -51,7 +51,8 @@ describe("high balls into the box", () => {
       const keepers = new Set([r.cfg.home.starters[0]!.id, r.cfg.away.starters[0]!.id, ...[r.cfg.home, r.cfg.away].flatMap((t) => (t.bench ?? []).filter((b) => b.role === "GK").map((b) => b.id))])
       for (const e of r.events.filter((x) => x.type === "tackle" && keepers.has(x.attrs.opponent_id as string))) {
         const keeperSide = sideOf(r.cfg, e.team_id) === "home" ? "away" : "home"
-        expect(inOwnBox(keeperSide, e.x!, e.y!), `${e.id} tackles keeper ${e.attrs.opponent_id} in the box`).toBe(false)
+        // The event sits at the tackler, who can stand up to the tackle radius (1.6 m) from the keeper: a keeper just outside the line is not in their hands.
+        expect(inOwnBox(keeperSide, e.x!, e.y!, 1.6), `${e.id} tackles keeper ${e.attrs.opponent_id} in the box`).toBe(false)
       }
     }
   })

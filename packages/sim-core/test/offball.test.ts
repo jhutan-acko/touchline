@@ -10,6 +10,8 @@ const play = (cfg: MatchConfig) => {
 }
 const opp = (x: number, y: number): PlayerState => ({ ...kickoffPlayersFor(makeConfig(1))[11]!, id: `o-${x}-${y}`, pos: { x, y } })
 const withParams = (over: (p: Params) => Params) => makeConfig(5, { params: over(DEFAULT_PARAMS) })
+/** The behaviours are on by default; "off" is the engine as it was before them. */
+const behavioursOff = (p: Params): Params => ({ ...p, support: { ...p.support, count: 0 }, marking: { ...p.marking, weight: 0 }, carry: { ...p.carry, avoidM: 0, shieldM: 0 } })
 
 describe("support play", () => {
   it("offers the open side, away from a cluster of opponents", () => {
@@ -39,8 +41,8 @@ describe("support play", () => {
       }
       return n / c
     }
-    const off = near(play(withParams((p) => p)).frames)
-    const on = near(play(withParams((p) => ({ ...p, support: { ...p.support, count: 2 } }))).frames)
+    const off = near(play(withParams(behavioursOff)).frames)
+    const on = near(play(withParams((p) => ({ ...behavioursOff(p), support: { ...p.support, count: 2 } }))).frames)
     expect(on).toBeGreaterThan(off + 0.1)
   })
 })
@@ -73,8 +75,8 @@ describe("marking", () => {
       }
       return per.reduce((s, v) => s + v, 0) / per.length
     }
-    const off = freeSpace(play(withParams((p) => p)).frames)
-    const on = freeSpace(play(withParams((p) => ({ ...p, marking: { ...p.marking, weight: 0.6 } }))).frames)
+    const off = freeSpace(play(withParams(behavioursOff)).frames)
+    const on = freeSpace(play(withParams((p) => ({ ...behavioursOff(p), marking: { ...p.marking, weight: 0.6 } }))).frames)
     expect(on).toBeLessThan(off - 0.3)
   })
 })
@@ -106,8 +108,8 @@ describe("on the ball", () => {
       }
       return n
     }
-    const off = moving(play(withParams((p) => p)).frames)
-    const on = moving(play(withParams((p) => ({ ...p, carry: { ...p.carry, shieldM: 3, avoidM: 6 } }))).frames)
+    const off = moving(play(withParams(behavioursOff)).frames)
+    const on = moving(play(withParams((p) => ({ ...behavioursOff(p), carry: { ...p.carry, shieldM: 3, avoidM: 6 } }))).frames)
     expect(on).toBeGreaterThan(off)
   })
 })
