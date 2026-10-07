@@ -94,6 +94,16 @@ describe("API over WebSocket", () => {
     expect(Exit.isFailure(lost) && JSON.stringify(lost.cause)).toContain("NotQueued")
   }, 120_000)
 
+  it("reports a session's ops numbers", async () => {
+    const report = await client((c) =>
+      Effect.gen(function* () {
+        const s = yield* c.StartSession({ match_id: MATCH_ID, speed: 4, from_minute: 0, live: false })
+        return yield* c.GetOps({ session_id: s.session_id })
+      })
+    )
+    expect([report.live, report.latency.stats.budget_ms, report.latency.insight.budget_ms]).toEqual([false, 250, 4000])
+  }, 120_000)
+
   it("refuses to watch an unknown session", async () => {
     const lost = await client((c) => Effect.exit(Stream.runDrain(c.Watch({ session_id: "nope", segment: { mode: "casual", lang: "en", club: null } }))))
     expect(Exit.isFailure(lost) && JSON.stringify(lost.cause)).toContain("SessionNotFound")

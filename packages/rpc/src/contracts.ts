@@ -235,7 +235,9 @@ export class TouchlineRpcs extends RpcGroup.make(
     error: Schema.Union([SessionNotFound, NotQueued])
   }),
   /** The broadcast graphics output for a segment: the scoreboard and the cues the producer sent, nothing else. */
-  Rpc.make("WatchGraphics", { payload: { session_id: Schema.String, segment: Segment }, success: Tick, error: SessionNotFound, stream: true })
+  Rpc.make("WatchGraphics", { payload: { session_id: Schema.String, segment: Segment }, success: Tick, error: SessionNotFound, stream: true }),
+  /** The session's ops numbers (spec §5.6 ops view), as of its frame. */
+  Rpc.make("GetOps", { payload: { session_id: Schema.String }, success: OpsReport, error: SessionNotFound })
 ) {}
 
 export const decodeTick = Schema.decodeUnknownSync(Tick)

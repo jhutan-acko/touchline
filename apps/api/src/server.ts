@@ -10,6 +10,7 @@ import { RpcSerialization, RpcServer } from "effect/rpc"
 import { MatchNotFound, TouchlineRpcs, type MatchSummary } from "@touchline/rpc"
 import { makeEvidence } from "./evidence.js"
 import type { LibraryMatch } from "./library.js"
+import { makeOps } from "./ops.js"
 import { makeSessions, type Companion } from "./session.js"
 import { makeStudio } from "./studio.js"
 
@@ -29,6 +30,7 @@ export const handlersLayer = (o: ApiOptions) =>
     Effect.gen(function* () {
       const ev = makeEvidence(o.library)
       const studio = makeStudio(ev)
+      const ops = makeOps()
       const sessions = yield* makeSessions(o.library, { ...(o.companion ? { companion: o.companion } : {}), studio: studio.record })
       const match = (id: string) => Effect.fromNullishOr(o.library.get(id)).pipe(Effect.mapError(() => new MatchNotFound({ match_id: id })))
       /** A session and what it has reached: answers never go past its frame. */
@@ -48,7 +50,8 @@ export const handlersLayer = (o: ApiOptions) =>
         GetRecap: ({ session_id, kind, segment }) => view(session_id).pipe(Effect.flatMap(({ s, v }) => ev.recap(s.match.info.match_id, kind, segment, v))),
         StudioWatch: ({ session_id, segment }) => studio.watch(sessions, session_id, segment),
         StudioAct: ({ session_id, moment_id, action }) => sessions.get(session_id).pipe(Effect.flatMap((s) => studio.act(s, moment_id, action))),
-        WatchGraphics: ({ session_id, segment }) => sessions.graphics(session_id, segment)
+        WatchGraphics: ({ session_id, segment }) => sessions.graphics(session_id, segment),
+        GetOps: ({ session_id }) => sessions.get(session_id).pipe(Effect.flatMap((s) => Effect.map(Ref.get(s.playback), (p) => ops.report(s, p.frame))))
       })
     })
   )
