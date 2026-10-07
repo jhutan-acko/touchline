@@ -161,6 +161,8 @@ export interface Params {
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
   readonly carry: { readonly speed: number; readonly durationS: readonly [number, number] }
   readonly runs: { readonly runInBehindRatePerS: number }
+  /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
+  readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   readonly movement: { readonly shapeSpeedShare: number }
   /** Team shape spread: width (fully in possession, partly without) and depth between lines. */
@@ -313,6 +315,7 @@ export const DEFAULT_PARAMS: Params = {
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0] },
   runs: { runInBehindRatePerS: 0.12 },
+  support: { count: 0, distM: 12, speedShare: 0.8 },
   movement: { shapeSpeedShare: 0.7 },
   shape: { width: 1, depth: 1 },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
@@ -383,6 +386,7 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
 const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
+  "support.speedShare",
   "kinematics.reachMargin", "ball.bounce", "execution.mishitBase", "movement.shapeSpeedShare",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",

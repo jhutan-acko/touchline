@@ -21,6 +21,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
+import { supportSpot } from "./offball.js"
 import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
@@ -971,7 +972,13 @@ const ballTick = (w: Work): void => {
 
 // ---------------------------------------------------------------- movement
 
-const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | null): { target: Vec2; speedCap: number; timeLeft?: number } => {
+const moveTarget = (
+  w: Work,
+  pl: PlayerState,
+  ballFlat: Vec2,
+  possSide: Side | null,
+  marks: ReadonlyMap<string, Vec2> | null
+): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl.attrs, pl.energy, w.p)
   const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, ballFlat, team.style, possSide === pl.side, w.p.shape), speedCap: vmax * w.p.movement.shapeSpeedShare })
@@ -1035,6 +1042,16 @@ const moveTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, possSide: Side | n
       return { target, speedCap: vmax }
     }
   }
+  if (pos.kind === "owned" && possSide === pl.side && w.p.support.count > 0) {
+    const owner = w.player(pos.playerId)
+    const supporters = w
+      .active(pl.side)
+      .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+      .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
+      .slice(0, w.p.support.count)
+    if (supporters.some((x) => x.id === pl.id))
+      return { target: supportSpot(owner.pos, shape().target, pl.side, w.active(other(pl.side)), w.p.support.distM), speedCap: vmax * w.p.support.speedShare }
+  }
   return shape()
 }
 
@@ -1045,7 +1062,7 @@ const moveAll = (w: Work): void => {
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide)
+    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, null)
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur.attrs, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)
