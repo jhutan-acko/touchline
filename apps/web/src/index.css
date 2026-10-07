@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pitch: #1f6b3a;
+  --color-pitch-line: #e8f5ec;
+  --font-sans: "Inter", "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif;
+}
