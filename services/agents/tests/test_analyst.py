@@ -16,12 +16,19 @@ async def signals(stats) -> list[Signal]:
     return [Signal.model_validate(s) for s in await stats.signals(limit=500)]
 
 
+@pytest.fixture
+async def error_signals(error_stats) -> list[Signal]:
+    """The signals of the error match (conftest ERROR_SEED: its only critical error is a mis-hit clearance under pressure)."""
+    return [Signal.model_validate(s) for s in await error_stats.signals(limit=500)]
+
+
 def moment_for(signals: list[Signal], type_: str):
     lead = next(s for s in signals if s.type == type_)
     return build_moments([lead.id], signals, DetectorState(fps=10), "rules")[0]
 
 
-async def test_explains_the_scripted_error_from_what_could_be_seen(stats, signals, manifest):
+async def test_explains_the_scripted_error_from_what_could_be_seen(error_stats, error_signals, error_manifest):
+    stats, signals, manifest = error_stats, error_signals, error_manifest
     [truth] = manifest["truths"]["critical_errors"]
     m = moment_for(signals, "costly_error")
     pack = await evidence(stats, m, signals)
@@ -72,7 +79,8 @@ def test_rejects_numbers_in_the_explanation_and_the_wrong_moment():
 
 
 @pytest.mark.live
-async def test_openai_explains_the_scripted_error(stats, signals, manifest):
+async def test_openai_explains_the_scripted_error(error_stats, error_signals, error_manifest):
+    stats, signals, manifest = error_stats, error_signals, error_manifest
     live = load_settings({"TOUCHLINE_LLM": "openai", "TOUCHLINE_TIMEOUT_SCALE": "10"})
     from touchline_agents.llm import make_client
 
@@ -84,7 +92,8 @@ async def test_openai_explains_the_scripted_error(stats, signals, manifest):
     assert any(c.event_id == manifest["truths"]["critical_errors"][0]["mistake_id"] for c in out.analysis.claims)
 
 
-async def test_the_events_a_moment_rests_on_are_in_the_pack_however_busy_the_play(stats, signals):
+async def test_the_events_a_moment_rests_on_are_in_the_pack_however_busy_the_play(error_stats, error_signals):
+    stats, signals = error_stats, error_signals
     m = moment_for(signals, "costly_error")
     busy = m.model_copy(update={"frame_to": m.frame_to + 3000})  # five minutes later: far more than 60 events
     lead = next(s for s in signals if s.id == m.signal_ids[0])
@@ -105,7 +114,8 @@ def test_a_saved_big_chance_credits_the_keeper():
     assert a.cause == "big chance saved by the goalkeeper" and "goalkeeper" in a.explanation
 
 
-async def test_the_lead_signal_comes_first_even_when_an_absorbed_one_is_older(stats, signals):
+async def test_the_lead_signal_comes_first_even_when_an_absorbed_one_is_older(error_stats, error_signals):
+    stats, signals = error_stats, error_signals
     lead = next(s for s in signals if s.type == "costly_error")
     older = lead.model_copy(update={"id": "absorbed-press", "type": "pressure_shift", "frame_id": lead.frame_id - 50, "frame_from": lead.frame_id - 3000,
                                     "frame_to": lead.frame_from, "salience": 0.6, "evidence": [f"team.press@{lead.frame_id - 3000}-{lead.frame_id - 50}"]})

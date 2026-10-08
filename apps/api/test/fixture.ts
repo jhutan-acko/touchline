@@ -1,4 +1,4 @@
-/** A match library for tests: one simulated match (costly_error, seed 2) with a small hand-made cue cache. */
+/** A match library for tests: one simulated match (costly_error, seed SEED) with a small hand-made cue cache. */
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -13,7 +13,11 @@ import { afterAll } from "vitest"
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 export const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
-export const MATCH_ID = "lib-err-2"
+// Seed 14: the session test starts at the first goal's minute and needs more than 10 streamed frames (×64: every 25th)
+// before the goal, so the goal must come at least about 25 s into its minute (seed 14: 51 s; seed 2's goal at 25 s no
+// longer cleared it after the 2026-10-08 engine changes). It also gives two goals, as the cue cache needs.
+const SEED = 14
+export const MATCH_ID = `lib-err-${SEED}`
 const fixture = (f: string) => (JSON.parse(readFileSync(join(root, "packages/schema/fixtures/agents/valid", f), "utf8")) as { value: unknown }).value
 
 // Each library is a simulated match (about 80 MB): delete them when the test file is done.
@@ -37,7 +41,7 @@ export const makeLibrary = async (): Promise<TestLibrary> => {
   const run = join(dir, MATCH_ID)
   const sc = SCENARIOS.costly_error!
   const club = (id: string) => league.clubs.find((c) => c.id === id)!
-  await Effect.runPromise(writeMatch({ matchId: MATCH_ID, seed: 2, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(sc.home), away: club(sc.away), params: DEFAULT_PARAMS, dt: 0.1, script: sc.script }, run))
+  await Effect.runPromise(writeMatch({ matchId: MATCH_ID, seed: SEED, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(sc.home), away: club(sc.away), params: DEFAULT_PARAMS, dt: 0.1, script: sc.script }, run))
   const events = readFileSync(join(run, "domain.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as DomainEvent)
   const goals = events.filter((e) => e.type === "goal").slice(0, 2)
   const base = fixture("cue.json") as Cue
