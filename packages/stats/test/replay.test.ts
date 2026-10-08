@@ -33,8 +33,9 @@ const byTick = (a: Signal, b: Signal) => a.frame_id - b.frame_id || a.id.localeC
 
 describe("replay and streams", () => {
   // A scripted match (its last window runs to full time, so carries and flights are cut short by the whistle).
+  // Seed 4250: with support, marking and shielding on, seeds 4245-4249 happen to have no error leading to a shot (the test needs some).
   const sc = SCENARIOS.late_comeback!
-  const cfg: MatchConfig = { matchId: "golden", seed: 4245, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(sc.home), away: club(sc.away), params: DEFAULT_PARAMS, dt: 0.1, script: sc.script }
+  const cfg: MatchConfig = { matchId: "golden", seed: 4250, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(sc.home), away: club(sc.away), params: DEFAULT_PARAMS, dt: 0.1, script: sc.script }
   const dir = mkdtempSync(join(tmpdir(), "touchline-stats-"))
   let live: StatsEngine
   let liveSignals: Signal[]
@@ -86,7 +87,7 @@ describe("replay and streams", () => {
       metrics: Object.fromEntries(Object.entries(snapshot(live, live.now)).filter(([k]) => !k.includes("|p-")).map(([k, v]) => [k, r(v)])),
       signals: [...liveSignals].sort(byTick).map((s) => [s.id, r(s.value)])
     }
-    const path = join(root, "packages/stats/test/golden/late-comeback-4245.json")
+    const path = join(root, "packages/stats/test/golden/late-comeback-4250.json")
     if (process.env.UPDATE_STATS_GOLDEN === "1") writeFileSync(path, JSON.stringify(summary, null, 1) + "\n")
     expect(summary).toEqual(JSON.parse(readFileSync(path, "utf8")))
   })

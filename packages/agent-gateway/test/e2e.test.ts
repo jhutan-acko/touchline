@@ -29,8 +29,9 @@ let run: string
 let result: GatewayResult
 
 beforeAll(async () => {
-  run = join(mkdtempSync(join(tmpdir(), "gw-e2e-")), "e2e-err-2")
-  spawnSync("pnpm", ["-s", "sim", "--scenario", "costly_error", "--seed", "2", "--match-id", "e2e-err-2", "--out", run], { cwd: root, stdio: "ignore" })
+  // Seed 10: with support, marking and shielding on (and the retuned parameters), seed 2 has no mis-hit clearance under pressure leading to a shot; seed 10 does.
+  run = join(mkdtempSync(join(tmpdir(), "gw-e2e-")), "e2e-err-10")
+  spawnSync("pnpm", ["-s", "sim", "--scenario", "costly_error", "--seed", "10", "--match-id", "e2e-err-10", "--out", run], { cwd: root, stdio: "ignore" })
   const port = await freePort()
   agents = spawn("uv", ["run", "--project", "services/agents", "touchline-agents", "--port", String(port)], { cwd: root, env: { ...process.env, TOUCHLINE_LLM: "stub" }, detached: true, stdio: "ignore" })
   const url = `http://127.0.0.1:${port}/`

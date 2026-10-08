@@ -15,7 +15,7 @@ const play = (cfg: MatchConfig) => {
   while (!isFinished(s)) { const r = step(s); s = r.state; events.push(...r.events) }
   return events
 }
-const runs = [1, 2, 3, 4, 5, 6].map((seed) => ({ cfg: makeConfig(seed, { params }), events: play(makeConfig(seed, { params })) }))
+const runs = Array.from({ length: 16 }, (_, i) => i + 1).map((seed) => ({ cfg: makeConfig(seed, { params }), events: play(makeConfig(seed, { params })) }))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
 const inOwnBox = (side: "home" | "away", x: number, y: number, inset = 0) => attackX(side, x) < -(PITCH.halfL - PITCH.boxDepth) - inset && Math.abs(y) < PITCH.boxHalfWidth - inset
@@ -90,7 +90,7 @@ describe("deflections", () => {
   })
   it("deflected shots rarely end in own goals", () => {
     const own = runs.reduce((n, r) => n + r.events.filter((e) => e.type === "goal" && e.attrs.own_goal === true).length, 0)
-    // Real matches see roughly one own goal every seven or eight matches; allow sampling noise over six.
-    expect(own).toBeLessThanOrEqual(3)
+    // Real matches see roughly one own goal every seven or eight matches; allow sampling noise: at most 3 per six matches, scaled to the number of runs.
+    expect(own).toBeLessThanOrEqual(Math.floor((3 * runs.length) / 6))
   })
 })
