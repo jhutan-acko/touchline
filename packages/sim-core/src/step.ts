@@ -27,7 +27,7 @@ import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
-import { countGoal, modsFor, outstandingForces, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
+import { countGoal, inWindow, modsFor, outstandingForces, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
 import { parryBall, planShot, type ShotMods } from "./shot.js"
 import { ballAfterTouch, drawFirstTouch, firstTouchError, type FirstTouch } from "./touch.js"
 import {
@@ -186,7 +186,10 @@ class Work {
     this.pressedBy = [...s.pressedBy]
     this.carry = s.carry
     this.subs = { ...s.subs }
-    this.forced = [...s.forced]
+    // A forced outcome lives only inside its window (judged at the state's minute, as the scenario runner does):
+    // a state taken inside a forced window plays on past the window exactly as the accepted run did.
+    const minute = (s.period === "first_half" ? 0 : 45) + (Math.max(0, s.periodTick) * s.config.dt) / 60
+    this.forced = s.forced.filter((f) => inWindow(f.window, minute, s.period))
     this.scriptGoals = [...s.scriptGoals]
     // A what-if override lives for its tick only: if the player has no decision to make then, it lapses.
     this.override = s.override && this.tick <= s.override.untilTick ? s.override : null
