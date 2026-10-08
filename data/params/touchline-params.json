@@ -301,7 +301,7 @@
   "redCardOpponent": 1.2
  },
  "script": {
-  "goalShotLogit": 1,
+  "goalShotLogit": 1.5,
   "goalScoring": 2,
   "goalRatePerMin": 0.016,
   "goalScoringMax": 6,
