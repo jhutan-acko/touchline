@@ -29,6 +29,9 @@ importers:
       '@effect/platform-node':
         specifier: 4.0.1
         version: 4.0.1(effect@4.0.1)(redis@6.3.0)
+      '@touchline/advisor':
+        specifier: workspace:*
+        version: link:../../packages/advisor
       '@touchline/agent-gateway':
         specifier: workspace:*
         version: link:../../packages/agent-gateway
@@ -44,6 +47,9 @@ importers:
       '@touchline/sim':
         specifier: workspace:*
         version: link:../../packages/sim
+      '@touchline/sim-core':
+        specifier: workspace:*
+        version: link:../../packages/sim-core
       '@touchline/stats':
         specifier: workspace:*
         version: link:../../packages/stats
@@ -54,9 +60,6 @@ importers:
       '@touchline/league':
         specifier: workspace:*
         version: link:../../packages/league
-      '@touchline/sim-core':
-        specifier: workspace:*
-        version: link:../../packages/sim-core
 
   apps/web:
     dependencies:

@@ -109,6 +109,13 @@ export const EvidenceEvent = Schema.Struct({
 })
 export type EvidenceEvent = typeof EvidenceEvent.Type
 
+export const PassVerdict = Schema.Literals(["played_pass_was_best", "better_option_found", "not_verified"])
+export type PassVerdict = typeof PassVerdict.Type
+
+/** A pass the cue says had a better option: the what-if split can show it; `verdict` once re-simulation has checked it (null: not yet). */
+export const WhatIfRef = Schema.Struct({ event_id: Id, verdict: Schema.NullOr(PassVerdict) })
+export type WhatIfRef = typeof WhatIfRef.Type
+
 /** Behind a cue (spec §5.6 "Why?" drawer): the moment, the cause, each checked claim, metric history and the events. */
 export const Evidence = Schema.Struct({
   cue_id: Id,
@@ -118,9 +125,39 @@ export const Evidence = Schema.Struct({
   claims: Schema.Array(EvidenceClaim),
   series: Schema.Array(Series),
   events: Schema.Array(EvidenceEvent),
-  model: Schema.NullOr(Schema.String)
+  model: Schema.NullOr(Schema.String),
+  /** The pass a "better option" claim names, if any (the "Show me" button). */
+  what_if: Schema.NullOr(WhatIfRef)
 })
 export type Evidence = typeof Evidence.Type
+
+const Arms = Schema.Struct({ played: Count, better: Count })
+
+/**
+ * A pass as the match went and with the better option played (the what-if split): frames over the same ticks, the
+ * same up to `pass_index`; the variant is the typical one of `seeds` re-simulations, and the counts are over all of them.
+ */
+export const WhatIfClip = Schema.Struct({
+  event_id: Id,
+  verdict: PassVerdict,
+  passer_id: Id,
+  played_to: Id,
+  better_to: Schema.NullOr(Id),
+  fps: Schema.Int,
+  pass_index: Count,
+  real: Schema.Array(PitchFrame),
+  /** Null unless the verdict is better_option_found. */
+  variant: Schema.NullOr(Schema.Array(PitchFrame)),
+  seeds: Count,
+  horizon_s: Schema.Finite,
+  typical_seed: Schema.NullOr(Count),
+  /** Seeds in which the team had a shot, and scored, after each pass. */
+  shots: Schema.NullOr(Arms),
+  goals: Schema.NullOr(Arms),
+  /** The better option minus the pass played: xG created plus the threat left at the end (mean and standard error over the seeds). */
+  gain: Schema.NullOr(Schema.Struct({ mean: Schema.Finite, se: Schema.Finite }))
+})
+export type WhatIfClip = typeof WhatIfClip.Type
 
 export const RecapView = Schema.Struct({ recap: Schema.NullOr(Recap), cards: Schema.Array(Cue) })
 export type RecapView = typeof RecapView.Type
@@ -128,6 +165,8 @@ export type RecapView = typeof RecapView.Type
 export class MatchNotFound extends Schema.TaggedError<MatchNotFound>()("MatchNotFound", { match_id: Schema.String }) {}
 export class SessionNotFound extends Schema.TaggedError<SessionNotFound>()("SessionNotFound", { session_id: Schema.String }) {}
 export class EvidenceNotFound extends Schema.TaggedError<EvidenceNotFound>()("EvidenceNotFound", { cue_id: Schema.String }) {}
+/** No what-if for this event: not a pass of the match, not reached yet, not re-simulatable, or it took too long. */
+export class WhatIfNotAvailable extends Schema.TaggedError<WhatIfNotAvailable>()("WhatIfNotAvailable", { event_id: Schema.String, reason: Schema.String }) {}
 
 /** Where a moment stands in the producer's queue: approved puts it in the presenter's talking points, on air sends it to graphics. */
 export const QueueStatus = Schema.Literals(["pending", "approved", "held", "on_air"])
@@ -223,6 +262,8 @@ export class TouchlineRpcs extends RpcGroup.make(
   }),
   /** What is behind a cue the session has shown (never past its frame; a live session's from its own agents). */
   Rpc.make("GetEvidence", { payload: { session_id: Schema.String, cue_id: Schema.String }, success: Evidence, error: Schema.Union([SessionNotFound, MatchNotFound, EvidenceNotFound]) }),
+  /** A pass as it went and with its better option played (never past the session's frame). */
+  Rpc.make("GetWhatIf", { payload: { session_id: Schema.String, event_id: Schema.String }, success: WhatIfClip, error: Schema.Union([SessionNotFound, MatchNotFound, WhatIfNotAvailable]) }),
   /** A recap once the session has reached its whistle (empty before). */
   Rpc.make("GetRecap", {
     payload: { session_id: Schema.String, kind: Schema.Literals(["half_time", "full_time"]), segment: Segment },

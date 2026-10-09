@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect } from "effect"
 import { loadRun } from "@touchline/mcp-stats"
-import { EvidenceNotFound, MatchNotFound, type Evidence, type EvidenceClaim, type RecapView, type Series } from "@touchline/rpc"
+import { EvidenceNotFound, MatchNotFound, type Evidence, type EvidenceClaim, type PassVerdict, type RecapView, type Series } from "@touchline/rpc"
 import { decodeMomentTrace, decodeRecap, type Claim, type MomentTrace, type Recap, type Segment } from "@touchline/schema"
 import { METRICS, modelsFromJson, StatsError, xtGridFromJson, type Roster, type StatsQuery } from "@touchline/stats"
 import { pickCues } from "./cues.js"
@@ -34,7 +34,10 @@ const label = (c: Claim): string => {
   return { score: "Score", minute: "Minute", event: "Event", better_option: "Better option", metric: "Metric" }[c.kind]
 }
 
-export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>) => {
+/** What re-simulation has said about a pass so far (null: not checked yet); the what-if module answers it. */
+export type VerdictOf = (m: LibraryMatch, eventId: string) => PassVerdict | null
+
+export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>, verdictOf: VerdictOf = () => null) => {
   const queries = new Map<string, Promise<StatsQuery>>()
   const params = (f: string) => JSON.parse(readFileSync(join(root, "data/params", f), "utf8"))
   const roster = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as Roster
@@ -75,6 +78,7 @@ export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>) => {
         const k = JSON.stringify([c.kind, c.metric_id, c.subject, c.event_id, c.receiver_id, c.value])
         return !seen.has(k) && (seen.add(k), true)
       })
+      const better = raw.find((c) => c.kind === "better_option" && c.event_id)?.event_id ?? null
       const who = names(m)
       const q = yield* query(m)
       const at = trace ? trace.moment.frame_to : recap!.at_frame
@@ -105,7 +109,8 @@ export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>) => {
         })),
         series,
         events,
-        model: trace?.model ?? (view?.live ? null : m.info.model)
+        model: trace?.model ?? (view?.live ? null : m.info.model),
+        what_if: better ? { event_id: better, verdict: verdictOf(m, better) } : null
       }
       return out
     })

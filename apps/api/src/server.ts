@@ -13,6 +13,7 @@ import type { LibraryMatch } from "./library.js"
 import { makeOps } from "./ops.js"
 import { makeSessions, type Companion } from "./session.js"
 import { makeStudio } from "./studio.js"
+import { makeWhatIf, type WhatIfOptions } from "./whatif.js"
 
 export const RPC_PATH = "/rpc"
 
@@ -20,6 +21,8 @@ export interface ApiOptions {
   readonly library: ReadonlyMap<string, LibraryMatch>
   /** Runs alongside live sessions (the live agents, Task 7). */
   readonly companion?: Companion
+  /** How what-if clips are computed on request (tests). */
+  readonly whatIf?: WhatIfOptions
 }
 
 const summary = ({ players: _, ...s }: LibraryMatch["info"]): MatchSummary => s
@@ -28,7 +31,8 @@ const summary = ({ players: _, ...s }: LibraryMatch["info"]): MatchSummary => s
 export const handlersLayer = (o: ApiOptions) =>
   Layer.unwrap(
     Effect.gen(function* () {
-      const ev = makeEvidence(o.library)
+      const whatIf = makeWhatIf(o.library, o.whatIf)
+      const ev = makeEvidence(o.library, whatIf.verdict)
       const studio = makeStudio(ev)
       const ops = makeOps()
       const sessions = yield* makeSessions(o.library, { ...(o.companion ? { companion: o.companion } : {}), studio: studio.record })
@@ -47,6 +51,7 @@ export const handlersLayer = (o: ApiOptions) =>
         Watch: ({ session_id, segment }) => sessions.watch(session_id, segment),
         Control: ({ session_id, action, speed }) => sessions.control(session_id, action, speed),
         GetEvidence: ({ session_id, cue_id }) => view(session_id).pipe(Effect.flatMap(({ s, v }) => ev.evidence(s.match.info.match_id, cue_id, v))),
+        GetWhatIf: ({ session_id, event_id }) => view(session_id).pipe(Effect.flatMap(({ s, v }) => whatIf.clip(s.match.info.match_id, event_id, v.frame))),
         GetRecap: ({ session_id, kind, segment }) => view(session_id).pipe(Effect.flatMap(({ s, v }) => ev.recap(s.match.info.match_id, kind, segment, v))),
         StudioWatch: ({ session_id, segment }) => studio.watch(sessions, session_id, segment),
         StudioAct: ({ session_id, moment_id, action }) => sessions.get(session_id).pipe(Effect.flatMap((s) => studio.act(s, moment_id, action))),
