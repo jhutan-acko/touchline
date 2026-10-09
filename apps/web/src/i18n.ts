@@ -76,7 +76,25 @@ const en = {
   moments: "Moments",
   cues: "Cues",
   none: "None",
-  missed: "missed (failed or timed out)"
+  missed: "missed (failed or timed out)",
+  view3d: "3D",
+  view2d: "2D",
+  noWebgl: "3D needs WebGL, which this browser does not have",
+  camera: "Camera",
+  layout: "Layout",
+  camFollow: "Follow",
+  camFp: "First-person",
+  camBroadcast: "Broadcast",
+  camTactical: "Tactical",
+  layoutPip: "Main + map",
+  layoutGrid: "Grid 2×2",
+  layoutSingle: "Single",
+  following: "Following",
+  map: "Map",
+  leftPitch: "left the pitch: switched to the broadcast camera",
+  loading3d: "Loading players…",
+  failed3d: "Could not load the 3D players. Switch to 2D to keep watching.",
+  keysHint: "Click a player to follow them · keys 1–4 switch camera · [ ] step through players"
 } as const
 
 export type Key = keyof typeof en
@@ -158,7 +176,25 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     moments: "Momentos",
     cues: "Cues",
     none: "Ninguno",
-    missed: "perdidos (fallaron o expiraron)"
+    missed: "perdidos (fallaron o expiraron)",
+    view3d: "3D",
+    view2d: "2D",
+    noWebgl: "El 3D necesita WebGL, que este navegador no tiene",
+    camera: "Cámara",
+    layout: "Diseño",
+    camFollow: "Seguir",
+    camFp: "Primera persona",
+    camBroadcast: "Televisión",
+    camTactical: "Táctica",
+    layoutPip: "Principal + mapa",
+    layoutGrid: "Cuadrícula 2×2",
+    layoutSingle: "Única",
+    following: "Siguiendo a",
+    map: "Mapa",
+    leftPitch: "salió del campo: cámara de televisión",
+    loading3d: "Cargando jugadores…",
+    failed3d: "No se pudieron cargar los jugadores 3D. Cambia a 2D para seguir viendo.",
+    keysHint: "Haz clic en un jugador para seguirlo · teclas 1–4 cambian la cámara · [ ] recorren los jugadores"
   },
   hi: {
     title: "Touchline",
@@ -235,7 +271,25 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     moments: "पल",
     cues: "क्यू",
     none: "कोई नहीं",
-    missed: "छूटे (विफल या समय समाप्त)"
+    missed: "छूटे (विफल या समय समाप्त)",
+    view3d: "3D दृश्य",
+    view2d: "2D दृश्य",
+    noWebgl: "3D के लिए WebGL चाहिए, जो इस ब्राउज़र में नहीं है",
+    camera: "कैमरा",
+    layout: "लेआउट",
+    camFollow: "पीछा",
+    camFp: "खिलाड़ी की नज़र",
+    camBroadcast: "प्रसारण",
+    camTactical: "रणनीति",
+    layoutPip: "मुख्य + नक्शा",
+    layoutGrid: "ग्रिड 2×2",
+    layoutSingle: "एक",
+    following: "किसका पीछा",
+    map: "नक्शा",
+    leftPitch: "मैदान से बाहर: प्रसारण कैमरा चालू",
+    loading3d: "खिलाड़ी लोड हो रहे हैं…",
+    failed3d: "3D खिलाड़ी लोड नहीं हुए। देखते रहने के लिए 2D चुनें।",
+    keysHint: "किसी खिलाड़ी पर क्लिक करें · 1–4 कैमरा बदलें · [ ] खिलाड़ी बदलें"
   }
 }
 

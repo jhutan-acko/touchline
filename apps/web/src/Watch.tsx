@@ -3,6 +3,7 @@ import type { MatchInfo, Playback } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
 import { t, type Lang } from "./i18n.js"
+import { Live3D } from "./Live3D.js"
 import { Overlays, useNow } from "./Overlays.js"
 import { Pitch } from "./Pitch.js"
 import { ProfileBar } from "./ProfileBar.js"
@@ -12,11 +13,29 @@ import { segmentOf, type Profile } from "./profile.js"
 import { TopBar } from "./TopBar.js"
 import { routeHash } from "./route.js"
 import { usePane } from "./usePane.js"
+import { hasWebGL } from "./view3d/webgl.js"
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32]
 
+/** The viewer's 2D or 3D choice, remembered in this browser (spec Plan 7: per viewer). */
+export const VIEW_KEY = "touchline.view"
+const savedView = (): "2d" | "3d" => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "3d" && hasWebGL() ? "3d" : "2d"
+  } catch {
+    return "2d"
+  }
+}
+const saveView = (v: "2d" | "3d") => {
+  try {
+    localStorage.setItem(VIEW_KEY, v)
+  } catch {
+    // private window or blocked storage: the choice lasts this visit only
+  }
+}
+
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d" }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -24,6 +43,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   onProfile: (p: Profile) => void
   onWhy?: (cue: Cue) => void
   label?: string
+  view?: "2d" | "3d"
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile))
@@ -32,10 +52,16 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
     <section className="flex flex-col gap-2" aria-label={label}>
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
       <TopBar match={match} board={pane.board} lang={lang} />
-      <div className="relative">
-        <Pitch frame={pane.frame} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
-        <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
-      </div>
+      {view === "3d" ? (
+        <Live3D match={match} frame={pane.frame} lang={lang}>
+          <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
+        </Live3D>
+      ) : (
+        <div className="relative">
+          <Pitch frame={pane.frame} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
+          <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
+        </div>
+      )}
       {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
       {pane.playback?.state === "ended" && <p className="text-center font-semibold">{t(lang, "ended")}</p>}
       {pane.feed.length > 0 && (
@@ -67,6 +93,13 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
   // Demo mode (spec §5.6): a second profile on the same session, side by side; by default the other mode, in Spanish.
   const [second, setSecond] = useState<Profile | null>(null)
   const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [] })
+  const [view, setView] = useState<"2d" | "3d">(savedView)
+  const webgl = hasWebGL()
+  const toggleView = () => {
+    const v = view === "3d" ? "2d" : "3d"
+    setView(v)
+    saveView(v)
+  }
   const [playback, setPlayback] = useState<Pick<Playback, "state" | "speed">>({ state: "playing", speed: 4 })
   const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback, () => {}) // a lost session shows on the pane
   return (
@@ -77,6 +110,9 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
           {playback.state === "paused" ? t(lang, "play") : t(lang, "pause")}
         </button>
         <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={toggleSplit}>{second ? t(lang, "single") : t(lang, "split")}</button>
+        <button type="button" className="rounded bg-slate-800 px-3 py-1 disabled:opacity-50" onClick={toggleView} disabled={!webgl} title={webgl ? undefined : t(lang, "noWebgl")}>
+          {view === "3d" ? t(lang, "view2d") : t(lang, "view3d")}
+        </button>
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "studio", session: sessionId, segment: segmentOf(profile) })}>{t(lang, "studio")}</a>
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "graphics", session: sessionId, segment: segmentOf(profile), match: match.match_id })}>{t(lang, "graphicsOut")}</a>
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "ops", session: sessionId, lang })}>{t(lang, "opsView")}</a>
@@ -88,8 +124,8 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
         </label>
       </div>
       <div className={second ? "grid gap-4 lg:grid-cols-2" : ""}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} />
-        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={setWhy} label="B" />}
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} view={view} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={setWhy} label="B" view={view} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} />}
