@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyIntervention, forkState, initMatch, isFinished, passOptions, playAhead, runScript, statesAt, step, whatIf, WhatIfError, type DomainEvent, type MatchState, type Script } from "../src/index.js"
+import { applyIntervention, forkState, initMatch, isFinished, passOptions, playAhead, playAheadFrames, runScript, statesAt, step, whatIf, WhatIfError, type DomainEvent, type MatchState, type Script } from "../src/index.js"
 import { makeConfig } from "../src/testing.js"
 
 const cfg = makeConfig(41)
@@ -60,6 +60,30 @@ describe("states and forks", () => {
     const a = playAhead(forkState(s, 0), 300).events
     expect(playAhead(forkState(s, 0), 300).events).toEqual(a)
     expect(playAhead(forkState(s, 1), 300).events).not.toEqual(a)
+  })
+})
+
+describe("play ahead with frames", () => {
+  it("plays exactly like playAhead and keeps one frame per tick, the same for the same fork", () => {
+    const s = onBall(12_000)
+    const plain = playAhead(forkState(s, 3), 50)
+    const shown = playAheadFrames(forkState(s, 3), 50)
+    expect(shown.events).toEqual(plain.events)
+    expect(shown.state).toEqual(plain.state)
+    expect(shown.frames.map((f) => f.tick)).toEqual(Array.from({ length: 50 }, (_, i) => s.tick + 1 + i))
+    const last = shown.frames.at(-1)!
+    for (const p of shown.state.players.filter((q) => !q.sentOff)) {
+      const f = [...last.home, ...last.away].find((x) => x.id === p.id)!
+      expect(f.x).toBeCloseTo(p.pos.x, 2)
+      expect(f.y).toBeCloseTo(p.pos.y, 2)
+    }
+    expect(playAheadFrames(forkState(s, 3), 50).frames).toEqual(shown.frames)
+  })
+
+  it("stops at full time", () => {
+    const out = playAheadFrames(match.states.get(Math.max(...match.states.keys()) - 5)!, 100)
+    expect(isFinished(out.state)).toBe(true)
+    expect(out.frames.length).toBeLessThanOrEqual(5)
   })
 })
 
