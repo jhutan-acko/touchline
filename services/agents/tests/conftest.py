@@ -20,11 +20,11 @@ MATCH_ID = "agents-test"
 # tests read: exactly one critical error, a mis-hit clearance under pressure leading to a shot, with no other signal
 # merging into its moment. Both are found by scripts/find_test_seed.py (it checks the shape over a range of seeds, then
 # runs the tests; ERROR_SEED first, then SEED with --general); re-run it whenever the engine or
-# data/params/touchline-params.json changes. 2026-10-09: of seeds 1-1400, 16 have the error shape and 28 is the first to
-# pass; 28 itself ends in a draw with no goal in the first 20000 frames, so the general match is seed 3, the first of
-# 1-60 for which the whole suite passes. Both can be overridden from the environment (TOUCHLINE_AGENTS_SEED, TOUCHLINE_AGENTS_ERROR_SEED).
-SEED = int(os.environ.get("TOUCHLINE_AGENTS_SEED", "3"))
-ERROR_SEED = int(os.environ.get("TOUCHLINE_AGENTS_ERROR_SEED", "28"))
+# data/params/touchline-params.json changes. 2026-10-09 (fitted physics): of seeds 1-1400, 8 have the error shape and 10
+# is the first to pass; the general match is seed 2, the first of 1-100 with its shape for which the whole suite passes.
+# Both can be overridden from the environment (TOUCHLINE_AGENTS_SEED, TOUCHLINE_AGENTS_ERROR_SEED).
+SEED = int(os.environ.get("TOUCHLINE_AGENTS_SEED", "2"))
+ERROR_SEED = int(os.environ.get("TOUCHLINE_AGENTS_ERROR_SEED", "10"))
 
 
 def simulate(out: Path, seed: int) -> Path:

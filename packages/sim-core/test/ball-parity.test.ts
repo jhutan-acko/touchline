@@ -6,8 +6,7 @@ import { stepBall } from "../src/ball.js"
 import { DEFAULT_PARAMS, type Params } from "../src/params.js"
 import type { BallState } from "../src/types.js"
 
-/** The fitted physics switched on (its defaults are the literature values). */
-const P: Params = { ...DEFAULT_PARAMS, physics: { ...DEFAULT_PARAMS.physics, enabled: true } }
+const P: Params = DEFAULT_PARAMS
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const hasUv = spawnSync("uv", ["--version"]).status === 0

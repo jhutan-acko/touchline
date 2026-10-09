@@ -31,10 +31,7 @@ export const motionFor = (pl: Mover, p: Params): Motion => {
 }
 
 /** Top speed; tiredness takes off at most 3 % (top speed barely drops through a real match). */
-export const vmaxFor = (pl: Mover, energy: number, p: Params): number =>
-  p.physics.enabled
-    ? motionFor(pl, p).s0 * (0.97 + 0.03 * energy)
-    : p.kinematics.vmaxBase * (0.86 + 0.14 * pl.attrs.pace) * (0.9 + 0.1 * energy)
+export const vmaxFor = (pl: Mover, energy: number, p: Params): number => motionFor(pl, p).s0 * (0.97 + 0.03 * energy)
 
 /**
  * One step of velocity towards `desired` within a player's limits: along the run, speeding up by at most
@@ -90,65 +87,20 @@ export const drainEnergy = (energy: number, speed: number, stamina: number, dt: 
   return Math.max(0, energy - dt * (f.drainBase + f.drainSpeed2 * speed * speed) * (1 + f.staminaSlope * (0.5 - stamina)))
 }
 
-/** Before the fitted physics: one acceleration cap for speeding up, slowing down and turning. */
+/**
+ * Who can reach a moving ball (resolve.ts) is a tuned rule, not physics: after `kinematics.reactionS` a player covers
+ * reachIn(t, 0, top speed, accelFor) towards the ball. The fitted 0.2 s reaction is the time to start moving; the rule's
+ * longer delay also covers reading where the pass is going (spec docs/superpowers/specs/2026-10-09-physics-fit-design.md, Revision).
+ */
 export const accelFor = (a: PlayerAttrs, p: Params): number => p.kinematics.accelMax * (0.8 + 0.2 * a.acceleration)
 
-/**
- * Distance a player can cover in `t` seconds starting at speed `v0` (towards the target),
- * accelerating at `amax` up to `vmax`. Matches what arrive() can achieve on a straight run.
- */
+/** Distance a player can cover in `t` seconds starting at speed `v0` (towards the target), accelerating at `amax` up to `vmax`. */
 export const reachIn = (t: number, v0: number, vmax: number, amax: number): number => {
   if (t <= 0) return 0
   const v = Math.max(0, Math.min(v0, vmax))
   const ta = (vmax - v) / amax
   if (t <= ta) return v * t + 0.5 * amax * t * t
   return v * ta + 0.5 * amax * ta * ta + vmax * (t - ta)
-}
-
-/** Reynolds "arrive": head for target, slow inside slowRadius, respect speed and acceleration caps. */
-export const arrive = (
-  pos: Vec2,
-  vel: Vec2,
-  target: Vec2,
-  vmax: number,
-  amax: number,
-  dt: number,
-  slowRadius = 4
-): { pos: Vec2; vel: Vec2 } => {
-  const to = sub(target, pos)
-  const d = len(to)
-  const desiredSpeed = d < 0.05 ? 0 : Math.min(vmax, (vmax * d) / slowRadius)
-  const desired = scale(norm(to), desiredSpeed)
-  let dv = sub(desired, vel)
-  const maxDv = amax * dt
-  if (len(dv) > maxDv) dv = scale(norm(dv), maxDv)
-  let nv = add(vel, dv)
-  if (len(nv) > vmax) nv = scale(norm(nv), vmax)
-  return { pos: add(pos, scale(nv, dt)), vel: nv }
-}
-
-/**
- * Steering for meeting a ball at a known time: aim for the velocity that arrives exactly when
- * `timeLeft` runs out, with the same acceleration and speed caps as arrive(). Pairs with the
- * reachable-disc check in resolve.ts, so a player judged able to reach the ball actually does.
- */
-export const arriveBy = (
-  pos: Vec2,
-  vel: Vec2,
-  target: Vec2,
-  vmax: number,
-  amax: number,
-  dt: number,
-  timeLeft: number
-): { pos: Vec2; vel: Vec2 } => {
-  let desired = scale(sub(target, pos), 1 / Math.max(dt, timeLeft))
-  if (len(desired) > vmax) desired = scale(norm(desired), vmax)
-  let dv = sub(desired, vel)
-  const maxDv = amax * dt
-  if (len(dv) > maxDv) dv = scale(norm(dv), maxDv)
-  let nv = add(vel, dv)
-  if (len(nv) > vmax) nv = scale(norm(nv), vmax)
-  return { pos: add(pos, scale(nv, dt)), vel: nv }
 }
 
 /** Repulsion from teammates closer than radius, so players don't stack. */

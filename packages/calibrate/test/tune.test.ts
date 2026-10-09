@@ -3,6 +3,7 @@ import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import { loss, scaleOf, type Targets } from "../src/evaluate.js"
 import { applyKnobs, initialKnobs, KNOBS, type Knob } from "../src/knobs.js"
 import { SCALAR_KEYS } from "../src/metrics.js"
+import { withPhysics } from "../src/physics.js"
 import { coordinateSearch } from "../src/tune.js"
 
 describe("knobs", () => {
@@ -53,5 +54,15 @@ describe("coordinateSearch", () => {
     const k: Knob[] = [{ name: "a", what: "", init: 0, min: -1, max: 1, step: 1, apply: (p) => p }]
     const res = coordinateSearch(k, { a: 0 }, 4, (v) => ({ loss: -v.a!, detail: null }))
     expect(res.knobs.a).toBe(1)
+  })
+})
+
+describe("physics in the tuner", () => {
+  it("calibrates on top of the fitted physics constants", () => {
+    const engine = { ball: { drag: 0.0153, restitution: 0.747, bounceFriction: 0.24, skidFriction: 0.35, rollC0: 0.55, rollC1: 0.11 }, players: { brake: 6.2, reactionS: 0.2 } }
+    const p = withPhysics(DEFAULT_PARAMS, { validation: { envelope: {}, real: { players: {} } }, engine })
+    expect(p.physics.ball).toEqual(engine.ball)
+    expect(p.physics.players.brake).toBe(6.2)
+    expect(p.physics.players.a0).toEqual(DEFAULT_PARAMS.physics.players.a0)
   })
 })

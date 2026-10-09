@@ -25,6 +25,16 @@ describe("resolveFlight", () => {
     const ball = { pos: { x: 0, y: 0, z: 0 }, vel: launchVelocity(passer.pos, receiver.pos, "ground", P) }
     expect(resolveFlight(ball, passer.id, receiver.id, [passer, receiver, def], P, 0.1, new Rng(seedRng(1))).winnerId).toBe(def.id)
   })
+  it("who reaches a pass keeps the tuned reaction, not the fitted one (spec Revision)", () => {
+    // A defender 3 m off a 25 m ground pass, 18 m along it: with the fitted 0.2 s he would cut it out.
+    const passer = at(base[2]!, 0, 0), receiver = at(base[5]!, 25, 0), def = at(base[13]!, 18, 3)
+    const run = (p: typeof P) => {
+      const ball = { pos: { x: 0, y: 0, z: 0 }, vel: launchVelocity(passer.pos, receiver.pos, "ground", p) }
+      return resolveFlight(ball, passer.id, receiver.id, [passer, receiver, def], p, 0.1, new Rng(seedRng(1))).winnerId
+    }
+    expect(run(P)).toBe(receiver.id)
+    expect(run({ ...P, physics: { ...P.physics, players: { ...P.physics.players, reactionS: 0 } } })).toBe(receiver.id)
+  })
   it("a ball hit out of the pitch with nobody near goes out", () => {
     const passer = at(base[2]!, 0, 30)
     const ball = { pos: { x: 0, y: 30, z: 0 }, vel: { x: 0, y: 15, z: 0 } }
@@ -68,7 +78,7 @@ describe("planShot", () => {
 })
 
 describe("resolveFlight — review fixes", () => {
-  const { arriveBy, accelFor, vmaxFor } = KIN
+  const { approachBy, motionFor, vmaxFor } = KIN
   it("a fast pass is intercepted by a defender standing between two tick samples", () => {
     const passer = at(base[2]!, 0, 0), receiver = at(base[5]!, 30, 0), def = at(base[13]!, 5, 0.9)
     const ball = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 20, y: 0, z: 0 } }
@@ -101,7 +111,7 @@ describe("resolveFlight — review fixes", () => {
       if (res.result !== "reached" || !res.winnerId) continue
       let w = players.find((p) => p.id === res.winnerId)!
       let s = { pos: w.pos, vel: w.vel }
-      for (let k = 0; k < res.ticks; k++) s = arriveBy(s.pos, s.vel, { x: res.ball.pos.x, y: res.ball.pos.y }, vmaxFor(w, w.energy, P), accelFor(w.attrs, P), 0.1, (res.ticks - k) * 0.1)
+      for (let k = 0; k < res.ticks; k++) s = approachBy(s.pos, s.vel, { x: res.ball.pos.x, y: res.ball.pos.y }, vmaxFor(w, w.energy, P), motionFor(w, P), 0.1, (res.ticks - k) * 0.1)
       expect(Math.hypot(s.pos.x - res.ball.pos.x, s.pos.y - res.ball.pos.y)).toBeLessThanOrEqual(1.5)
       checked++
     }

@@ -28,3 +28,31 @@ def test_report_labels_every_spatial_metric():
     from touchline_analytics.report import LABELS
 
     assert all(k in LABELS for k in SPATIAL_KEYS)
+
+
+def test_physics_section_reports_movement_statistics_and_work_rate(tmp_path):
+    import json
+
+    import numpy as np
+
+    from touchline_analytics.physics.validate import PLAYER_EDGES, hist
+    from touchline_analytics.report import physics_section, simulated_tracks
+
+    run = tmp_path / "m-1"
+    run.mkdir()
+    (run / "meta.json").write_text(json.dumps({"meta": {"tracking": {"fps": 10}}}))
+    frames = [{"period": per, "frame_id": i, "teams": {"home": {"players": [{"id": "a", "x": 2.0 * i / 10, "y": 0.0}]}, "away": {"players": [{"id": "k", "x": 0.0, "y": 0.0}]}}} for per in ("first_half", "second_half") for i in range(27_001)]
+    (run / "tracking.jsonl").write_text("\n".join(json.dumps(f) for f in frames))
+    tracks, halves = simulated_tracks([run], {"a": "CM", "k": "GK"})
+    assert set(tracks) == {"m-1/a", "m-1/k"} and tracks["m-1/a"][0] == "MID" and len(halves["m-1/a"][1]) == 2
+    assert np.isnan(tracks["m-1/a"][1][27_001]).all()  # a gap between the halves
+
+    real = {k: hist([e[1]], e) for k, e in PLAYER_EDGES.items()}
+    physics = {"validation": {"envelope": {k: {"max": 0.5} for k in PLAYER_EDGES}, "real": {"players": real, "work_rate": {
+        "distance": {"ALL": [120.0, 118.0, 110.0, 112.0, 104.0, 100.0]}, "hsr": {"ALL": [8.0] * 6},
+        "late_ratio": {"distance": {"mean": 0.91, "min": 0.84, "max": 0.99}, "hsr": {"mean": 0.95, "min": 0.69, "max": 1.22}}}}}}
+    text = "\n".join(physics_section(tracks, halves, physics))
+    assert "## Player movement against real tracking" in text
+    assert "| Top speed per player (m/s) |" in text and "Inside the real envelope:" in text
+    assert "| 0–15 | 120.0 | 120.0 |" in text  # real and simulated metres per minute, first 15 minutes
+    assert "late-to-early ratio" in text and "real 0.84–0.99" in text

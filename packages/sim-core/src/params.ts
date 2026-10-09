@@ -43,7 +43,7 @@ export interface ClassifierThresholds {
 export interface Params {
   readonly provenance: Provenance
   readonly kinematics: {
-    readonly vmaxBase: number
+    /** The tuned rule for who can reach a moving ball (resolve.ts; kinematics.ts accelFor and reachIn), not physics. */
     readonly accelMax: number
     readonly reactionS: number
     readonly reachM: number
@@ -53,10 +53,6 @@ export interface Params {
     readonly headerHeightM: number
   }
   readonly ball: {
-    /** Before the fitted physics (physics.enabled false): quadratic drag, constant rolling deceleration, restitution. */
-    readonly drag: number
-    readonly rollDecel: number
-    readonly bounce: number
     readonly gravity: number
     readonly substeps: number
   }
@@ -65,8 +61,6 @@ export interface Params {
    * `pnpm physics:fit`. The defaults are literature values (spec docs/superpowers/specs/2026-10-09-physics-fit-design.md).
    */
   readonly physics: {
-    /** Off until the recalibration switches it on, so the engine's output (and the realism baseline) stays put meanwhile. */
-    readonly enabled: boolean
     readonly ball: {
       /** Quadratic drag per metre (a = -drag |v| v). */
       readonly drag: number
@@ -283,10 +277,9 @@ export const DEFAULT_PARAMS: Params = {
     fitted_at: "2026-10-03",
     version: "prior-1"
   },
-  kinematics: { vmaxBase: 9.2, accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
-  ball: { drag: 0.013, rollDecel: 1.2, bounce: 0.55, gravity: 9.81, substeps: 4 },
+  kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
+  ball: { gravity: 9.81, substeps: 4 },
   physics: {
-    enabled: false,
     ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },
     players: {
       a0: { GK: [7.6, 8, 8.5, 9, 9.4], DEF: [7.6, 8, 8.5, 9, 9.4], MID: [7.6, 8, 8.5, 9, 9.4], FWD: [7.6, 8, 8.5, 9, 9.4] },
@@ -379,7 +372,7 @@ export const DEFAULT_PARAMS: Params = {
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   script: {
-    goalShotLogit: 1.25, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
+    goalShotLogit: 1.5, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
     momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
@@ -442,7 +435,7 @@ const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.s
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
-  "kinematics.reachMargin", "ball.bounce", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare",
+  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",

@@ -7,6 +7,7 @@ import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import type { Targets } from "./evaluate.js"
 import { applyKnobs, KNOBS } from "./knobs.js"
 import { GATE_KEYS } from "./gate.js"
+import { withPhysics, type PhysicsFile } from "./physics.js"
 import { tune } from "./tune.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -18,7 +19,9 @@ const o = cliOptions("calibrate: tune engine knobs to real-match targets (method
   matches: { default: "8", check: positiveInteger, help: "simulated matches per evaluation" },
   rounds: { default: "3", check: positiveInteger, help: "coordinate-search rounds" },
   // --from <file>: continue from that file's calibration knobs instead of the defaults.
-  from: { default: "", help: "start from the calibration.knobs of this file" }
+  from: { default: "", help: "start from the calibration.knobs of this file" },
+  // The fitted physics is fixed: the tuner calibrates behaviour on top of it.
+  physics: { default: join(root, "data/params/physics.json"), help: "physics fit (physics.json), or \"none\" for the literature defaults" }
 })
 const outPath = here(o.out)
 // Make the output folder now: a tuning chunk runs for most of an hour and must not fail when it writes its result.
@@ -44,15 +47,16 @@ const start = o.from ? (readJson("start", o.from) as { calibration?: { knobs?: R
 
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const targets = readJson("targets", o.targets) as Targets
+const base = o.physics === "none" ? DEFAULT_PARAMS : withPhysics(DEFAULT_PARAMS, readJson("physics", o.physics) as PhysicsFile)
 const t0 = Date.now()
-const res = tune(league, DEFAULT_PARAMS, targets, {
+const res = tune(league, base, targets, {
   matches,
   rounds,
   start,
   onEval: (evals, loss) => process.stdout.write(`eval ${evals}: loss ${loss.toFixed(2)} (${Math.round((Date.now() - t0) / 1000)} s)\n`)
 })
 const today = new Date().toISOString().slice(0, 10)
-const tuned = applyKnobs(DEFAULT_PARAMS, res.knobs)
+const tuned = applyKnobs(base, res.knobs)
 const out = {
   ...tuned,
   provenance: {

@@ -38,49 +38,8 @@ export const bounce = (vt: number, vn: number, w: number, b: Physics): { vt: num
   return { vt: vt - sign * impulse, vz, w: w + (sign * 1.5 * impulse) / BALL_RADIUS }
 }
 
-/** Before the fitted physics: drag, a fixed bounce keeping 85 % of horizontal speed, constant rolling deceleration. */
-const legacyStepBall = (ball: BallState, dt: number, p: Params["ball"]): BallState => {
-  let { x, y, z } = ball.pos
-  let { x: vx, y: vy, z: vz } = ball.vel
-  const h = dt / p.substeps
-  for (let i = 0; i < p.substeps; i++) {
-    const airborne = z > 1e-6 || vz > 1e-6
-    if (airborne) {
-      const speed = Math.hypot(vx, vy, vz)
-      const k = p.drag * speed * h
-      vx -= k * vx
-      vy -= k * vy
-      vz -= k * vz + p.gravity * h
-      x += vx * h
-      y += vy * h
-      z += vz * h
-      if (z <= 0) {
-        z = 0
-        vz = -vz * p.bounce
-        vx *= 0.85
-        vy *= 0.85
-        if (vz < 0.6) vz = 0
-      }
-    } else {
-      z = 0
-      vz = 0
-      const speed = Math.hypot(vx, vy)
-      if (speed > 0) {
-        const next = Math.max(0, speed - (p.rollDecel + p.drag * speed * speed) * h)
-        const f = next / speed
-        vx *= f
-        vy *= f
-        x += vx * h
-        y += vy * h
-      }
-    }
-  }
-  return { pos: { x, y, z }, vel: { x: vx, y: vy, z: vz } }
-}
-
 /** Advance the ball by dt seconds in p.ball.substeps substeps. */
 export const stepBall = (ball: BallState, dt: number, p: Params): BallState => {
-  if (!p.physics.enabled) return legacyStepBall(ball, dt, p.ball)
   const b = p.physics.ball
   const g = p.ball.gravity
   let { x, y, z } = ball.pos
@@ -186,7 +145,6 @@ export const groundDistance = (v0: number, vEnd: number, b: Physics, g: number):
 
 /** Speed of a ground pass (struck without spin) that arrives at `arriveSpeed` after `distance` metres (fixed secant steps). */
 export const groundLaunchSpeed = (distance: number, arriveSpeed: number, p: Params): number => {
-  if (!p.physics.enabled) return Math.sqrt(arriveSpeed * arriveSpeed + 2 * (p.ball.rollDecel + 1.2) * Math.max(0, distance))
   const b = p.physics.ball
   const g = p.ball.gravity
   if (distance <= 0) return arriveSpeed

@@ -7,7 +7,7 @@ import { approach, approachBy, GROUP_OF, motionFor, steer, throughKnots, vmaxFor
 import { DEFAULT_PARAMS, type Params } from "../src/params.js"
 import type { PlayerAttrs, Role } from "../src/types.js"
 
-const P: Params = { ...DEFAULT_PARAMS, physics: { ...DEFAULT_PARAMS.physics, enabled: true } }
+const P: Params = DEFAULT_PARAMS
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const attrs = (pace: number, acceleration: number): PlayerAttrs =>
   ({ pace, acceleration, shortPassing: 0.5, longPassing: 0.5, vision: 0.5, crossing: 0.5, dribbling: 0.5, finishing: 0.5, heading: 0.5, tackling: 0.5, composure: 0.5, stamina: 0.5, handling: 0.5, reflexes: 0.5 })
@@ -94,15 +94,16 @@ describe("player movement", () => {
     }
   })
 
+  it("the ball and movement steps use no transcendental functions (bit-identical replays across JavaScript engines)", () => {
+    for (const f of ["ball.ts", "kinematics.ts"]) {
+      const src = readFileSync(join(root, "packages/sim-core/src", f), "utf8")
+      expect(src, f).not.toMatch(/Math\.(exp|pow|log|expm1|log1p|cbrt)\(/)
+    }
+  })
+
   it("top speed drops only to 97 % when a player is exhausted", () => {
     const pl = median("CM")
     expect(vmaxFor(pl, 0, P) / vmaxFor(pl, 1, P)).toBeCloseTo(0.97, 12)
     expect(vmaxFor(pl, 1, P)).toBeCloseTo(motionFor(pl, P).s0, 12)
-  })
-
-  it("with the fitted physics off, top speed is the old formula", () => {
-    const pl = median("CM")
-    const k = DEFAULT_PARAMS.kinematics
-    expect(vmaxFor(pl, 0.5, DEFAULT_PARAMS)).toBeCloseTo(k.vmaxBase * (0.86 + 0.14 * pl.attrs.pace) * 0.95, 12)
   })
 })

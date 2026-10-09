@@ -49,4 +49,5 @@ for (let i = 0; i < matches; i++) {
 }
 const note = `${params.provenance.version}; held-out seeds 2000–${2000 + matches - 1}`
 execFileSync("uv", ["run", "--project", join(root, "python/analytics"), "python", "-m", "touchline_analytics.report", ...dirs,
-  "--targets", join(root, "data/params/targets-idsse.json"), "--note", note, "--out", here(o.out)], { stdio: "inherit" })
+  "--targets", join(root, "data/params/targets-idsse.json"), "--note", note, "--out", here(o.out),
+  "--physics", join(root, "data/params/physics.json"), "--league", join(root, "data/league/league.json")], { stdio: "inherit" })

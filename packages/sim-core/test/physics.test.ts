@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { BALL_RADIUS, bounce, carryDistance, groundDistance, groundLaunchSpeed, launchVelocity, rollDistance, stepBall } from "../src/ball.js"
-import { arrive, interceptPoint } from "../src/kinematics.js"
+import { interceptPoint } from "../src/kinematics.js"
 import { DEFAULT_PARAMS, type Params } from "../src/params.js"
 import type { BallState } from "../src/types.js"
 
-/** The fitted physics switched on (its defaults are the literature values). */
-const P: Params = { ...DEFAULT_PARAMS, physics: { ...DEFAULT_PARAMS.physics, enabled: true } }
+const P: Params = DEFAULT_PARAMS
 
 const roll = (b: BallState, s: number, p: Params = P): BallState => { let x = b; for (let i = 0; i < s / 0.1; i++) x = stepBall(x, 0.1, p); return x }
 const withBall = (o: Partial<Params["physics"]["ball"]>): Params => ({ ...P, physics: { ...P.physics, ball: { ...P.physics.ball, ...o } } })
@@ -70,18 +69,6 @@ describe("ball", () => {
 })
 
 describe("kinematics", () => {
-  it("arrive respects speed and acceleration caps and does not overshoot", () => {
-    let s = { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 } }
-    let maxV = 0
-    for (let i = 0; i < 100; i++) {
-      const prev = s.vel
-      s = arrive(s.pos, s.vel, { x: 20, y: 0 }, 8, 4, 0.1)
-      maxV = Math.max(maxV, Math.hypot(s.vel.x, s.vel.y))
-      expect(Math.hypot(s.vel.x - prev.x, s.vel.y - prev.y)).toBeLessThanOrEqual(0.4 + 1e-9)
-    }
-    expect(maxV).toBeLessThanOrEqual(8)
-    expect(Math.abs(s.pos.x - 20)).toBeLessThan(0.5)
-  })
   it("constant-bearing intercept leads a moving target", () => {
     const p = interceptPoint({ x: 0, y: -10 }, 8, { x: 0, y: 0 }, { x: 5, y: 0 })
     expect(p.x).toBeGreaterThan(0)

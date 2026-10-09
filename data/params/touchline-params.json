@@ -7,7 +7,6 @@
   "version": "calib-2026-10-08"
  },
  "kinematics": {
-  "vmaxBase": 9.2,
   "accelMax": 4.5,
   "reactionS": 0.7,
   "reachM": 1,
@@ -16,9 +15,6 @@
   "headerHeightM": 2.4
  },
  "ball": {
-  "drag": 0.013,
-  "rollDecel": 1.2,
-  "bounce": 0.55,
   "gravity": 9.81,
   "substeps": 4
  },
@@ -301,7 +297,7 @@
   "redCardOpponent": 1.2
  },
  "script": {
-  "goalShotLogit": 1.25,
+  "goalShotLogit": 1.5,
   "goalScoring": 2,
   "goalRatePerMin": 0.016,
   "goalScoringMax": 6,

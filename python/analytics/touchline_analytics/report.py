@@ -12,7 +12,10 @@ import json
 import math
 from pathlib import Path
 
+import numpy as np
+
 from .metrics import PASS_LEN_EDGES, SPEED_EDGES, touchline_metrics
+from .physics.validate import PLAYER_EDGES, player_metrics, w1, work_rate
 
 LABELS = {
     "passes": ("Passes per match", "{:.0f}"),
@@ -95,7 +98,78 @@ def statistics_section(sim_mean: dict, sim_sd: dict, targets: dict) -> tuple[lis
     return lines, counts
 
 
-def build(run_dirs: list[Path], targets: dict, params_note: str) -> str:
+# The engine's roles by position group (packages/sim-core kinematics.ts GROUP_OF).
+ENGINE_GROUP = {"GK": "GK", "CB": "DEF", "FB": "DEF", "DM": "MID", "CM": "MID", "AM": "MID", "W": "FWD", "ST": "FWD"}
+GROUP_NAMES = {"GK": "keepers", "DEF": "defenders", "MID": "midfielders", "FWD": "forwards"}
+PLAYER_LABELS = {
+    **{f"speed_{g}": f"Speed, {n} (m/s)" for g, n in GROUP_NAMES.items()},
+    **{f"accel_{g}": f"Change of speed, {n} (m/s²)" for g, n in GROUP_NAMES.items()},
+    "max_speed": "Top speed per player (m/s)",
+    "hsr20": "Metres above 20 km/h per 90 minutes",
+    "hsr25": "Metres above 25 km/h per 90 minutes",
+    "acc_count": "Accelerations past 3 m/s² per 90 minutes",
+    "dec_count": "Decelerations past 3 m/s² per 90 minutes",
+}
+PERIOD_LABELS = ["0–15", "15–30", "30–45", "45–60", "60–75", "75–90"]
+
+
+def simulated_tracks(run_dirs: list[Path], roles: dict[str, str]) -> tuple[dict, dict]:
+    """Every player's 10 Hz track per simulated match: both halves with a gap between them, and the halves apart."""
+    tracks: dict[str, tuple[str, np.ndarray]] = {}
+    halves: dict[str, tuple[str, list[np.ndarray]]] = {}
+    for run in run_dirs:
+        fps = float(json.loads((run / "meta.json").read_text())["meta"]["tracking"]["fps"])
+        assert fps == 10, f"{run}: tracking at {fps} Hz, expected 10"
+        periods: dict[str, list[dict[str, tuple[float, float]]]] = {}
+        with (run / "tracking.jsonl").open() as fh:
+            for line in fh:
+                f = json.loads(line)
+                periods.setdefault(f["period"], []).append({p["id"]: (p["x"], p["y"]) for side in ("home", "away") for p in f["teams"][side]["players"]})
+        ids = sorted({pid for frames in periods.values() for fr in frames for pid in fr})
+        for pid in ids:
+            if pid not in roles:
+                continue
+            parts = [np.array([fr.get(pid, (np.nan, np.nan)) for fr in frames], dtype=float) for frames in periods.values()]
+            group = ENGINE_GROUP[roles[pid]]
+            tracks[f"{run.name}/{pid}"] = (group, np.vstack([x for part in parts for x in (part, np.full((1, 2), np.nan))]))
+            halves[f"{run.name}/{pid}"] = (group, parts)
+    return tracks, halves
+
+
+def physics_section(tracks: dict, halves: dict, physics: dict) -> list[str]:
+    """Player movement statistics against the real inter-match envelope, and the work rate by period (physics.json)."""
+    val = physics["validation"]
+    sim = player_metrics(tracks)
+    lines = ["## Player movement against real tracking", "",
+             "Each statistic is a distribution; it is inside when its distance (W1) to the real matches is no larger than "
+             "the largest distance between two real matches (data/params/physics.json).", "",
+             "| Statistic | W1 to real | Largest real-to-real | Inside |", "|---|---|---|---|"]
+    inside = 0
+    keys = [k for k in PLAYER_EDGES if k in val["envelope"] and k in val["real"]["players"]]
+    for k in keys:
+        d = w1(sim[k], val["real"]["players"][k], PLAYER_EDGES[k])
+        top = val["envelope"][k]["max"]
+        inside += d <= top
+        lines.append(f"| {PLAYER_LABELS[k]} | {d:.3f} | {top:.3f} | {'yes' if d <= top else 'no'} |")
+    lines += ["", f"Inside the real envelope: {inside} of {len(keys)}.", ""]
+    real = val["real"].get("work_rate")
+    if real:
+        w = work_rate(halves)
+        lines += ["### Work rate by 15-minute period", "",
+                  "Outfielders on the pitch for the whole match, metres per minute.", "",
+                  "| Minutes | Real | Simulated | Real above 20 km/h | Simulated above 20 km/h |", "|---|---|---|---|---|"]
+        for i, label in enumerate(PERIOD_LABELS):
+            sd = w["distance"]["ALL"][i] if w["distance"]["ALL"] else float("nan")
+            sh = w["hsr"]["ALL"][i] if w["hsr"]["ALL"] else float("nan")
+            lines.append(f"| {label} | {real['distance']['ALL'][i]:.1f} | {sd:.1f} | {real['hsr']['ALL'][i]:.1f} | {sh:.1f} |")
+        lr = real["late_ratio"]
+        lines += ["", "Last 15 minutes of a half over its first 15 (late-to-early ratio): distance "
+                  f"{w['late_ratio']['distance']:.2f} simulated (real {lr['distance']['min']:.2f}–{lr['distance']['max']:.2f}, mean {lr['distance']['mean']:.2f}); "
+                  f"above 20 km/h {w['late_ratio']['hsr']:.2f} simulated (real {lr['hsr']['min']:.2f}–{lr['hsr']['max']:.2f}, mean {lr['hsr']['mean']:.2f}).", ""]
+    return lines
+
+
+def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict | None = None, roles: dict[str, str] | None = None) -> str:
     runs = [touchline_metrics(d) for d in run_dirs]
     n = len(runs)
     mean = lambda k: sum(r[k] for r in runs) / n  # noqa: E731
@@ -122,6 +196,8 @@ def build(run_dirs: list[Path], targets: dict, params_note: str) -> str:
         syn = [sum(r[hk][i] for r in runs) / n for i in range(len(edges) - 1)]
         lines.append(f"| {label} | {wasserstein_binned(syn, real, edges):.2f} {unit} | {js_divergence(syn, real):.4f} |")
     lines += ["", "Lower is closer. W1 is in the distribution's own unit; JS divergence is 0 for identical and 1 for disjoint distributions.", ""]
+    if physics and roles:
+        lines += physics_section(*simulated_tracks(run_dirs, roles), physics)
     return "\n".join(lines)
 
 
@@ -133,8 +209,12 @@ if __name__ == "__main__":
     ap.add_argument("--targets", default="data/params/targets-idsse.json")
     ap.add_argument("--note", default="calibrated parameters")
     ap.add_argument("--out", default="docs/realism/realism-report.md")
+    ap.add_argument("--physics", default="", help="data/params/physics.json: adds player movement against real tracking")
+    ap.add_argument("--league", default="data/league/league.json", help="player roles, for the physics section")
     a = ap.parse_args()
-    md = build([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note)
+    physics = json.loads(Path(a.physics).read_text()) if a.physics else None
+    roles = {p["id"]: p["role"] for c in json.loads(Path(a.league).read_text())["clubs"] for p in c["squad"]} if physics else None
+    md = build([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note, physics, roles)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(md + "\n")
     print(md)

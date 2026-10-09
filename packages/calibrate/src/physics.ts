@@ -13,7 +13,7 @@
  * halves, metres per minute and metres per minute above 20 km/h in each period, by position group and for all
  * outfielders, and the late-to-early ratio (last 15 minutes of a half over its first 15, averaged over the halves).
  */
-import { GROUP_OF, type Frame, type Group, type MatchConfig, type Role } from "@touchline/sim-core"
+import { GROUP_OF, type Frame, type Group, type MatchConfig, type Params, type Role } from "@touchline/sim-core"
 
 export const GROUPS: ReadonlyArray<Group> = ["GK", "DEF", "MID", "FWD"]
 const DT = 0.1
@@ -36,7 +36,11 @@ export const PLAYER_EDGES: Readonly<Record<string, ReadonlyArray<number>>> = {
 }
 
 export type Point = readonly [number, number] | null
-export type Tracks = ReadonlyMap<string, { readonly group: Group; readonly xy: ReadonlyArray<Point> }>
+export interface Track {
+  readonly group: Group
+  readonly xy: ReadonlyArray<Point>
+}
+export type Tracks = ReadonlyMap<string, Track>
 
 /** Values outside the edges go in the end bins; shares sum to 1 (all zero without values). */
 export const hist = (values: ReadonlyArray<number>, e: ReadonlyArray<number>): number[] => {
@@ -147,7 +151,11 @@ const PERIODS_PER_HALF = 3
 const FULL_SHARE = 0.9
 const OUTFIELD: ReadonlyArray<Group> = ["DEF", "MID", "FWD"]
 
-export type Halves = ReadonlyMap<string, { readonly group: Group; readonly halves: ReadonlyArray<ReadonlyArray<Point>> }>
+export interface HalfTracks {
+  readonly group: Group
+  readonly halves: ReadonlyArray<ReadonlyArray<Point>>
+}
+export type Halves = ReadonlyMap<string, HalfTracks>
 
 export interface WorkRate {
   readonly players: Record<string, number>
@@ -224,7 +232,15 @@ export interface PhysicsFile {
     readonly envelope: Readonly<Record<string, { readonly max: number }>>
     readonly real: { readonly players: Readonly<Record<string, ReadonlyArray<number>>> }
   }
+  /** The constants the engine reads (pnpm physics:fit also copies them into touchline-params.json). */
+  readonly engine?: { readonly ball: Params["physics"]["ball"]; readonly players: Partial<Params["physics"]["players"]> }
 }
+
+/** `base` with the fitted physics constants of physics.json: the tuner calibrates behaviour on top of them. */
+export const withPhysics = (base: Params, physics: PhysicsFile): Params =>
+  physics.engine
+    ? { ...base, physics: { ...base.physics, ball: { ...physics.engine.ball }, players: { ...base.physics.players, ...physics.engine.players } } }
+    : base
 
 export interface GateRow {
   readonly key: string
