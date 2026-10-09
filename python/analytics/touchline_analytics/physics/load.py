@@ -154,7 +154,15 @@ def kick_events(path: Path) -> list[KickEvent]:
     return out
 
 
-def smooth(xy: np.ndarray, fps: int = FPS) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+_PLAYER = re.compile(r'<Player [^>]*?PersonId="([^"]+)"[^>]*?PlayingPosition="([^"]+)"')
+
+
+def player_positions(path: Path) -> dict[str, str]:
+    """Player id -> DFL position code (e.g. TW, IVL, DMZ, STZ) from a match-information file."""
+    return {m[1]: m[2] for m in _PLAYER.finditer(Path(path).read_text(encoding="utf-8"))}
+
+
+def smooth(xy: np.ndarray, fps: int = FPS, window: int = WINDOW, order: int = ORDER) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Savitzky-Golay position, velocity and acceleration of an (n, k) series, per run of finite frames.
 
     Runs shorter than the window stay NaN, so gaps never bleed into derivatives.
@@ -165,10 +173,10 @@ def smooth(xy: np.ndarray, fps: int = FPS) -> tuple[np.ndarray, np.ndarray, np.n
     ok = np.isfinite(xy).all(axis=1)
     edges = np.flatnonzero(np.diff(np.concatenate([[0], ok.astype(int), [0]])))
     for a, b in zip(edges[::2], edges[1::2]):
-        if b - a < WINDOW:
+        if b - a < window:
             continue
         seg = xy[a:b]
-        pos[a:b] = savgol_filter(seg, WINDOW, ORDER, axis=0)
-        vel[a:b] = savgol_filter(seg, WINDOW, ORDER, deriv=1, delta=1 / fps, axis=0)
-        acc[a:b] = savgol_filter(seg, WINDOW, ORDER, deriv=2, delta=1 / fps, axis=0)
+        pos[a:b] = savgol_filter(seg, window, order, axis=0)
+        vel[a:b] = savgol_filter(seg, window, order, deriv=1, delta=1 / fps, axis=0)
+        acc[a:b] = savgol_filter(seg, window, order, deriv=2, delta=1 / fps, axis=0)
     return pos, vel, acc
