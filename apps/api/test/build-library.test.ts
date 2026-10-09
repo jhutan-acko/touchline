@@ -1,12 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, describe, expect, it } from "vitest"
-import { segmentKey } from "@touchline/schema"
+import { decodeMomentTrace, segmentKey } from "@touchline/schema"
 import { BuildError, buildLibrary, librarySegments } from "../src/build-library.js"
 import { scanLibrary } from "../src/library.js"
+import { betterOptionEvents, readWhatIfs } from "../src/whatif.js"
 import { league, root } from "./fixture.js"
 
 const freePort = () => new Promise<number>((ok) => {
@@ -57,5 +58,9 @@ describe("library builder", () => {
     expect(m.info.segments).toHaveLength(12)
     expect(m.info.model).toBe("stub")
     expect(m.cues.length).toBeGreaterThan(100)
+    // Every pass the agents said had a better option has its what-if clip cached (the scenario has at least one).
+    const named = betterOptionEvents(readFileSync(join(m.dir, "agents", "traces.jsonl"), "utf8").trim().split("\n").map((l) => decodeMomentTrace(JSON.parse(l))))
+    expect(named.length).toBeGreaterThan(0)
+    expect([...readWhatIfs(m.dir).keys()].sort()).toEqual([...named].sort())
   }, 300_000)
 })

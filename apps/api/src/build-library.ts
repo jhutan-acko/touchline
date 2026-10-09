@@ -1,6 +1,7 @@
 /**
  * Fill the match library: simulate the built-in scenarios and run each through the agent service (pnpm agents'
- * gateway), so every match plays with its cached cues (spec §6 cached replay). Deterministic for a stub model.
+ * gateway), so every match plays with its cached cues (spec §6 cached replay), and cache the what-if clip of every
+ * pass the agents called a mistake. Deterministic for a stub model.
  */
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
@@ -9,6 +10,7 @@ import { a2aSender, DEFAULT_OPTIONS, replaySignals, runGateway, startMcpStats, s
 import type { Segment } from "@touchline/schema"
 import { SCENARIOS } from "@touchline/sim"
 import { root } from "./playback.js"
+import { betterOptionEvents, writeWhatIfs } from "./whatif.js"
 
 export class BuildError extends Error {}
 
@@ -47,6 +49,8 @@ export const buildLibrary = async (o: BuildOptions): Promise<string[]> => {
         writeCache(dir, result)
         const s = summarize(result)
         log(`  ${s.moments} moments, ${s.cues} cues (${s.models.join(", ") || "no model"})`)
+        // The what-if split answers library matches at once: every pass the agents called a mistake, re-simulated now.
+        writeWhatIfs(dir, betterOptionEvents(result.traces), log)
       } finally {
         mcp.stop()
       }
