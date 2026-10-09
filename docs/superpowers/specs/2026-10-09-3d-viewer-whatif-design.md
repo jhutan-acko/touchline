@@ -1,6 +1,6 @@
 # 3D viewer, player cameras and what-if split — design
 
-Agreed 2026-10-09 in brainstorming (sections 1–5 approved one by one). The engine was picked after a bake-off between Three.js and Babylon.js. Extends §5.6 of `2026-10-03-touchline-design.md`. Plan 7, branch `plan-7-viewer`.
+Agreed 2026-10-09 in brainstorming (sections 1–5 approved one by one). The engine was picked after a bake-off between Three.js and Babylon.js; the prototype's rulings are in §10. Extends §5.6 of `2026-10-03-touchline-design.md`. Plan 7, branch `plan-7-viewer`.
 
 ## 1. Goal
 
@@ -170,7 +170,22 @@ Vitest + jsdom, as in the rest of `apps/web`.
 
 CUDA or server GPUs; a free "any moment" what-if sandbox; stadium crowds; multi-match views; facial or kit detail beyond colours and numbers.
 
-## 10. Follow-ups to other docs
+## 10. Rulings from the prototype (2026-10-09)
+
+Building the prototype changed these points. The implementation plan follows the rulings, not the sections above.
+
+1. **Where the split comes from (user decision).** Agents' `better_option` claims were checked by re-simulation in six costly-error matches: 0 of 5 came out `better_option_found` (3 "played pass was best", 2 not verifiable). Scanning every pass instead finds them: 8 of 498 attacking passes in one match. So `pnpm library` scans each match's passes (at least 3 options on record, played more than 5 m into the opponents' half) across worker threads, and every verified better pass becomes its own verified **better-pass cue** in each mode and language, with "Show me" in its Why? drawer. Agent claims keep their clip and get the honest verdict. Live sessions compute on request only (no live scan).
+2. **No new frame fields.** Tracking stores each player's speed as a single number and no intent, so `Spot` is unchanged. The client works out velocity, facing and gait from consecutive positions.
+3. **Preferred foot** is added to `MatchInfo.players` (`foot`), so the kick uses the right leg.
+4. **No 3D pitch markers.** Nothing produces `pitch_marker` cues today (no agent, no stats path), so there is nothing to pin.
+5. **No drei.** React Three Fiber hosts the canvas, its size and pixel ratio, and the frame loop. The scenes are plain three.js, two per canvas in the split, each viewport with its own effects chain (drei `<View>` cannot post-process per view).
+6. **Following** starts with the player nearest the ball (profiles have no player focus setting).
+7. **Clips stop at the session's frame.** Both plays are cut there, so nothing after it is shown. Better-pass cues appear only once their 8 seconds have played.
+8. **Demo auto-show** is a checkbox on the Watch page that opens the split on each better-pass cue (no ranking of the "clearest").
+9. **Kicks** count once per touch, because a kick seen across skipped frames would otherwise count twice. r186 has no soft shadow map, so `PCFShadowMap` is used.
+10. **Assets** are committed in `apps/web/public/3d/`. How the body was trimmed is recorded in `ATTRIBUTION.md` instead of a script, which would need the 14 MB source pack and a new dev dependency.
+
+## 11. Follow-ups to other docs
 
 - `2026-10-03-touchline-design.md` §5.6: a pointer to this design.
 - Roadmap: a Plan 7 row.

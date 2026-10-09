@@ -4881,7 +4881,7 @@ PATCH
 
 - [ ] **Step 2: Run every suite this plan touched**
 
-Run: `pnpm turbo run test typecheck --filter=@touchline/sim-core --filter=@touchline/advisor --filter=@touchline/rpc --filter=@touchline/api --filter=@touchline/web -- --no-file-parallelism`
+Run: `pnpm turbo run test --filter=@touchline/sim-core --filter=@touchline/advisor --filter=@touchline/rpc --filter=@touchline/api --filter=@touchline/web -- --no-file-parallelism && pnpm turbo run typecheck --filter=@touchline/sim-core --filter=@touchline/advisor --filter=@touchline/rpc --filter=@touchline/api --filter=@touchline/web` (typecheck separately: `tsc` rejects vitest's flag)
 Expected: all tasks successful (the API's `build-library` test needs `uv`; the full repository suite runs with `pnpm test -- --no-file-parallelism`, see the toolchain notes)
 
 - [ ] **Step 3: Build a demo library**
