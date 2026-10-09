@@ -635,6 +635,7 @@ This harness backs innovation #1 (§2.1). Scenario scripts (§5.1.7) record **ta
 - **Studio console:** cue queue for a producer (approve, hold, send to graphics), presenter talking points, raw cue feed view.
 - **Demo mode:** split-screen of two profiles on the same match.
 - **Ops view:** agent traces summary, fact-check pass/retry/drop counts, latency percentiles.
+- **3D viewer and what-if split:** see `2026-10-09-3d-viewer-whatif-design.md` (Plan 7).
 
 ### 5.7 API (`apps/api`)
 
