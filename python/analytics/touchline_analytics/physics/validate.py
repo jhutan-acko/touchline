@@ -269,3 +269,17 @@ def replay_span(pos: np.ndarray, p: BallPhysics) -> Replay:
     f = least_squares(lambda x: (path(x) - pos).ravel(), x0, bounds=(lo, hi), max_nfev=600)
     floor = min(_rmse(path(f.x), pos), rmse)
     return Replay(_path(th, n, p), rmse, floor, rmse / max(floor, REPLAY_FLOOR_M))
+
+
+def _main() -> None:
+    """Player statistics of tracks given as JSON {id: {group, xy: [[x, y] or null, ...]}} at 10 Hz (parity test)."""
+    import json
+    import sys
+
+    raw = json.loads(open(sys.argv[1]).read())
+    tracks = {pid: (t["group"], np.array([[np.nan, np.nan] if p is None else p for p in t["xy"]], dtype=float)) for pid, t in raw.items()}
+    print(json.dumps(player_metrics(tracks)))
+
+
+if __name__ == "__main__":
+    _main()
