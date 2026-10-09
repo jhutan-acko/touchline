@@ -3,7 +3,7 @@ name = "touchline-analytics"
 version = "0.1.0"
 description = "Offline analytics for Touchline: CDF validation, real-data calibration targets, realism report."
 requires-python = ">=3.11"
-dependencies = ["common-data-format-validator==0.1.1", "kloppy==3.19.0"]
+dependencies = ["common-data-format-validator==0.1.1", "kloppy==3.19.0", "numpy==2.3.4", "scipy==1.16.3"]
 
 [build-system]
 requires = ["hatchling"]
