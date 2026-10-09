@@ -1,3 +1,4 @@
+export * from "./clip.js"
 export * from "./explain.js"
 export * from "./position.js"
 export * from "./session.js"
