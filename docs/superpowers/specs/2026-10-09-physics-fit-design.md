@@ -1,7 +1,7 @@
 # Physics fitted on real tracking — design
 
 Designed 2026-10-09 with the brainstorming method, from `../reports/Football engine physics accuracy.md` (the
-research report, outside the repository). Status: **approved in conversation, awaiting review of this written spec.**
+research report, outside the repository). Status: **approved 2026-10-09; revised the same day after measurement (see Revision).**
 
 ## Purpose
 
@@ -26,6 +26,8 @@ uncertainty and validation, which no published football engine provides.
 | Scope | Full fit-and-validate harness (report item 0) plus report items 1–4: tangential bounce, speed-dependent rolling, acceleration–speed law with a braking cap, short reaction delay |
 | Schedule | Plan 6b now (about Oct 9–20). Plan 4b afterwards keeps only manager agents and A/B evaluation; the corner optimiser is dropped. Azure starts about Oct 23 |
 | Physics vs tuner | Physics constants are fixed measured values in their own file. Physics knobs leave the tuner, which recalibrates behaviour only |
+| Who reaches the ball (revision) | The fitted ball and fitted player movement are switched on; deciding who reaches a moving ball keeps the tuned 0.7 s rule (see Revision) |
+| Stamina (revision) | Add a work-rate-by-period check, real against simulated; measured and reported, not fitted |
 
 ## Fixed facts (observed 2026-10-09)
 
@@ -110,11 +112,10 @@ report's literature values, so tests and the CLI work without the file. The engi
    A player's `A0` and `S0` come from their pace and acceleration attributes mapped onto the fitted percentiles for
    their position — no random draw. Euler multiply-add only. `vmaxFor` and `accelFor` keep their names and read the new
    model; `kinematics.accelMax` and `vmaxBase` are removed.
-4. **Reaction and reach.** `reachIn` becomes "carry the current velocity for `τr`, then exponential reach". The
-   exponential uses a 64-entry interpolated table for e^(−t/τ). A new `timeToIntercept` solves with four fixed Newton
-   steps. `resolve.ts` and `pitchcontrol.ts` both use it with the fitted `τr` (about 0.3 s) in place of 0.7 s. Plan 6a's
-   support and marking callers are updated in the same change.
-5. **Fatigue.** The energy floor on top speed goes from 0.9 to 0.97 (`vmaxFor`'s `0.9 + 0.1·energy` becomes
+4. **Reaction and reach (revised).** Unchanged: `resolve.ts` and `pitchcontrol.ts` keep the tuned interception rule
+   (`reachIn` with `kinematics.reactionS` 0.7 s and `kinematics.accelMax`), now documented as a behavioural rule, not
+   physics. The fitted `τr` (0.2 s) is reported in `physics.json` only. See Revision.
+5. **Fatigue.** The energy floor on top speed goes from 0.9 to 0.97 (a literature value, not fitted) (`vmaxFor`'s `0.9 + 0.1·energy` becomes
    `0.97 + 0.03·energy`).
 
 **Determinism:** no `Math.exp`, `Math.pow` or other transcendental call in the step path (tables or polynomials
@@ -130,6 +131,9 @@ instead); fixed iteration counts; players iterated in a fixed order.
   decelerations over 3 m/s², distance above 20 and 25 km/h.
 - Distances are Wasserstein-1 (in physical units) plus KS, with real and simulated data resampled to 10 Hz and smoothed
   identically. The pass threshold for each metric is the inter-match envelope maximum.
+- **Work rate by period (revision):** distance and distance above 20 km/h per player per 15-minute period of each half,
+  by position group, real (all seven matches) against simulated, plus the late-to-early ratio (last 15 minutes of each half
+  over the first 15). Measured and reported in `physics.json` and the realism report; not a pass/fail criterion.
 - **Free-ball replay:** seed the engine with each held-out kick state and run it to first touch; trajectory RMSE must
   be within 1.5× that segment's best-fit residual.
 - The results go into the realism report (`docs/realism/realism-report.md`) and a new physics section of the realism
@@ -147,12 +151,34 @@ as in Plan 2b; physics is not bent to close them. Fixtures are re-pinned in thei
 |---|---|
 | P1 | `physics.json` is produced from IDSSE with provenance, confidence intervals and reject counts; fit-recovery tests on synthetic data pass |
 | P2 | On the two held-out matches, the ball metrics (flight time, carry, rolling deceleration, bounce apex ratio, speed at reception) fit by the five fit matches fall inside the inter-match envelope |
-| P3 | Simulated player metrics (speed and acceleration by position, maximum speed, accelerations and decelerations over 3 m/s², distance over 20 and 25 km/h) fall inside the envelope against the real matches |
+| P3 | (revised) Simulated player metrics (speed and acceleration by position, maximum speed, accelerations and decelerations over 3 m/s², distance over 20 and 25 km/h) are measured against the envelope and reported; the count inside is recorded as a known gap, not a gate |
 | P4 | The free-ball replay passes on the held-out matches |
-| P5 | After recalibration the realism gate passes, and the counts within 1 SD and within 2 SD are no lower than the 2026-10-09 baseline (11 and 17 of 19); remaining gaps are listed |
+| P5 | With the fitted physics switched on the realism gate passes, and the counts within 1 SD and within 2 SD are no lower than the 2026-10-09 baseline (11 and 17 of 19); remaining gaps are listed |
+| P7 | (revision) Work rate by period is measured on real and simulated matches and reported |
 | P6 | A match replays bit-identically run to run; the golden hash changes only through a deliberate re-pin |
 
 Each metric that misses its threshold is reported with its value and envelope, not hidden.
+
+## Revision (2026-10-09, after measurement)
+
+Switching every fitted piece on lowered realism (loss 30.0 to 58.5; within 1 SD 11 to 9). Measured one piece at a time
+from the current parameters, on the 16 gate seeds:
+
+| Switched on | Loss | Within 1 SD | Within 2 SD |
+|---|---|---|---|
+| Nothing (today) | 30.0 | 11 | 17 |
+| Fitted ball | 25.5 | 12 | 19 |
+| Fitted player movement | 26.4 | 12 | 18 |
+| Fitted reaction and reach (0.2 s) | 69.7 | 12 | 14 |
+| Ball and movement, tuned interception rule | 24.8 | 12 | 19 |
+| All three, reaction 0.7 s and reach margin 0.5 | 32.8 | 14 | 17 |
+
+The fitted 0.2 s is the time to start moving; the engine's reach disc assumes the defender already knows where the pass
+is going, which the tuned 0.7 s absorbs. A "pace and drift" movement policy, tuned over three calibration rounds, moved
+3 of 13 player metrics inside the envelope (1 without it) but raised the loss to 88. Hence the user's decision
+(2026-10-09): ship the fitted ball and player movement with the tuned interception rule, no movement-pace policy and no
+recalibration; report P3 as a known gap and add the work-rate check. A movement policy that matches real work rate is a
+follow-up plan.
 
 ## Testing
 
@@ -165,8 +191,7 @@ Test-driven throughout; each test is written and seen failing first.
 - **Parity.** Each new metric to 9 decimal places, Python against TypeScript.
 - **Engine.** Bounce matches closed-form Brody/Cross; the FIFA angle test (50 km/h at 15°) keeps 45–60 % of its speed
   on dry turf; the ramp test rolls 4–8 m; a standing start reaches 5 m in 1.2–1.4 s; a stop from 8 m/s takes 0.9–1.2 s;
-  acceleration never exceeds its caps; `timeToIntercept` agrees with a brute-force search; pitch control and
-  `resolve.ts` agree on reachability.
+  acceleration never exceeds its caps.
 - **Determinism.** Golden hash of a full match, run twice, identical. A test fails if `Math.exp` or `Math.pow`
   appears in the step path.
 - **Replay** as in Validation.
@@ -186,7 +211,8 @@ method, and the IDSSE attribution — the open result to show judges. Roadmap: a
 ## Out of scope
 
 Spin and Magnus lift, the drag-crisis C_D(v) table, launch distributions per action type, per-player random draws of
-`A0`/`S0`/`τr`, and an explicit fatigue sprint policy (report items 5–9).
+`A0`/`S0`/`τr`, an explicit fatigue sprint policy (report items 5–9), fitting the energy drain, and a movement policy
+that matches real work rate (revision).
 
 ## Risks
 
