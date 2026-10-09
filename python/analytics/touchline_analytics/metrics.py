@@ -126,6 +126,60 @@ def tracking_metrics(frames: Iterable[tuple[str, float, bool, dict[str, tuple[fl
     }
 
 
+SPATIAL_SAMPLE_S = 1.0
+SUPPORT_RADIUS_M = 15.0
+SPATIAL_KEYS = ["width_poss_m", "width_def_m", "length_def_m", "line_height_def_m", "ball_pressure_m", "support_15m", "free_space_m"]
+
+
+def spatial_metrics(frames: Iterable[tuple], half_length: float = 52.5) -> dict:
+    """Team shape and space, once a second, on live frames with a team in possession.
+
+    frames: (period, t_seconds, ball_in_play, poss "home"|"away"|None, ball (x, y)|None, {"home": [(x, y)], "away": [(x, y)]}).
+    Each team's attack direction per period comes from its mean x in that period's first frame (teams change ends).
+    """
+    dirs: dict[str, dict[str, int]] = {}
+    last_sec: dict[str, int] = {}
+    w_poss: list[float] = []
+    w_def: list[float] = []
+    length: list[float] = []
+    line: list[float] = []
+    press: list[float] = []
+    support: list[float] = []
+    space: list[float] = []
+    for period, t, live, poss, ball, teams in frames:
+        if period not in dirs and teams["home"] and teams["away"]:
+            dirs[period] = {s: 1 if sum(p[0] for p in teams[s]) / len(teams[s]) < 0 else -1 for s in ("home", "away")}
+        if not live or poss not in ("home", "away") or ball is None or period not in dirs:
+            continue
+        sec = math.floor(t / SPATIAL_SAMPLE_S + 1e-6)
+        if last_sec.get(period) == sec:
+            continue
+        last_sec[period] = sec
+        def_side = "away" if poss == "home" else "home"
+        att, dfn = teams[poss], teams[def_side]
+        if len(att) < 3 or len(dfn) < 3:
+            continue
+        w_poss.append(max(p[1] for p in att) - min(p[1] for p in att))
+        w_def.append(max(p[1] for p in dfn) - min(p[1] for p in dfn))
+        u = sorted(dirs[period][def_side] * p[0] for p in dfn)
+        length.append(u[-1] - u[1])
+        line.append(u[1] + half_length)
+        bx, by = ball
+        press.append(min(math.hypot(p[0] - bx, p[1] - by) for p in dfn))
+        support.append(max(0, sum(1 for p in att if math.hypot(p[0] - bx, p[1] - by) <= SUPPORT_RADIUS_M) - 1))
+        carrier = min(range(len(att)), key=lambda i: math.hypot(att[i][0] - bx, att[i][1] - by))
+        space.append(_median([min(math.hypot(p[0] - q[0], p[1] - q[1]) for q in dfn) for i, p in enumerate(att) if i != carrier]))
+    return {
+        "width_poss_m": _median(w_poss),
+        "width_def_m": _median(w_def),
+        "length_def_m": _median(length),
+        "line_height_def_m": _median(line),
+        "ball_pressure_m": _median(press),
+        "support_15m": sum(support) / len(support) if support else float("nan"),
+        "free_space_m": _median(space),
+    }
+
+
 # ---------------------------------------------------------------- adapters: Touchline output
 
 
@@ -151,6 +205,19 @@ def touchline_events(domain_jsonl: Path) -> list[dict]:
     return out
 
 
+def touchline_spatial_frames(run_dir: Path, fps: float):
+    """Touchline tracking.jsonl as spatial_metrics frames; possession from ball.poss_team_id."""
+    home_id = json.loads((run_dir / "meta.json").read_text())["teams"]["home"]["id"]
+    offset = {"first_half": 0.0, "second_half": 10_000.0}
+    with (run_dir / "tracking.jsonl").open() as fh:
+        for line in fh:
+            f = json.loads(line)
+            pid = f["ball"].get("poss_team_id")
+            poss = None if pid is None else ("home" if pid == home_id else "away")
+            teams = {s: [(p["x"], p["y"]) for p in f["teams"][s]["players"]] for s in ("home", "away")}
+            yield f["period"], offset[f["period"]] + f["frame_id"] / fps, bool(f["ball"].get("status")), poss, (f["ball"]["x"], f["ball"]["y"]), teams
+
+
 def touchline_metrics(run_dir: Path, fps: float = 10.0) -> dict:
     m = event_metrics(touchline_events(run_dir / "domain.jsonl"))
     meta = json.loads((run_dir / "meta.json").read_text())
@@ -165,6 +232,7 @@ def touchline_metrics(run_dir: Path, fps: float = 10.0) -> dict:
                 yield f["period"], offset[f["period"]] + f["frame_id"] / fps, bool(f["ball"].get("status")), players
 
     m.update(tracking_metrics(frames()))
+    m.update(spatial_metrics(touchline_spatial_frames(run_dir, fps)))
     return m
 
 

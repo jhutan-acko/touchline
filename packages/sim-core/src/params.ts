@@ -159,12 +159,20 @@ export interface Params {
     readonly fumbleShare: number
   }
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
-  readonly carry: { readonly speed: number; readonly durationS: readonly [number, number] }
+  /**
+   * Carries: speed and duration; opponents ahead within avoidM bend the heading away (0 = off); a holding carrier with an
+   * opponent within shieldM moves away from them at shieldSpeed instead of standing still (0 = off).
+   */
+  readonly carry: { readonly speed: number; readonly durationS: readonly [number, number]; readonly avoidM: number; readonly shieldM: number; readonly shieldSpeed: number }
   readonly runs: { readonly runInBehindRatePerS: number }
+  /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
+  readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
+  /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
+  readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   readonly movement: { readonly shapeSpeedShare: number }
-  /** Team shape spread: width (fully in possession, partly without) and depth between lines. */
-  readonly shape: { readonly width: number; readonly depth: number }
+  /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball a line push upfield (m) and extra depth squeeze. */
+  readonly shape: { readonly width: number; readonly depth: number; readonly defLineM: number; readonly defDepth: number; /** metres forwards (ST/W/AM) drop back without the ball */ readonly fwdDropM: number }
   /**
    * Energy (1 fresh .. 0 exhausted) drains per second by (drainBase + drainSpeed2 x speed^2) x (1 + staminaSlope x (0.5 - stamina));
    * players recover halfTimeRecovery at the break; tiredness widens execution error by up to executionK.
@@ -311,17 +319,19 @@ export const DEFAULT_PARAMS: Params = {
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
-  carry: { speed: 5.5, durationS: [0.8, 2.0] },
+  carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5 },
   runs: { runInBehindRatePerS: 0.12 },
+  support: { count: 2, distM: 12, speedShare: 0.8 },
+  marking: { weight: 0.5, radiusM: 10, goalSideM: 1.5, widthSlackM: 4 },
   movement: { shapeSpeedShare: 0.7 },
-  shape: { width: 1, depth: 1 },
+  shape: { width: 1, depth: 1, defLineM: 0, defDepth: 1, fwdDropM: 0 },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   script: {
-    goalShotLogit: 1.0, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
+    goalShotLogit: 1.25, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
     momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
@@ -383,6 +393,7 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
 const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
+  "support.speedShare", "marking.weight",
   "kinematics.reachMargin", "ball.bounce", "execution.mishitBase", "movement.shapeSpeedShare",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",

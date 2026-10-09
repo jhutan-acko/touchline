@@ -44,6 +44,17 @@ describe("states and forks", () => {
     expect(statesAt(scfg, [20_000]).get(20_000)).toBeDefined()
   })
 
+  it("drop forced outcomes whose window has ended, so a state taken inside a forced window plays on like the main run", () => {
+    // A goal forced for the home side in minutes 0-2 that never came: from a state inside the window, it must lapse at minute 2.
+    const script: Script = { name: "t", entries: [{ window: [0, 2], team: "home", effect: "goal", count: 9 }] }
+    let s: MatchState = { ...initMatch(makeConfig(3, { script })), forced: [script.entries[0]!] }
+    const minute = (st: MatchState) => (st.period === "first_half" ? 0 : 45) + (st.periodTick * st.config.dt) / 60
+    while (minute(s) < 2) s = step(s).state
+    expect(s.forced.length).toBeGreaterThan(0)
+    s = step(s).state
+    expect(s.forced).toEqual([])
+  })
+
   it("fork with fresh random streams: forks differ from each other but each is reproducible", () => {
     const s = match.states.get(20_000)!
     const a = playAhead(forkState(s, 0), 300).events

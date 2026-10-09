@@ -77,7 +77,17 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "pass_arrive", what: "ground passes are struck to arrive at this speed (m/s): faster passes are intercepted less but run out more", init: DEFAULT_PARAMS.pass.arriveSpeed, min: 5, max: 12, step: 1,
     apply: (p, v) => ({ ...p, pass: { ...p.pass, arriveSpeed: v } }) },
   { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
-    apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) }
+    apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) },
+  { name: "def_line", what: "metres a team without the ball pushes its shape upfield (defensive line height)", init: DEFAULT_PARAMS.shape.defLineM, min: 0, max: 20, step: 2.5,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defLineM: v } }) },
+  { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: DEFAULT_PARAMS.shape.defDepth, min: 0.5, max: 1.2, step: 0.1,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) },
+  { name: "fwd_drop", what: "metres forwards drop back without the ball (defending team length)", init: DEFAULT_PARAMS.shape.fwdDropM, min: 0, max: 20, step: 2.5,
+    apply: (p, v) => ({ ...p, shape: { ...p.shape, fwdDropM: v } }) },
+  { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: DEFAULT_PARAMS.marking.weight, min: 0, max: 1, step: 0.25,
+    apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
+  { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: DEFAULT_PARAMS.support.distM, min: 8, max: 18, step: 2,
+    apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

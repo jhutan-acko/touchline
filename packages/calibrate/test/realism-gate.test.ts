@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest"
 import type { League } from "@touchline/league"
 import { paramsFromJson } from "@touchline/sim-core"
 import { FIXTURES, loss, runMatch, scaleOf, type Targets } from "../src/evaluate.js"
-import { DRIFT_Z, driftZ, GATE_SEEDS, summarize, type Baseline } from "../src/gate.js"
+import { DRIFT_Z, driftZ, GATE_KEYS, GATE_SEEDS, summarize, type Baseline } from "../src/gate.js"
 import { matchMetrics, SCALAR_KEYS } from "../src/metrics.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -39,7 +39,7 @@ describe("realism gate", () => {
     const drift = driftZ(now.mean, baseline, runs.length)
     const z = Object.fromEntries(SCALAR_KEYS.map((k) => [k, (now.mean[k] - targets.metrics[k]!.mean) / scaleOf(targets.metrics[k]!)]))
     console.log("realism gate", JSON.stringify({ loss: Number(loss(now.mean, targets).toFixed(2)), maxDrift: Number(Math.max(...Object.values(drift).map(Math.abs)).toFixed(2)) }))
-    for (const k of SCALAR_KEYS) expect(Math.abs(drift[k]), `${k} drifted from the baseline`).toBeLessThan(DRIFT_Z)
+    for (const k of GATE_KEYS) expect(Math.abs(drift[k]), `${k} drifted from the baseline`).toBeLessThan(DRIFT_Z)
     for (const k of SCALAR_KEYS) expect(Math.abs(z[k]!), `${k} vs real`).toBeLessThan(GATE_Z)
     expect(loss(now.mean, targets)).toBeLessThan(GATE_LOSS)
   })

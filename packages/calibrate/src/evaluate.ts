@@ -1,6 +1,7 @@
 import type { Club, League } from "@touchline/league"
 import { initMatch, isFinished, step, type DomainEvent, type Frame, type MatchConfig, type Params } from "@touchline/sim-core"
-import { matchMetrics, SCALAR_KEYS, type MatchMetrics, type ScalarKey } from "./metrics.js"
+import { GATE_KEYS, type GateKey } from "./gate.js"
+import { matchMetrics, type MatchMetrics } from "./metrics.js"
 
 /** Target statistic measured on real matches (data/params/targets-*.json). */
 export interface Target {
@@ -53,23 +54,24 @@ export const evaluate = (league: League, params: Params, matches: number): Match
     return matchMetrics(events, frames, cfg.dt)
   })
 
-export const meanMetrics = (ms: ReadonlyArray<MatchMetrics>): Record<ScalarKey, number> =>
-  Object.fromEntries(SCALAR_KEYS.map((k) => [k, ms.reduce((s, m) => s + m[k], 0) / ms.length])) as Record<ScalarKey, number>
+export const meanMetrics = (ms: ReadonlyArray<MatchMetrics>): Record<GateKey, number> =>
+  Object.fromEntries(GATE_KEYS.map((k) => [k, ms.reduce((s, m) => s + m[k], 0) / ms.length])) as Record<GateKey, number>
 
 /** Relative weights: noisy, low-count statistics count less. */
-export const WEIGHTS: Readonly<Record<ScalarKey, number>> = {
+export const WEIGHTS: Readonly<Record<GateKey, number>> = {
   passes: 1, completion: 1, long_share: 1, pass_len_median: 1, shots: 1, on_target_share: 0.7, blocked_share: 0.7, save_rate: 0.7, goals: 1, penalties: 0.5, corners: 0.7,
-  throw_ins: 1, goal_kicks: 0.7, free_kicks: 0.7, fouls: 1, cards: 0.5, in_play_share: 1, distance_km_median: 0.7, peak_speed_kmh_median: 0.7
+  throw_ins: 1, goal_kicks: 0.7, free_kicks: 0.7, fouls: 1, cards: 0.5, in_play_share: 1, distance_km_median: 0.7, peak_speed_kmh_median: 0.7,
+  width_poss_m: 0.3, width_def_m: 0.3, length_def_m: 0.3, line_height_def_m: 0.3, ball_pressure_m: 0.3, support_15m: 0.3, free_space_m: 0.3
 }
 
 /** Scale for a z-score: the real between-match SD, but never below 5 % of the mean (tracking targets come from one match). */
 export const scaleOf = (t: Target): number => Math.max(t.sd, 0.05 * Math.abs(t.mean), 1e-6)
 
 /** Weighted sum of squared z-scores over the statistics that have a target and a finite simulated value. */
-export const loss = (sim: Readonly<Record<ScalarKey, number>>, targets: Targets): number => {
+export const loss = (sim: Readonly<Record<GateKey, number>>, targets: Targets): number => {
   let acc = 0
   let used = 0
-  for (const k of SCALAR_KEYS) {
+  for (const k of GATE_KEYS) {
     const t = targets.metrics[k]
     if (!t || !Number.isFinite(sim[k])) continue
     const z = (sim[k] - t.mean) / scaleOf(t)

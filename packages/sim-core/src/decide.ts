@@ -157,7 +157,11 @@ export const buildCandidates = (input: DecisionInput, p: Params, pressure: numbe
     if (distance < 4 || distance > 65) continue
     const inBox = attackX(side, lead.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(lead.y) < PITCH.boxHalfWidth
     const wideOwner = Math.abs(owner.pos.y) > PITCH.boxHalfWidth
-    push(tm, lead, wideOwner && inBox ? "high" : distance < 30 ? "ground" : "high")
+    const height: PassHeight = wideOwner && inBox ? "high" : distance < 30 ? "ground" : "high"
+    // Nobody lofts the ball back at their own keeper: a high ball dropping in front of the goal ends in the net
+    // when it is overhit or the keeper miscontrols it. Back passes to the keeper go along the ground, from close.
+    if (tm.role === "GK" && height === "high") continue
+    push(tm, lead, height)
     const ahead = attackX(side, tm.pos.x) > lastDef - 4 || tm.intent.kind === "run_in_behind"
     if (ahead && tm.role !== "GK") {
       const target = { x: tm.pos.x + d * p.pass.throughLeadM, y: tm.pos.y }

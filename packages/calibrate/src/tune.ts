@@ -2,7 +2,7 @@ import type { League } from "@touchline/league"
 import type { Params } from "@touchline/sim-core"
 import { evaluate, loss, meanMetrics, type Targets } from "./evaluate.js"
 import { applyKnobs, initialKnobs, KNOBS, type Knob, type KnobValues } from "./knobs.js"
-import type { ScalarKey } from "./metrics.js"
+import type { GateKey } from "./gate.js"
 
 export interface Scored<S> {
   readonly loss: number
@@ -74,7 +74,7 @@ export interface TuneOptions {
  * Method of simulated moments: tune engine knobs so the mean statistics of `matches` simulated
  * matches (same fixtures and seeds every time — common random numbers) match the real targets.
  */
-export const tune = (league: League, base: Params, targets: Targets, opts: TuneOptions): SearchResult<Readonly<Record<ScalarKey, number>>> =>
+export const tune = (league: League, base: Params, targets: Targets, opts: TuneOptions): SearchResult<Readonly<Record<GateKey, number>>> =>
   coordinateSearch(KNOBS, { ...initialKnobs(), ...opts.start }, opts.rounds, (values) => {
     const sim = meanMetrics(evaluate(league, applyKnobs(base, values), opts.matches))
     return { loss: loss(sim, targets), detail: sim }

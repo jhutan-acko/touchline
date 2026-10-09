@@ -68,3 +68,61 @@ def test_shot_outcome_shares():
     assert math.isclose(m["save_rate"], 3 / 4)
     empty = event_metrics([])
     assert empty["blocked_share"] == 0.0 and empty["save_rate"] == 0.0
+
+
+from touchline_analytics.metrics import spatial_metrics
+
+HOME = [(-45.0, 0.0), (-5.0, -15.0), (0.0, 0.0), (5.0, 10.0)]
+AWAY = [(45.0, 0.0), (10.0, -10.0), (4.0, 0.0), (20.0, 12.0)]
+
+
+def sframe(t, ball=(0.0, 0.0), live=True, poss="home", period="first_half", home=HOME, away=AWAY):
+    return (period, t, live, poss, ball, {"home": list(home), "away": list(away)})
+
+
+def test_spatial_metrics_measure_shape_pressure_support_and_space():
+    # Only the first frame counts: the next is in the same second, then dead ball, then no possession.
+    m = spatial_metrics([sframe(0.0), sframe(0.5, ball=(40.0, 0.0)), sframe(1.0, live=False), sframe(1.2, poss=None)])
+    assert m["width_poss_m"] == 25.0
+    assert m["width_def_m"] == 22.0
+    assert m["length_def_m"] == 16.0
+    assert m["line_height_def_m"] == 32.5
+    assert m["ball_pressure_m"] == 4.0
+    assert m["support_15m"] == 1.0
+    assert math.isclose(m["free_space_m"], math.hypot(15, 5))
+
+
+def test_spatial_metrics_follow_each_period_attack_direction_and_skip_unusable_frames():
+    flipped_home = [(-x, y) for x, y in HOME]
+    flipped_away = [(-x, y) for x, y in AWAY]
+    m = spatial_metrics([
+        sframe(0.0, period="second_half", home=flipped_home, away=flipped_away, poss="away", ball=(-4.0, 0.0)),
+        sframe(1.0, ball=None),        # no ball position
+        sframe(2.0, home=HOME[:2]),    # a team with fewer than 3 players
+    ])
+    # In the second half home defends the +x goal: its deepest outfielder is at x = 5 -> u = -5.
+    assert m["line_height_def_m"] == 47.5
+    assert m["length_def_m"] == 10.0
+    assert m["ball_pressure_m"] == 4.0
+
+
+def test_spatial_metrics_with_no_usable_frames_are_nan():
+    m = spatial_metrics([])
+    assert all(math.isnan(m[k]) for k in m)
+
+
+def test_touchline_spatial_frames_reads_possession_ball_and_teams(tmp_path):
+    import json
+
+    from touchline_analytics.metrics import touchline_spatial_frames
+
+    (tmp_path / "meta.json").write_text(json.dumps({"teams": {"home": {"id": "h"}, "away": {"id": "a"}}}))
+    line = {
+        "frame_id": 30, "period": "second_half",
+        "teams": {"home": {"players": [{"id": "h1", "x": 1.0, "y": 2.0}]}, "away": {"players": [{"id": "a1", "x": -1.0, "y": -2.0}]}},
+        "ball": {"x": 3.0, "y": 4.0, "z": 0.0, "status": True, "poss_team_id": "a"},
+    }
+    (tmp_path / "tracking.jsonl").write_text(json.dumps(line) + "\n")
+    [(period, t, live, poss, ball, teams)] = list(touchline_spatial_frames(tmp_path, 10.0))
+    assert (period, t, live, poss, ball) == ("second_half", 10_003.0, True, "away", (3.0, 4.0))
+    assert teams == {"home": [(1.0, 2.0)], "away": [(-1.0, -2.0)]}

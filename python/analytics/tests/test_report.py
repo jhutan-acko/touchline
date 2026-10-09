@@ -21,3 +21,10 @@ def test_statistics_table_shows_relative_error_and_lists_large_misses():
     assert "+4 %" in text
     assert "More than 30 % from the real mean: Corners (-75 %)." in text
     assert counts == {"within 1 SD": 1, "within 2 SD": 1, "off": 0}
+
+
+def test_report_labels_every_spatial_metric():
+    from touchline_analytics.metrics import SPATIAL_KEYS
+    from touchline_analytics.report import LABELS
+
+    assert all(k in LABELS for k in SPATIAL_KEYS)

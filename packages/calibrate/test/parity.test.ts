@@ -9,7 +9,7 @@ import type { League } from "@touchline/league"
 import { writeMatch } from "@touchline/sim"
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import { runMatch } from "../src/evaluate.js"
-import { matchMetrics, SCALAR_KEYS } from "../src/metrics.js"
+import { matchMetrics, SCALAR_KEYS, SPATIAL_KEYS } from "../src/metrics.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const hasUv = spawnSync("uv", ["--version"]).status === 0
@@ -27,6 +27,7 @@ describe("metric parity", () => {
     const { events, frames } = runMatch(cfg)
     const ts = matchMetrics(events, frames, cfg.dt)
     for (const k of SCALAR_KEYS) expect(ts[k], k).toBeCloseTo(py[k] as number, 9)
+    for (const k of SPATIAL_KEYS) expect(ts[k], k).toBeCloseTo(py[k] as number, 9)
     // Histograms: Math.hypot and math.hypot may differ in the last bit, which can move a sample sitting
     // exactly on a bin edge into the neighbouring bin (one sample in ~45,000 = 2e-5), hence 1e-3.
     ts.pass_len_hist.forEach((v, i) => expect(v).toBeCloseTo((py.pass_len_hist as number[])[i]!, 3))
