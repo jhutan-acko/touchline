@@ -94,6 +94,18 @@ def test_ground_launch_speed_inverts_ground_distance():
     assert ground_distance(v_short, 9.0, p) == pytest.approx(3.0, rel=1e-6)
 
 
+def test_ground_launch_speed_inverts_ground_distance_across_the_fit_guard_ranges():
+    # A refit that passes the guards must still give passes that arrive (the secant alone can leave its bracket).
+    for mu_s in (0.1, 0.5, 0.9, 1.2):
+        for c0 in (0.0, 0.2, 0.8, 1.5):
+            for c1 in (0.0, 0.05, 0.3):
+                p = BallPhysics(mu_s=mu_s, c0=c0, c1=c1)
+                for d in (0.5, 3.0, 25.0, 80.0):
+                    for arrive in (0.5, 2.0, 8.0, 15.0):
+                        v0 = ground_launch_speed(d, arrive, p)
+                        assert ground_distance(v0, arrive, p) == pytest.approx(d, rel=1e-6), (mu_s, c0, c1, d, arrive)
+
+
 def test_step_is_plain_euler_in_the_air():
     p = BallPhysics(k=0.01)
     s = step((0.0, 0.0, 5.0, 10.0, 0.0, 0.0, 0.0), 0.025, p)

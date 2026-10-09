@@ -169,12 +169,22 @@ def ground_distance(v0: float, v_end: float, p: BallPhysics) -> float:
     return d
 
 
+SOLVE_TOL = 1e-9
+BRACKET_STEPS = 32
+BISECT_STEPS = 60
+
+
 def ground_launch_speed(distance: float, arrive: float, p: BallPhysics) -> float:
-    """Launch speed of a ground pass (struck without spin) that arrives at `arrive` m/s after `distance` metres (fixed secant steps)."""
+    """Launch speed of a ground pass (struck without spin) that arrives at `arrive` m/s after `distance` metres.
+
+    Fixed secant steps; if they miss (possible for constants far from the fitted ones), bisection on a bracket: the
+    pure-rolling speed falls short, and doubling a speed until it carries far enough bounds the root from above.
+    """
     if distance <= 0:
         return arrive
     lo = math.sqrt(arrive * arrive + 2 * _roll_decel(arrive, p) * distance)
     hi = math.sqrt(arrive * arrive + 2 * (p.mu_s * p.gravity + _roll_decel(arrive, p)) * distance) + 0.5
+    a, b = lo, hi
     f_lo = ground_distance(lo, arrive, p) - distance
     f_hi = ground_distance(hi, arrive, p) - distance
     for _ in range(8):
@@ -183,7 +193,19 @@ def ground_launch_speed(distance: float, arrive: float, p: BallPhysics) -> float
         mid = hi - f_hi * (hi - lo) / (f_hi - f_lo)
         lo, f_lo = hi, f_hi
         hi, f_hi = mid, ground_distance(mid, arrive, p) - distance
-    return hi
+    if abs(f_hi) <= SOLVE_TOL * distance:
+        return hi
+    for _ in range(BRACKET_STEPS):
+        if ground_distance(b, arrive, p) >= distance:
+            break
+        a, b = b, 2 * b
+    for _ in range(BISECT_STEPS):
+        m = 0.5 * (a + b)
+        if ground_distance(m, arrive, p) < distance:
+            a = m
+        else:
+            b = m
+    return 0.5 * (a + b)
 
 
 def _main() -> None:

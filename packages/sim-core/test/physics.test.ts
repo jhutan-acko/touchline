@@ -47,6 +47,19 @@ describe("ball", () => {
       expect(groundDistance(v0, arrive, P.physics.ball, 9.81)).toBeCloseTo(d, 6)
     }
   })
+  it("ground passes arrive at the speed they were struck for across the fit's guard ranges", () => {
+    // A refit that passes the guards must still give passes that arrive (the secant alone can leave its bracket).
+    for (const skidFriction of [0.1, 0.5, 0.9, 1.2])
+      for (const rollC0 of [0, 0.2, 0.8, 1.5])
+        for (const rollC1 of [0, 0.05, 0.3]) {
+          const p = withBall({ skidFriction, rollC0, rollC1 })
+          for (const d of [0.5, 3, 25, 80])
+            for (const arrive of [0.5, 2, 8, 15]) {
+              const v0 = groundLaunchSpeed(d, arrive, p)
+              expect(Math.abs(groundDistance(v0, arrive, p.physics.ball, 9.81) / d - 1), `${skidFriction} ${rollC0} ${rollC1} ${d} ${arrive}`).toBeLessThan(1e-6)
+            }
+        }
+  })
   it("a lofted ball first lands at its target (within 1 m)", () => {
     for (const d of [25, 40, 55]) {
       const v = launchVelocity({ x: 0, y: 0 }, { x: d, y: 0 }, "high", P)

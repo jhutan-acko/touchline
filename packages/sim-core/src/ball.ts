@@ -21,6 +21,9 @@ const REST_VZ = 0.4
 const SLIP_EPS = 1e-9
 const SIMPSON_N = 16
 const SKID_N = 64
+const SOLVE_TOL = 1e-9
+const BRACKET_STEPS = 32
+const BISECT_STEPS = 60
 
 type Physics = Params["physics"]["ball"]
 
@@ -143,13 +146,19 @@ export const groundDistance = (v0: number, vEnd: number, b: Physics, g: number):
   return d
 }
 
-/** Speed of a ground pass (struck without spin) that arrives at `arriveSpeed` after `distance` metres (fixed secant steps). */
+/**
+ * Speed of a ground pass (struck without spin) that arrives at `arriveSpeed` after `distance` metres. Fixed secant steps;
+ * if they miss (possible for constants far from the fitted ones), bisection on a bracket: the pure-rolling speed falls
+ * short, and doubling a speed until it carries far enough bounds the root from above.
+ */
 export const groundLaunchSpeed = (distance: number, arriveSpeed: number, p: Params): number => {
   const b = p.physics.ball
   const g = p.ball.gravity
   if (distance <= 0) return arriveSpeed
   let lo = Math.sqrt(arriveSpeed * arriveSpeed + 2 * rollDecel(arriveSpeed, b) * distance)
   let hi = Math.sqrt(arriveSpeed * arriveSpeed + 2 * (b.skidFriction * g + rollDecel(arriveSpeed, b)) * distance) + 0.5
+  let low = lo
+  let high = hi
   let fLo = groundDistance(lo, arriveSpeed, b, g) - distance
   let fHi = groundDistance(hi, arriveSpeed, b, g) - distance
   for (let i = 0; i < 8; i++) {
@@ -160,7 +169,18 @@ export const groundLaunchSpeed = (distance: number, arriveSpeed: number, p: Para
     hi = mid
     fHi = groundDistance(mid, arriveSpeed, b, g) - distance
   }
-  return hi
+  if (Math.abs(fHi) <= SOLVE_TOL * distance) return hi
+  for (let i = 0; i < BRACKET_STEPS; i++) {
+    if (groundDistance(high, arriveSpeed, b, g) >= distance) break
+    low = high
+    high = 2 * high
+  }
+  for (let i = 0; i < BISECT_STEPS; i++) {
+    const m = 0.5 * (low + high)
+    if (groundDistance(m, arriveSpeed, b, g) < distance) low = m
+    else high = m
+  }
+  return 0.5 * (low + high)
 }
 
 /** Horizontal distance at which a ball launched at `speed` and `deg` first touches the ground. */
