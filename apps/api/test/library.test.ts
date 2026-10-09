@@ -23,6 +23,7 @@ describe("library", () => {
     expect(m.segments).toEqual(["analyst.es.neutral", "casual.en.neutral", "casual.en.northwick"])
     expect(m.model).toBe("stub")
     expect(m.players.length).toBeGreaterThanOrEqual(40)
+    expect(new Set(m.players.map((p) => p.foot))).toEqual(new Set(["left", "right"])) // the 3D view kicks with it
   })
 
   it("plays a match without a cue cache with stats only", () => {

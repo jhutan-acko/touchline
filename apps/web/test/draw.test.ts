@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { PitchFrame } from "@touchline/rpc"
-import { drawFrame, toPx } from "../src/draw.js"
+import { drawFrame, drawMarkings, STRIPES, toPx } from "../src/draw.js"
 
 /** A 2D context that records what is drawn, in which colour. */
 const recorder = () => {
@@ -22,6 +22,16 @@ const frame = (ballZ = 0): PitchFrame => ({
 })
 
 describe("pitch drawing", () => {
+  it("mows stripes under the markings for the 3D grass, and none for the 2D pitch", () => {
+    const fills: string[] = []
+    const ctx = { fillStyle: "", strokeStyle: "", lineWidth: 1, strokeRect: () => {}, beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {}, arc: () => {}, fill: () => {}, fillRect() { fills.push(String(ctx.fillStyle)) } }
+    drawMarkings(ctx as never, { w: 1800, h: 1000 }, 18)
+    expect(fills.slice(1)).toEqual(Array.from({ length: 18 }, (_, i) => STRIPES[i % 2]))
+    fills.length = 0
+    drawMarkings(ctx as never, { w: 1800, h: 1000 })
+    expect(fills).toHaveLength(1)
+  })
+
   it("maps the pitch's corners and centre to the canvas", () => {
     const size = { w: 1050, h: 680 }
     expect(toPx(size, -52.5, 34)).toEqual([0, 0])

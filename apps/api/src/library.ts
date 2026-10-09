@@ -33,10 +33,10 @@ const json = <A>(path: string): A => JSON.parse(readFileSync(path, "utf8")) as A
 const team = (league: League, id: string, side: "home" | "away"): { brief: TeamBrief; players: Player[] } => {
   const club = league.clubs.find((c) => c.id === id)
   if (!club) throw new LibraryError(`club ${id} is not in the league file`)
-  const c = club as unknown as { name: string; short: string; kits: Record<"home" | "away", { primary: string; secondary: string }>; squad: ReadonlyArray<{ id: string; name: string; jersey: number; role: string }> }
+  const c = club as unknown as { name: string; short: string; kits: Record<"home" | "away", { primary: string; secondary: string }>; squad: ReadonlyArray<{ id: string; name: string; jersey: number; role: string; preferredFoot: "left" | "right" }> }
   return {
     brief: { id, name: c.name, short: c.short, side, kit: c.kits[side] },
-    players: c.squad.map((p) => ({ id: p.id, team_id: id, name: p.name, jersey: p.jersey, role: p.role }))
+    players: c.squad.map((p) => ({ id: p.id, team_id: id, name: p.name, jersey: p.jersey, role: p.role, foot: p.preferredFoot }))
   }
 }
 

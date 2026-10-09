@@ -20,3 +20,10 @@ Touchline's simulator is original code. These projects and papers shaped its des
 | IDSSE / Sportec Open DFL dataset — © Deutsche Fussball Liga (DFL); Bassek et al., *Scientific Data* (2025), https://doi.org/10.1038/s41597-025-04505-y | CC-BY 4.0 | Downloaded locally into git-ignored `data/raw/`; only aggregate match statistics (`data/params/targets-idsse.json`), fitted model coefficients (`data/params/stats-models.json`) and the expected-threat grid (`data/params/xt-grid.json`) are committed. These are the targets the engine is tuned to and validated against (`docs/realism/realism-report.md`). |
 
 The default xG prior (`packages/sim-core/src/params.ts`) is fitted to an approximate public reference xG curve by distance and angle, not to any dataset.
+
+## 3D viewer assets
+
+| Asset | Licence | How it is used |
+|---|---|---|
+| Player body and its idle, walk, jog and sprint clips: [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) (Standard), by Quaternius | CC0 1.0 | `apps/web/public/3d/player.glb`: the pack's `Godot/AnimationLibrary_Godot_Standard.glb` trimmed with [glTF Transform](https://gltf-transform.dev) to the four clips (`Idle_Loop`, `Walk_Loop`, `Jog_Fwd_Loop`, `Sprint_Loop`). Recoloured to kits in the browser. The kick is our own (`apps/web/src/view3d/kick.ts`, CC0). |
+| Stadium light and backdrop: [Stadium 01](https://polyhaven.com/a/stadium_01) HDRI (1k), Poly Haven | CC0 1.0 | `apps/web/public/3d/stadium_01_1k.hdr`, unchanged. |

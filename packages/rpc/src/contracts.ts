@@ -41,7 +41,8 @@ export const MatchSummary = Schema.Struct({
 })
 export type MatchSummary = typeof MatchSummary.Type
 
-export const Player = Schema.Struct({ id: Id, team_id: Id, name: Schema.String, jersey: Schema.Int, role: Schema.String })
+/** A squad member; `foot` is the preferred foot (the 3D view kicks with it). */
+export const Player = Schema.Struct({ id: Id, team_id: Id, name: Schema.String, jersey: Schema.Int, role: Schema.String, foot: Schema.Literals(["left", "right"]) })
 export type Player = typeof Player.Type
 
 export const MatchInfo = Schema.Struct({ ...MatchSummary.fields, players: Schema.Array(Player) })

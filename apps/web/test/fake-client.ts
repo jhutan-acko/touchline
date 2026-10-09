@@ -12,8 +12,8 @@ export const MATCH: MatchSummary = {
 export const INFO: MatchInfo = {
   ...MATCH,
   players: [
-    { id: "p-nor-01", team_id: "northwick", name: "Datan Drenussen", jersey: 1, role: "GK" },
-    { id: "p-lar-09", team_id: "larkspur", name: "Feseo Wylford", jersey: 9, role: "ST" }
+    { id: "p-nor-01", team_id: "northwick", name: "Datan Drenussen", jersey: 1, role: "GK", foot: "right" },
+    { id: "p-lar-09", team_id: "larkspur", name: "Feseo Wylford", jersey: 9, role: "ST", foot: "left" }
   ]
 }
 
