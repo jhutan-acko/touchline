@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from "vitest"
 import { decodeMomentTrace, segmentKey } from "@touchline/schema"
 import { BuildError, buildLibrary, librarySegments } from "../src/build-library.js"
 import { scanLibrary } from "../src/library.js"
+import { betterMomentId } from "../src/betterpass.js"
 import { betterOptionEvents, readWhatIfs } from "../src/whatif.js"
 import { league, root } from "./fixture.js"
 
@@ -58,9 +59,14 @@ describe("library builder", () => {
     expect(m.info.segments).toHaveLength(12)
     expect(m.info.model).toBe("stub")
     expect(m.cues.length).toBeGreaterThan(100)
-    // Every pass the agents said had a better option has its what-if clip cached (the scenario has at least one).
+    // Every pass the agents said had a better option has its what-if clip cached (the scenario has at least one), and so
+    // has every verified better pass the scan found, each with a cue of its own.
     const named = betterOptionEvents(readFileSync(join(m.dir, "agents", "traces.jsonl"), "utf8").trim().split("\n").map((l) => decodeMomentTrace(JSON.parse(l))))
     expect(named.length).toBeGreaterThan(0)
-    expect([...readWhatIfs(m.dir).keys()].sort()).toEqual([...named].sort())
-  }, 300_000)
+    const clips = readWhatIfs(m.dir)
+    for (const id of named) expect(clips.has(id)).toBe(true)
+    const found = [...clips.values()].filter((c) => c.verdict === "better_option_found")
+    expect(found.length).toBeGreaterThan(0)
+    for (const c of found) expect(m.cues.filter((q) => q.moment_id === betterMomentId(c.event_id))).toHaveLength(6)
+  }, 600_000)
 })

@@ -6,7 +6,8 @@ import { WhatIfClip } from "@touchline/rpc"
 import { decodeMomentTrace, type DomainEvent, type MomentTrace } from "@touchline/schema"
 import { makeEvidence } from "../src/evidence.js"
 import { readMatch, type LibraryMatch } from "../src/library.js"
-import { betterOptionEvents, computeClip, computeInWorker, makeWhatIf, readWhatIfs, WHATIF_FILE, WHATIF_SEEDS, writeWhatIfs } from "../src/whatif.js"
+import { betterMomentId } from "../src/betterpass.js"
+import { betterOptionEvents, computeClip, computeInWorker, makeWhatIf, readWhatIfs, scanCandidates, scanChunk, scanPasses, SCAN_MIN_OPTIONS, WHATIF_FILE, WHATIF_SEEDS, writeWhatIfs } from "../src/whatif.js"
 import { league, makeLibrary, MATCH_ID, type TestLibrary } from "./fixture.js"
 
 let lib: TestLibrary
@@ -48,7 +49,7 @@ describe("what-if clips", () => {
 
   it("are cached per run and read back; a pass that cannot be re-simulated is skipped", () => {
     const logs: string[] = []
-    const written = writeWhatIfs(lib.run, [pass.id, "nope"], (l) => logs.push(l))
+    const written = writeWhatIfs(lib.run, [pass.id, "nope"], [], (l) => logs.push(l))
     expect(written).toEqual([computed])
     expect(logs.join("\n")).toMatch(/no what-if for nope/)
     expect(readWhatIfs(lib.run)).toEqual(new Map([[pass.id, computed]]))
@@ -108,7 +109,7 @@ describe("the what-if service", () => {
     const goal = lib.goals[0]!
     const path = join(lib.run, "agents", "traces.jsonl")
     const original = readFileSync(path, "utf8")
-    const ev = makeEvidence(new Map([[MATCH_ID, lm]]), w.verdict)
+    const ev = makeEvidence(new Map([[MATCH_ID, lm]]), w)
     const cue = `mo-${goal.id}-casual.en.neutral`
     expect((await Effect.runPromise(ev.evidence(MATCH_ID, cue))).what_if).toBeNull()
     const traces = original.trim().split("\n").map((l) => JSON.parse(l) as MomentTrace)
@@ -116,12 +117,64 @@ describe("the what-if service", () => {
     traces[0] = { ...traces[0]!, analysis: { ...traces[0]!.analysis, claims: [...traces[0]!.analysis.claims, claim as never] } }
     writeFileSync(path, traces.map((t) => JSON.stringify(t) + "\n").join(""))
     try {
-      const fresh = makeEvidence(new Map([[MATCH_ID, lm]]), w.verdict)
+      const fresh = makeEvidence(new Map([[MATCH_ID, lm]]), w)
       expect((await Effect.runPromise(fresh.evidence(MATCH_ID, cue))).what_if).toEqual({ event_id: pass.id, verdict: "better_option_found" })
-      const unknown = makeEvidence(new Map([[MATCH_ID, lm]]))
+      const unknown = makeEvidence(new Map([[MATCH_ID, lm]]), { verdict: () => null, known: () => null })
       expect((await Effect.runPromise(unknown.evidence(MATCH_ID, cue))).what_if).toEqual({ event_id: pass.id, verdict: null })
     } finally {
       writeFileSync(path, original)
     }
+  }, 60_000)
+})
+
+describe("the better-pass scan", () => {
+  it("looks at the passes with options on record, explains those played in the opponents' half, and keeps the verified better ones", async () => {
+    const all = scanCandidates(lib.run)
+    const events = readFileSync(join(lib.run, "domain.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as DomainEvent)
+    for (const id of all) expect((events.find((e) => e.id === id)!.attrs.options as unknown[]).length).toBeGreaterThanOrEqual(SCAN_MIN_OPTIONS)
+    const some = all.slice(200, 212)
+    const one = scanChunk(lib.run, some)
+    expect(one.examined).toBeGreaterThan(0)
+    expect(one.examined).toBeLessThanOrEqual(some.length)
+    for (const c of one.clips) {
+      expect(c.verdict).toBe("better_option_found")
+      expect(c).toEqual(computeClip(lib.run, c.event_id))
+    }
+    // Spread over threads, the same answer.
+    expect(await scanPasses(lib.run, { workers: 3, eventIds: some })).toEqual({ clips: one.clips, examined: one.examined })
+  }, 300_000)
+})
+
+describe("better-pass moments", () => {
+  const better = (): WhatIfClip => ({ ...cachedClip(), shots: { played: 1, better: 6 } })
+  const lmWith = (clips: WhatIfClip[]) => {
+    mkdirSync(join(lib.run, "agents"), { recursive: true })
+    writeFileSync(join(lib.run, "agents", WHATIF_FILE), clips.map((c) => JSON.stringify(c) + "\n").join(""))
+    return readMatch(lib.run, league)
+  }
+
+  it("become a verified cue per mode and language, shown once the clip's real play has run", () => {
+    const lm = lmWith([better(), { ...computed, event_id: "other", verdict: "played_pass_was_best" }])
+    const cues = lm.cues.filter((c) => c.moment_id === betterMomentId(pass.id))
+    expect(cues.map((c) => `${c.segment.mode}.${c.segment.lang}`).sort()).toEqual(["analyst.en", "analyst.es", "analyst.hi", "casual.en", "casual.es", "casual.hi"])
+    const en = cues.find((c) => c.segment.mode === "casual" && c.segment.lang === "en")!
+    expect(en).toMatchObject({ verified: true, evidence: [pass.id], display: { slot: "lower_third", template: "better_pass" }, anchor: { frame_from: pass.frame_id, frame_to: computed.real.at(-1)!.frame } })
+    expect(en.text!.headline).toBe("A better pass was on")
+    expect(en.text!.body).toMatch(/led to a shot in 6 of 20 re-runs, against 1 of 20\./)
+    expect(en.text!.body).toMatch(/^#\d+ \w+/)
+    expect(lm.cues.some((c) => c.moment_id === betterMomentId("other"))).toBe(false) // only verified better passes
+    const noShots = lmWith([{ ...better(), shots: { played: 2, better: 2 } }]).cues.find((c) => c.cue_id.endsWith("casual.en.neutral") && c.moment_id === betterMomentId(pass.id))!
+    expect(noShots.text!.body).toMatch(/verified better over 20 re-runs \(expected goals and threat \+0\.20\)/)
+  })
+
+  it("explain themselves with the re-simulation's numbers and offer the split", async () => {
+    const lm = lmWith([better()])
+    const ev = makeEvidence(new Map([[MATCH_ID, lm]]))
+    const e = await Effect.runPromise(ev.evidence(MATCH_ID, `${betterMomentId(pass.id)}-casual.es.neutral`))
+    expect(e.cause).toBe("A better pass was on")
+    expect(e.claims.map((c) => c.quote)).toEqual(["1 of 20 vs 6 of 20", "0 of 20 vs 2 of 20", "+0.20 ± 0.05"])
+    expect(e.events.map((x) => x.id)).toEqual([pass.id])
+    expect(e.what_if).toEqual({ event_id: pass.id, verdict: "better_option_found" })
+    expect(e.model).toBeNull()
   }, 60_000)
 })

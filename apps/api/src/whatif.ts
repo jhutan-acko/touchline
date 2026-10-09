@@ -5,14 +5,15 @@
  * within a time limit, and kept for the next viewer. Answers never go past the session's frame.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { availableParallelism } from "node:os"
 import { join } from "node:path"
 import { Worker } from "node:worker_threads"
 import { Effect, Schema } from "effect"
-import { explainPass, passClip, Session } from "@touchline/advisor"
+import { explainPass, passClip, Session, type PassClip } from "@touchline/advisor"
 import { MatchNotFound, WhatIfClip, WhatIfNotAvailable, type PassVerdict, type PitchFrame } from "@touchline/rpc"
 import { decodeDomainEvent, type DomainEvent, type MomentTrace } from "@touchline/schema"
-import { DEFAULT_PARAMS, matchClock, paramsFromJson, type Frame, type TeamSetup } from "@touchline/sim-core"
-import { xtGridFromJson } from "@touchline/stats"
+import { attackX, DEFAULT_PARAMS, matchClock, paramsFromJson, type Frame, type TeamSetup } from "@touchline/sim-core"
+import { xtGridFromJson, type XtGrid } from "@touchline/stats"
 import type { LibraryMatch } from "./library.js"
 import { root } from "./playback.js"
 
@@ -36,19 +37,61 @@ const toPitchFrame = (f: Frame, dt: number): PitchFrame => ({
   away: f.away.map((p) => ({ id: p.id, x: r3(p.x), y: r3(p.y) }))
 })
 
-/** Rebuild a run folder's match, explain the pass and cut its clip (CPU only: a few seconds; throws AdvisorError). */
-export const computeClip = (dir: string, eventId: string): WhatIfClip => {
+/** A run folder's match rebuilt for re-simulation, with the expected-threat grid. */
+const rebuild = (dir: string) => {
   const json = (p: string) => JSON.parse(readFileSync(join(root, p), "utf8"))
   const league = json("data/league/league.json") as { clubs: ReadonlyArray<TeamSetup> }
   const session = Session.fromRun(dir, league, [paramsFromJson(json("data/params/touchline-params.json")), DEFAULT_PARAMS])
-  const xt = xtGridFromJson(json("data/params/xt-grid.json"))
-  const c = passClip(session, explainPass(session, eventId, xt, { seeds: WHATIF_SEEDS, horizonS: WHATIF_HORIZON_S }), xt)
+  return { session, xt: xtGridFromJson(json("data/params/xt-grid.json")) }
+}
+
+/** The clip of an explained pass, in the API's frame shape. */
+const toClip = (session: Session, c: PassClip): WhatIfClip => {
   const dt = session.cfg.dt
   return {
     event_id: c.event_id, verdict: c.verdict, passer_id: c.passer_id, played_to: c.played_to, better_to: c.better_to, fps: Math.round(1 / dt), pass_index: c.pass_index,
     real: c.real.map((f) => toPitchFrame(f, dt)), variant: c.variant ? c.variant.map((f) => toPitchFrame(f, dt)) : null,
     seeds: c.seeds, horizon_s: c.horizon_s, typical_seed: c.typical_seed, shots: c.shots, goals: c.goals, gain: c.gain ? { mean: c.gain.mean, se: c.gain.se } : null
   }
+}
+
+const explained = (session: Session, xt: XtGrid, eventId: string) => explainPass(session, eventId, xt, { seeds: WHATIF_SEEDS, horizonS: WHATIF_HORIZON_S })
+
+/** Rebuild a run folder's match, explain the pass and cut its clip (CPU only: a few seconds; throws AdvisorError). */
+export const computeClip = (dir: string, eventId: string): WhatIfClip => {
+  const { session, xt } = rebuild(dir)
+  return toClip(session, passClip(session, explained(session, xt, eventId), xt))
+}
+
+/** The scan looks at passes with at least this many options on record, ... */
+export const SCAN_MIN_OPTIONS = 3
+/** ... played from at least this far (m) into the opponents' half. */
+export const SCAN_MIN_X = 5
+
+/** The passes of a run worth scanning for a better option (by option count; the scan checks where each was played). */
+export const scanCandidates = (dir: string): string[] =>
+  readFileSync(join(dir, "domain.jsonl"), "utf8").split("\n").filter((l) => l.trim()).map((l) => decodeDomainEvent(JSON.parse(l)))
+    .filter((e) => e.type === "pass" && e.player_id !== null && ((e.attrs.options as unknown[] | undefined) ?? []).length >= SCAN_MIN_OPTIONS)
+    .map((e) => e.id)
+
+/**
+ * Explain each of the passes (those played in the opponents' half) and cut a clip of every one with a verified better
+ * option: one match rebuild and one replay for all their states. CPU only; for a worker thread.
+ */
+export const scanChunk = (dir: string, eventIds: ReadonlyArray<string>): { readonly clips: WhatIfClip[]; readonly examined: number } => {
+  const { session, xt } = rebuild(dir)
+  const events = eventIds.map((id) => session.event(id))
+  session.prefetch(events.map((e) => e.frame_id - 1))
+  const attacking = events.filter((e) => {
+    const p = session.stateAt(e.frame_id - 1).players.find((q) => q.id === e.player_id)
+    return p !== undefined && attackX(p.side, p.pos.x) > SCAN_MIN_X
+  })
+  const clips: WhatIfClip[] = []
+  for (const e of attacking) {
+    const x = explained(session, xt, e.id)
+    if (x.verdict === "better_option_found") clips.push(toClip(session, passClip(session, x, xt)))
+  }
+  return { clips, examined: attacking.length }
 }
 
 /** The passes the agents' traces say had a better option (claims of kind better_option), first seen first. */
@@ -66,39 +109,61 @@ export const readWhatIfs = (dir: string): Map<string, WhatIfClip> => {
   return new Map(clips.map((c) => [c.event_id, c]))
 }
 
-/** Compute and cache the clip of every pass the run's traces name (passes that cannot be re-simulated are skipped). */
-export const writeWhatIfs = (dir: string, eventIds: ReadonlyArray<string>, log: (line: string) => void = () => {}): WhatIfClip[] => {
-  const clips: WhatIfClip[] = []
-  for (const id of eventIds) {
-    try {
-      clips.push(computeClip(dir, id))
-    } catch (e) {
-      log(`  no what-if for ${id}: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-  writeFileSync(join(dir, "agents", WHATIF_FILE), clips.map((c) => JSON.stringify(c) + "\n").join(""))
-  log(`  ${clips.length} what-if clips (${clips.filter((c) => c.verdict === "better_option_found").length} with a better option)`)
-  return clips
-}
-
-/** computeClip in a worker thread, so sessions keep playing while it runs. */
-export const computeInWorker = (dir: string, eventId: string, timeoutMs: number): Promise<WhatIfClip> =>
+/** One job in a worker thread: its answer, or its error as a rejection; terminated after `timeoutMs`. */
+const inWorker = <A>(job: WorkerJob, timeoutMs: number): Promise<A> =>
   new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./whatif-worker.ts", import.meta.url), { workerData: { dir, eventId }, execArgv: ["--import", "tsx"] })
+    const worker = new Worker(new URL("./whatif-worker.ts", import.meta.url), { workerData: job, execArgv: ["--import", "tsx"] })
     const timer = setTimeout(() => {
       void worker.terminate()
       reject(new Error(`timed out after ${timeoutMs / 1000} s`))
     }, timeoutMs)
-    worker.once("message", (m: { clip?: WhatIfClip; error?: string }) => {
+    worker.once("message", (m: { ok?: A; error?: string }) => {
       clearTimeout(timer)
       void worker.terminate()
-      m.clip ? resolve(m.clip) : reject(new Error(m.error ?? "no answer"))
+      m.error === undefined ? resolve(m.ok as A) : reject(new Error(m.error))
     })
     worker.once("error", (e) => {
       clearTimeout(timer)
       reject(e)
     })
   })
+
+export type WorkerJob = { readonly kind: "clip"; readonly dir: string; readonly eventId: string } | { readonly kind: "scan"; readonly dir: string; readonly eventIds: ReadonlyArray<string> }
+
+/** computeClip in a worker thread, so sessions keep playing while it runs. */
+export const computeInWorker = (dir: string, eventId: string, timeoutMs: number): Promise<WhatIfClip> => inWorker({ kind: "clip", dir, eventId }, timeoutMs)
+
+/** Threads the scan uses by default: all cores but two. */
+export const SCAN_WORKERS = Math.max(1, availableParallelism() - 2)
+
+/** Scan a run's passes for verified better options across worker threads (the work split evenly); clips in match order. */
+export const scanPasses = async (dir: string, o: { readonly workers?: number; readonly eventIds?: ReadonlyArray<string> } = {}): Promise<{ readonly clips: WhatIfClip[]; readonly examined: number }> => {
+  const ids = o.eventIds ?? scanCandidates(dir)
+  const n = Math.max(1, Math.min(o.workers ?? SCAN_WORKERS, ids.length))
+  const chunks = Array.from({ length: n }, (_, i) => ids.filter((_, j) => j % n === i)).filter((c) => c.length > 0)
+  const parts = await Promise.all(chunks.map((eventIds) => inWorker<{ clips: WhatIfClip[]; examined: number }>({ kind: "scan", dir, eventIds }, 60 * 60_000)))
+  return { clips: parts.flatMap((p) => p.clips).sort((a, b) => a.real[a.pass_index]!.frame - b.real[b.pass_index]!.frame), examined: parts.reduce((a, p) => a + p.examined, 0) }
+}
+
+/**
+ * Cache a run's what-if clips: the scan's (verified better passes) and the clip of every pass the agents' traces
+ * name (whatever its verdict, so a "Show me" on it can say so). Passes that cannot be re-simulated are skipped.
+ */
+export const writeWhatIfs = (dir: string, claimed: ReadonlyArray<string>, scanned: ReadonlyArray<WhatIfClip>, log: (line: string) => void = () => {}): WhatIfClip[] => {
+  const clips = new Map(scanned.map((c) => [c.event_id, c]))
+  for (const id of claimed) {
+    if (clips.has(id)) continue
+    try {
+      clips.set(id, computeClip(dir, id))
+    } catch (e) {
+      log(`  no what-if for ${id}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  const all = [...clips.values()]
+  writeFileSync(join(dir, "agents", WHATIF_FILE), all.map((c) => JSON.stringify(c) + "\n").join(""))
+  log(`  ${all.length} what-if clips (${all.filter((c) => c.verdict === "better_option_found").length} with a better option)`)
+  return all
+}
 
 export interface WhatIfOptions {
   /** How a clip is computed on request (default: computeInWorker within `timeoutMs`). */
@@ -114,7 +179,7 @@ export const makeWhatIf = (library: ReadonlyMap<string, LibraryMatch>, o: WhatIf
   const events = new Map<string, ReadonlyArray<DomainEvent>>()
   const clipsOf = (m: LibraryMatch) => {
     let c = cached.get(m.info.match_id)
-    if (!c) cached.set(m.info.match_id, (c = readWhatIfs(m.dir)))
+    if (!c) cached.set(m.info.match_id, (c = new Map(m.clips)))
     return c
   }
   const eventsOf = (m: LibraryMatch) => {
@@ -155,5 +220,8 @@ export const makeWhatIf = (library: ReadonlyMap<string, LibraryMatch>, o: WhatIf
       return { ...c, real: c.real.slice(0, n), variant: c.variant ? c.variant.slice(0, n) : null }
     })
 
-  return { clip, verdict, match } as const
+  /** The clip of a pass if it is cached or was computed (never computes). */
+  const known = (m: LibraryMatch, eventId: string): WhatIfClip | null => clipsOf(m).get(eventId) ?? null
+
+  return { clip, verdict, known, match } as const
 }

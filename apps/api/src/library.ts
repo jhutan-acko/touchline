@@ -6,16 +6,20 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { League } from "@touchline/league"
 import { readCueCache } from "@touchline/agent-gateway"
-import type { MatchInfo, MatchSummary, Player, TeamBrief } from "@touchline/rpc"
+import type { MatchInfo, MatchSummary, Player, TeamBrief, WhatIfClip } from "@touchline/rpc"
 import { segmentKey, type Cue } from "@touchline/schema"
+import { betterPassCues } from "./betterpass.js"
+import { readWhatIfs } from "./whatif.js"
 
 export class LibraryError extends Error {}
 
 export interface LibraryMatch {
   readonly dir: string
   readonly info: MatchInfo
-  /** The agents' cached cues (empty without a cache). */
+  /** The agents' cached cues (empty without a cache), and a cue for each verified better pass the scan found. */
   readonly cues: ReadonlyArray<Cue>
+  /** The cached what-if clips by pass (`pnpm library`). */
+  readonly clips: ReadonlyMap<string, WhatIfClip>
 }
 
 interface Manifest {
@@ -53,7 +57,9 @@ export const readMatch = (dir: string, league: League): LibraryMatch => {
     match_id: m.match_id, scenario: m.scenario, seed: m.seed, home: home.brief, away: away.brief, score: { home: h ?? 0, away: a ?? 0 },
     fps: m.fps, frames: m.stats.frames, segments: [...new Set(cues.map((c) => segmentKey(c.segment)))].sort(), model
   }
-  return { dir, info: { ...summary, players: [...home.players, ...away.players] }, cues }
+  const info = { ...summary, players: [...home.players, ...away.players] }
+  const clips = readWhatIfs(dir)
+  return { dir, info, cues: [...cues, ...betterPassCues(info, clips.values())], clips }
 }
 
 /** Every run folder directly under `root`, by match id (folders that are not runs are skipped). */

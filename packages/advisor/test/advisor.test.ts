@@ -48,6 +48,16 @@ describe("session", () => {
     expect(session.stateAt(5_000).eventSeq).toBe(lastSeq(5_000))
   })
 
+  it("fetches the states at many ticks in one run, the same as asking for each", () => {
+    const ticks = [7_001, 7_513, 22_222]
+    const fresh = Session.fromRun(dir, league, [DEFAULT_PARAMS])
+    fresh.prefetch(ticks)
+    for (const t of ticks) {
+      expect(fresh.stateAt(t)).toEqual(session.stateAt(t))
+      expect(fresh.stateAt(t)).toBe(fresh.stateAt(t))
+    }
+  })
+
   it("refuses parameters of another version, a missing folder, and a folder that does not match its manifest", () => {
     expect(() => Session.fromRun(dir, league, [{ ...DEFAULT_PARAMS, provenance: { ...DEFAULT_PARAMS.provenance, version: "other" } }])).toThrow(/the run used parameters "prior-1"; available: other/)
     expect(() => Session.fromRun(join(dir, "nope"), league, [DEFAULT_PARAMS])).toThrow(AdvisorError)

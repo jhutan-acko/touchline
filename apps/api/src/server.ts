@@ -32,7 +32,7 @@ export const handlersLayer = (o: ApiOptions) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const whatIf = makeWhatIf(o.library, o.whatIf)
-      const ev = makeEvidence(o.library, whatIf.verdict)
+      const ev = makeEvidence(o.library, whatIf)
       const studio = makeStudio(ev)
       const ops = makeOps()
       const sessions = yield* makeSessions(o.library, { ...(o.companion ? { companion: o.companion } : {}), studio: studio.record })
