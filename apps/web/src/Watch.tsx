@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { MatchInfo, Playback } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
@@ -8,6 +8,7 @@ import { Overlays, useNow } from "./Overlays.js"
 import { Pitch } from "./Pitch.js"
 import { ProfileBar } from "./ProfileBar.js"
 import { RecapPanel } from "./RecapPanel.js"
+import { WhatIfSplit } from "./WhatIfSplit.js"
 import { WhyDrawer } from "./WhyDrawer.js"
 import { segmentOf, type Profile } from "./profile.js"
 import { TopBar } from "./TopBar.js"
@@ -35,7 +36,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d" }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -44,10 +45,16 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   onWhy?: (cue: Cue) => void
   label?: string
   view?: "2d" | "3d"
+  /** Called with the pass when a better-pass cue arrives (the demo's auto-show). */
+  onBetterPass?: (eventId: string) => void
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile))
   const now = useNow()
+  const newest = pane.feed[0]
+  useEffect(() => {
+    if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])
+  }, [newest?.cue_id])
   return (
     <section className="flex flex-col gap-2" aria-label={label}>
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
@@ -90,6 +97,9 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
 }) => {
   const lang: Lang = profile.lang
   const [why, setWhy] = useState<Cue | null>(null)
+  // The what-if split on a pass: only this viewer leaves the live match (the panes keep receiving it, hidden).
+  const [whatIf, setWhatIf] = useState<string | null>(null)
+  const [autoWhatIf, setAutoWhatIf] = useState(false)
   // Demo mode (spec §5.6): a second profile on the same session, side by side; by default the other mode, in Spanish.
   const [second, setSecond] = useState<Profile | null>(null)
   const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [] })
@@ -117,18 +127,23 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "graphics", session: sessionId, segment: segmentOf(profile), match: match.match_id })}>{t(lang, "graphicsOut")}</a>
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "ops", session: sessionId, lang })}>{t(lang, "opsView")}</a>
         <label className="text-sm">
+          <input type="checkbox" className="mr-1" checked={autoWhatIf} onChange={(e) => setAutoWhatIf(e.target.checked)} />
+          {t(lang, "autoWhatIf")}
+        </label>
+        <label className="text-sm">
           {t(lang, "speed")}{" "}
           <select aria-label={t(lang, "speed")} className="rounded bg-slate-800 px-2 py-1" value={playback.speed} onChange={(e) => control("speed", Number(e.target.value))}>
             {SPEEDS.map((s) => <option key={s} value={s}>×{s}</option>)}
           </select>
         </label>
       </div>
-      <div className={second ? "grid gap-4 lg:grid-cols-2" : ""}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} view={view} />
+      {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
+      <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf ? "hidden" : ""}`}>
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} view={view} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} />
         {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={setWhy} label="B" view={view} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
-      {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} />}
+      {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} onShowMe={(id) => (setWhy(null), setWhatIf(id))} />}
     </div>
   )
 }

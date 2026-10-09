@@ -5,7 +5,7 @@
 import { BrowserSocket } from "@effect/platform-browser"
 import { Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect"
 import { RpcClient, RpcSerialization } from "effect/rpc"
-import { TouchlineRpcs, type Evidence, type MatchInfo, type MatchSummary, type OpsReport, type Playback, type QueueStatus, type RecapView, type StudioAction, type StudioTick, type Tick } from "@touchline/rpc"
+import { TouchlineRpcs, type Evidence, type MatchInfo, type MatchSummary, type OpsReport, type Playback, type QueueStatus, type RecapView, type StudioAction, type StudioTick, type Tick, type WhatIfClip } from "@touchline/rpc"
 import type { Segment } from "@touchline/schema"
 
 export interface StartOptions {
@@ -22,6 +22,8 @@ export interface TouchlineClient {
   control(sessionId: string, action: "play" | "pause" | "speed", speed?: number): Promise<Playback>
   /** What is behind a cue the session has shown. */
   evidence(sessionId: string, cueId: string): Promise<Evidence>
+  /** A pass as it went and with its better option played (the what-if split). */
+  whatIf(sessionId: string, eventId: string): Promise<WhatIfClip>
   /** A recap, once the session has reached its whistle (empty before). */
   recap(sessionId: string, kind: "half_time" | "full_time", segment: Segment): Promise<RecapView>
   /** The studio console's stream for a producer segment; returns a function that stops it. */
@@ -58,6 +60,7 @@ export const connect = async (url: string): Promise<TouchlineClient> => {
     watch: (session_id, segment, onTick, onEnd) => follow(client.Watch({ session_id, segment }), onTick, onEnd),
     control: (session_id, action, speed) => call(client.Control({ session_id, action, speed: speed ?? null })),
     evidence: (session_id, cue_id) => call(client.GetEvidence({ session_id, cue_id })),
+    whatIf: (session_id, event_id) => call(client.GetWhatIf({ session_id, event_id })),
     recap: (session_id, kind, segment) => call(client.GetRecap({ session_id, kind, segment })),
     studio: (session_id, segment, onTick, onEnd) => follow(client.StudioWatch({ session_id, segment }), onTick, onEnd),
     act: (session_id, moment_id, action) => call(client.StudioAct({ session_id, moment_id, action })),
