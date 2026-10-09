@@ -18,7 +18,8 @@ const evidence: Evidence = {
   claims: [{ kind: "metric", quote: "6.8%", label: "Expected goals", metric_id: "shot.xg", subject: null, subject_name: null, value: 0.0678, at_frame: 19344, event_id: "e1442" }],
   series: [{ metric_id: "team.mom", subject: "larkspur", label: "Momentum — Larkspur City", points: [{ frame: 16344, value: 0.4 }, { frame: 17844, value: null }, { frame: 19344, value: 0.62 }] }],
   events: [{ id: "e1442", type: "shot", clock: "32:13.70", team_id: "larkspur", player: "Feseo Wylford", outcome: "goal", qualifiers: { body_part: "left_foot" } }],
-  model: "openai:gpt-6.1-sol"
+  model: "openai:gpt-6.1-sol",
+  what_if: null
 }
 
 describe("sparkline", () => {

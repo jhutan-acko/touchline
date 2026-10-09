@@ -1,6 +1,7 @@
 /**
  * Fill the match library: simulate the built-in scenarios and run each through the agent service (pnpm agents'
- * gateway), so every match plays with its cached cues (spec §6 cached replay). Deterministic for a stub model.
+ * gateway), so every match plays with its cached cues (spec §6 cached replay), and cache the what-if clip of every
+ * pass the agents called a mistake. Deterministic for a stub model.
  */
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
@@ -9,6 +10,7 @@ import { a2aSender, DEFAULT_OPTIONS, replaySignals, runGateway, startMcpStats, s
 import type { Segment } from "@touchline/schema"
 import { SCENARIOS } from "@touchline/sim"
 import { root } from "./playback.js"
+import { betterOptionEvents, scanPasses, writeWhatIfs } from "./whatif.js"
 
 export class BuildError extends Error {}
 
@@ -23,6 +25,8 @@ export interface BuildOptions {
   /** The agent service, or null to simulate only (matches play with stats cues and no agent cues). */
   readonly agentsUrl: string | null
   readonly log?: (line: string) => void
+  /** Threads for the better-pass scan (default: all cores but two). */
+  readonly workers?: number
 }
 
 /** Simulate and (with an agent service) annotate each scenario; returns the run folders written. */
@@ -47,6 +51,11 @@ export const buildLibrary = async (o: BuildOptions): Promise<string[]> => {
         writeCache(dir, result)
         const s = summarize(result)
         log(`  ${s.moments} moments, ${s.cues} cues (${s.models.join(", ") || "no model"})`)
+        // The what-if split answers library matches at once: every pass played in the opponents' half re-simulated now
+        // (the verified better ones become cues of their own), and every pass the agents called a mistake.
+        const scan = await scanPasses(dir, o.workers ? { workers: o.workers } : {})
+        log(`  scanned ${scan.examined} attacking passes`)
+        writeWhatIfs(dir, betterOptionEvents(result.traces), scan.clips, log)
       } finally {
         mcp.stop()
       }

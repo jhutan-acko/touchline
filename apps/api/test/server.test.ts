@@ -22,7 +22,8 @@ let stop: () => Promise<void>
 beforeAll(async () => {
   lib = await makeLibrary()
   port = await freePort()
-  const fiber = Effect.runFork(Layer.launch(serverLayer({ library: new Map([[MATCH_ID, readMatch(lib.run, league)]]), port })))
+  // What-ifs computed on request get longer than the live limit here: a busy test machine is slower.
+  const fiber = Effect.runFork(Layer.launch(serverLayer({ library: new Map([[MATCH_ID, readMatch(lib.run, league)]]), port, whatIf: { timeoutMs: 120_000 } })))
   stop = async () => {
     fiber.interruptUnsafe()
   }
@@ -108,4 +109,24 @@ describe("API over WebSocket", () => {
     const lost = await client((c) => Effect.exit(Stream.runDrain(c.Watch({ session_id: "nope", segment: { mode: "casual", lang: "en", club: null } }))))
     expect(Exit.isFailure(lost) && JSON.stringify(lost.cause)).toContain("SessionNotFound")
   })
+
+  it("cuts a what-if clip of a pass the session has passed, computed on request, and refuses one it has not reached", async () => {
+    const { readFileSync } = await import("node:fs")
+    const passes = readFileSync(`${lib.run}/domain.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; type: string; frame_id: number; attrs: { options?: unknown[] } })
+      .filter((e) => e.type === "pass" && (e.attrs.options ?? []).length >= 3 && e.frame_id > 6000)
+    const minute = Math.ceil(passes[0]!.frame_id / 600) + 1
+    const later = passes.find((e) => e.frame_id > (minute + 2) * 600)!
+    const { clip, early } = await client((c) =>
+      Effect.gen(function* () {
+        const s = yield* c.StartSession({ match_id: MATCH_ID, speed: 1, from_minute: minute, live: false })
+        yield* c.Control({ session_id: s.session_id, action: "pause", speed: null })
+        const clip = yield* c.GetWhatIf({ session_id: s.session_id, event_id: passes[0]!.id })
+        const early = yield* Effect.exit(c.GetWhatIf({ session_id: s.session_id, event_id: later.id }))
+        return { clip, early }
+      })
+    )
+    expect(clip.event_id).toBe(passes[0]!.id)
+    expect(clip.real.length).toBeGreaterThan(clip.pass_index)
+    expect(Exit.isFailure(early) && JSON.stringify(early.cause)).toMatch(/WhatIfNotAvailable.*not reached yet/)
+  }, 120_000)
 })

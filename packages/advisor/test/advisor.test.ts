@@ -8,7 +8,7 @@ import type { League } from "@touchline/league"
 import { SCENARIOS, writeMatch } from "@touchline/sim"
 import { DEFAULT_PARAMS, type MatchState } from "@touchline/sim-core"
 import { xtGridFromJson } from "@touchline/stats"
-import { AdvisorError, clearlyBetter, explainPass, Session, SESSION_CACHE_STATES, suggestPosition } from "../src/index.js"
+import { AdvisorError, CLIP_AFTER_S, CLIP_BEFORE_S, clearlyBetter, explainPass, passClip, Session, SESSION_CACHE_STATES, suggestPosition, typicalIndex, type PassExplanation } from "../src/index.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
@@ -46,6 +46,16 @@ describe("session", () => {
     // At most the recent states asked for, plus one checkpoint per 3,000 ticks of the match.
     expect(session.cachedStates).toBeLessThanOrEqual(SESSION_CACHE_STATES + 20)
     expect(session.stateAt(5_000).eventSeq).toBe(lastSeq(5_000))
+  })
+
+  it("fetches the states at many ticks in one run, the same as asking for each", () => {
+    const ticks = [7_001, 7_513, 22_222]
+    const fresh = Session.fromRun(dir, league, [DEFAULT_PARAMS])
+    fresh.prefetch(ticks)
+    for (const t of ticks) {
+      expect(fresh.stateAt(t)).toEqual(session.stateAt(t))
+      expect(fresh.stateAt(t)).toBe(fresh.stateAt(t))
+    }
   })
 
   it("refuses parameters of another version, a missing folder, and a folder that does not match its manifest", () => {
@@ -149,5 +159,51 @@ describe("positioning advisor", () => {
     let t = 15_000
     while (session.stateAt(t).possession.kind === "owned") t++
     expect(() => suggestPosition(session, carrier, t, xt)).toThrow(/nobody has the ball/)
+  })
+})
+
+describe("pass clip", () => {
+  const pass = () => session.events.filter((e) => e.type === "pass" && Array.isArray(e.attrs.options) && (e.attrs.options as unknown[]).length >= 3 && e.frame_id > 600)[3]!
+  /** The pass explained, with its best simulated alternative taken as the better option (whatever the verdict). */
+  const asBetter = (x: PassExplanation): PassExplanation => {
+    const alt = x.options.filter((o) => o.simulated).sort((a, b) => b.simulated!.mean - a.simulated!.mean)[0]!
+    return { ...x, verdict: "better_option_found", better: alt }
+  }
+
+  it("shows the match as it went around the pass, then the better pass in its typical seed from the same frames", () => {
+    const x = asBetter(explainPass(session, pass().id, xt, { seeds: 10, horizonS: 10 }))
+    const c = passClip(session, x, xt)
+    const before = CLIP_BEFORE_S / 0.1
+    const after = CLIP_AFTER_S / 0.1
+    expect(c.real.map((f) => f.tick)).toEqual(Array.from({ length: before + after }, (_, i) => x.frame_id - before + i))
+    expect(c.pass_index).toBe(before)
+    expect(c.real[c.pass_index]!.tick).toBe(x.frame_id)
+    for (const t of [c.real[0]!, c.real.at(-1)!]) {
+      const s = session.stateAt(t.tick)
+      const p = s.players.find((q) => q.id === t.home[0]!.id)!
+      expect(t.home[0]!.x).toBeCloseTo(p.pos.x, 2)
+    }
+    expect(c.variant!.map((f) => f.tick)).toEqual(c.real.map((f) => f.tick))
+    expect(c.variant!.slice(0, c.pass_index)).toEqual(c.real.slice(0, c.pass_index))
+    expect(c.variant!.slice(c.pass_index)).not.toEqual(c.real.slice(c.pass_index))
+    expect(c).toMatchObject({ verdict: "better_option_found", passer_id: x.player_id, played_to: x.options.find((o) => o.chosen)!.receiver_id, better_to: x.better!.receiver_id, seeds: 10, gain: x.better!.simulated })
+    expect(c.typical_seed).toBeGreaterThanOrEqual(0)
+    expect(c.typical_seed).toBeLessThan(10)
+    for (const n of [c.shots!.played, c.shots!.better, c.goals!.played, c.goals!.better]) expect(n).toBeGreaterThanOrEqual(0)
+    expect(c.goals!.better).toBeLessThanOrEqual(c.shots!.better)
+    expect(passClip(session, x, xt)).toEqual(c)
+  }, 60_000)
+
+  it("shows only the match as it went when no better option was found", () => {
+    const x = explainPass(session, pass().id, xt, { seeds: 0 })
+    const c = passClip(session, x, xt)
+    expect(c).toMatchObject({ verdict: "not_verified", better_to: null, variant: null, typical_seed: null, shots: null, goals: null, gain: null })
+    expect(c.real.length).toBe((CLIP_BEFORE_S + CLIP_AFTER_S) / 0.1)
+  })
+
+  it("picks the seed closest to the mean, never an outlier", () => {
+    expect(typicalIndex([0, 0.1, 0.9, 0.2])).toBe(3) // mean 0.3
+    expect(typicalIndex([1, 1])).toBe(0)
+    expect(() => typicalIndex([])).toThrow(AdvisorError)
   })
 })

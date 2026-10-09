@@ -15,16 +15,17 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.0.1",
+    "@touchline/advisor": "workspace:*",
     "@touchline/agent-gateway": "workspace:*",
     "@touchline/mcp-stats": "workspace:*",
     "@touchline/rpc": "workspace:*",
     "@touchline/schema": "workspace:*",
     "@touchline/sim": "workspace:*",
+    "@touchline/sim-core": "workspace:*",
     "@touchline/stats": "workspace:*",
     "effect": "4.0.1"
   },
   "devDependencies": {
-    "@touchline/league": "workspace:*",
-    "@touchline/sim-core": "workspace:*"
+    "@touchline/league": "workspace:*"
   }
 }

@@ -8,7 +8,7 @@ import { attackX, clampToPitch, dist, type Side, type Vec2 } from "./geometry.js
 import { substream } from "./rng.js"
 import { runScript } from "./runner.js"
 import { initMatch, isFinished, step } from "./step.js"
-import { CONCERNS, type DomainEvent, type MatchConfig, type MatchState, type TeamStyle } from "./types.js"
+import { CONCERNS, type DomainEvent, type Frame, type MatchConfig, type MatchState, type TeamStyle } from "./types.js"
 
 export type Intervention =
   | { readonly kind: "none" }
@@ -107,6 +107,21 @@ export const playAhead = (s: MatchState, ticks: number): { readonly events: Doma
     events.push(...r.events)
   }
   return { events, state: t }
+}
+
+/** Play a state forward like playAhead, also keeping the frame of every tick played (to show the play). */
+export const playAheadFrames = (s: MatchState, ticks: number): { readonly events: DomainEvent[]; readonly state: MatchState; readonly frames: Frame[] } => {
+  const events: DomainEvent[] = []
+  const frames: Frame[] = []
+  let t = s
+  const end = s.tick + ticks
+  while (!isFinished(t) && t.tick < end) {
+    const r = step(t)
+    t = r.state
+    events.push(...r.events)
+    if (r.frame) frames.push(r.frame) // the step to full time has none
+  }
+  return { events, state: t, frames }
 }
 
 /** What one play-ahead produced, from one team's point of view. */

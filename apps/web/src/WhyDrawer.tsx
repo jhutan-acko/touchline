@@ -6,7 +6,15 @@ import { t, type Lang } from "./i18n.js"
 import { Sparkline } from "./Sparkline.js"
 
 /** Behind a cue (spec §5.6 "Why?" drawer): the cause, each checked fact, the metric's history and the events. */
-export const WhyDrawer = ({ client, sessionId, cue, lang, onClose }: { client: TouchlineClient; sessionId: string; cue: Cue; lang: Lang; onClose: () => void }) => {
+export const WhyDrawer = ({ client, sessionId, cue, lang, onClose, onShowMe }: {
+  client: TouchlineClient
+  sessionId: string
+  cue: Cue
+  lang: Lang
+  onClose: () => void
+  /** Open the what-if split on a pass (offered when re-simulation found, or may find, a better option). */
+  onShowMe?: (eventId: string) => void
+}) => {
   const [ev, setEv] = useState<Evidence | null | "none">(null)
   useEffect(() => {
     let live = true
@@ -38,6 +46,11 @@ export const WhyDrawer = ({ client, sessionId, cue, lang, onClose }: { client: T
               {ev.explanation && <p className="text-slate-300">{ev.explanation}</p>}
             </section>
           )}
+          {ev.what_if && onShowMe && (ev.what_if.verdict === null || ev.what_if.verdict === "better_option_found") && (
+            <button type="button" className="self-start rounded bg-amber-400 px-3 py-1 font-semibold text-slate-950" onClick={() => onShowMe(ev.what_if!.event_id)}>{t(lang, "showMe")}</button>
+          )}
+          {ev.what_if?.verdict === "played_pass_was_best" && <p className="text-slate-300">{t(lang, "bestPlayed")}</p>}
+          {ev.what_if?.verdict === "not_verified" && <p className="text-slate-300">{t(lang, "notVerified")}</p>}
           <section>
             <h3 className="font-semibold text-slate-400">{t(lang, "claims")}</h3>
             <ul className="mt-1 flex flex-col gap-1">

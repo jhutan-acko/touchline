@@ -20,6 +20,8 @@ export const SESSION_CACHE_STATES = 256
 export class Session {
   private readonly cache = new Map<number, MatchState>()
   private readonly checkpoints = new Map<number, MatchState>()
+  /** States fetched ahead in one pass (prefetch), kept until the session goes. */
+  private readonly pinned = new Map<number, MatchState>()
 
   constructor(
     readonly cfg: MatchConfig,
@@ -29,7 +31,7 @@ export class Session {
 
   /** The state after the step of `tick` (tick -1: before kick-off). */
   stateAt(tick: number): MatchState {
-    const hit = this.cache.get(tick) ?? this.checkpoints.get(tick)
+    const hit = this.pinned.get(tick) ?? this.cache.get(tick) ?? this.checkpoints.get(tick)
     if (hit) return hit
     if (!Number.isInteger(tick) || tick < -1) throw new AdvisorError(`no state at tick ${tick}`)
     let s: MatchState
@@ -50,6 +52,15 @@ export class Session {
     this.cache.set(tick, s)
     if (this.cache.size > SESSION_CACHE_STATES) this.cache.delete(this.cache.keys().next().value!)
     return s
+  }
+
+  /**
+   * Compute the states at many ticks in one run of the match (a scripted match is replayed once, not once per tick)
+   * and keep them all: for scanning many events. About 25 kB per state.
+   */
+  prefetch(ticks: Iterable<number>): void {
+    const want = [...new Set(ticks)].filter((t) => !this.pinned.has(t))
+    if (want.length) for (const [t, s] of statesAt(this.cfg, want)) this.pinned.set(t, s)
   }
 
   /** States kept for reuse (asked for and checkpoints). */

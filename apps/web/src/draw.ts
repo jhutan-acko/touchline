@@ -36,10 +36,17 @@ const box = (ctx: Ctx, size: Size, x0: number, x1: number, halfW: number) => {
   ctx.strokeRect(Math.min(a, c), b, Math.abs(c - a), d - b)
 }
 
-/** The markings: touchlines, halfway line, centre circle, penalty and goal areas. */
-export const drawMarkings = (ctx: Ctx, size: Size) => {
+/** Mown stripes across the pitch, alternating shades (the 3D grass). */
+export const STRIPES = ["#2a723c", "#2f7d43"] as const
+
+/** The markings: touchlines, halfway line, centre circle, penalty and goal areas; on mown stripes if asked (3D). */
+export const drawMarkings = (ctx: Ctx, size: Size, stripes = 0) => {
   ctx.fillStyle = PITCH
   ctx.fillRect(0, 0, size.w, size.h)
+  for (let i = 0; i < stripes; i++) {
+    ctx.fillStyle = STRIPES[i % 2]!
+    ctx.fillRect((i * size.w) / stripes, 0, size.w / stripes + 1, size.h)
+  }
   ctx.strokeStyle = LINE
   ctx.lineWidth = Math.max(1, size.w / 500)
   ctx.strokeRect(0, 0, size.w, size.h)

@@ -1,5 +1,5 @@
 /** A TouchlineClient for component tests: canned answers, and ticks the test pushes to every watcher. */
-import type { Evidence, MatchInfo, MatchSummary, OpsReport, Playback, RecapView, StudioTick, Tick } from "@touchline/rpc"
+import type { Evidence, MatchInfo, MatchSummary, OpsReport, Playback, RecapView, StudioTick, Tick, WhatIfClip } from "@touchline/rpc"
 import type { Segment } from "@touchline/schema"
 import type { TouchlineClient } from "../src/client.js"
 
@@ -12,8 +12,8 @@ export const MATCH: MatchSummary = {
 export const INFO: MatchInfo = {
   ...MATCH,
   players: [
-    { id: "p-nor-01", team_id: "northwick", name: "Datan Drenussen", jersey: 1, role: "GK" },
-    { id: "p-lar-09", team_id: "larkspur", name: "Feseo Wylford", jersey: 9, role: "ST" }
+    { id: "p-nor-01", team_id: "northwick", name: "Datan Drenussen", jersey: 1, role: "GK", foot: "right" },
+    { id: "p-lar-09", team_id: "larkspur", name: "Feseo Wylford", jersey: 9, role: "ST", foot: "left" }
   ]
 }
 
@@ -35,7 +35,7 @@ export interface FakeClient extends TouchlineClient {
   pushGraphics(t: Tick): void
 }
 
-export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport } = {}): FakeClient => {
+export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip> } = {}): FakeClient => {
   const watchers: FakeClient["watchers"] = []
   const studios: FakeClient["studios"] = []
   const outputs: FakeClient["outputs"] = []
@@ -94,6 +94,11 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
       calls.push(`evidence ${cueId}`)
       if (!o.evidence) throw new Error("no evidence")
       return o.evidence
+    },
+    whatIf: async (_s, eventId) => {
+      calls.push(`whatIf ${eventId}`)
+      if (!o.whatIf) throw new Error("no what-if")
+      return o.whatIf()
     },
     recap: async (sessionId, kind) => {
       calls.push(`recap ${sessionId} ${kind}`)
