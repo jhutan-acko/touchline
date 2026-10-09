@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest"
 import type { League } from "@touchline/league"
 import { DEFAULT_PARAMS } from "@touchline/sim-core"
 import { runMatch } from "../src/evaluate.js"
-import { hist, physicsGate, PLAYER_EDGES, playerMetrics, playerSamples, rolesOf, simTracks, w1, type Point, type Tracks } from "../src/physics.js"
+import { hist, physicsGate, PLAYER_EDGES, playerMetrics, playerSamples, rolesOf, simHalves, simTracks, w1, workRate, type Point, type Tracks } from "../src/physics.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const hasUv = spawnSync("uv", ["--version"]).status === 0
@@ -57,6 +57,27 @@ describe("player movement statistics", () => {
   })
 })
 
+describe("work rate by period", () => {
+  const nan = (n: number): Point[] => Array.from({ length: n }, () => null)
+  it("measures metres per minute, and above 20 km/h, per 15 minutes for full-match outfielders", () => {
+    const steady = [run([[2, 2700]]), run([[2, 2700]])]
+    const fades = [0, 1].map(() => run([[6, 900], [2, 900], [1, 900]]))
+    const w = workRate(new Map([
+      ["s", { group: "MID", halves: steady }],
+      ["f", { group: "FWD", halves: fades }],
+      ["gk", { group: "GK", halves: steady }],
+      ["sub", { group: "DEF", halves: [steady[0]!, nan(steady[0]!.length)] }]
+    ]))
+    expect(w.players).toEqual({ DEF: 0, MID: 1, FWD: 1 })
+    w.distance.MID!.forEach((v) => expect(v).toBeCloseTo(120, 0))
+    ;[360, 120, 60, 360, 120, 60].forEach((v, i) => expect(Math.abs(w.distance.FWD![i]! / v - 1)).toBeLessThan(0.01))
+    ;[360, 0, 0, 360, 0, 0].forEach((v, i) => expect(w.hsr.FWD![i]!).toBeCloseTo(v, -1))
+    expect(w.lateRatio.distance).toBeCloseTo(90 / 240, 2)
+    expect(w.lateRatio.hsr).toBe(0)
+    expect(w.distance.DEF).toEqual([])
+  })
+})
+
 describe("player statistics parity", () => {
   // In CI the test must run: a missing uv fails it rather than skipping it.
   it.skipIf(!hasUv && !process.env.CI)("TypeScript and Python give the same histograms for a simulated match", () => {
@@ -73,5 +94,16 @@ describe("player statistics parity", () => {
     // Math.hypot and math.hypot may differ in the last bit, which can move a sample sitting exactly on a bin edge into
     // the neighbouring bin (as in the match-statistics parity test), hence 1e-3.
     for (const k of Object.keys(PLAYER_EDGES)) ts[k]!.forEach((v, i) => expect(v, `${k}[${i}]`).toBeCloseTo(py[k]![i]!, 3))
+    const halves = simHalves(runMatch(cfg).frames, rolesOf(cfg))
+    writeFileSync(file, JSON.stringify(Object.fromEntries(halves)))
+    const pyW = JSON.parse(
+      execFileSync("uv", ["run", "--locked", "--project", join(root, "python/analytics"), "python", "-m", "touchline_analytics.physics.validate", file, "--work-rate"], { encoding: "utf8", maxBuffer: 1 << 26 })
+    ) as { players: Record<string, number>; distance: Record<string, number[]>; hsr: Record<string, number[]>; late_ratio: Record<string, number> }
+    const tsW = workRate(halves)
+    expect(tsW.players).toEqual(pyW.players)
+    expect(tsW.players.DEF! + tsW.players.MID! + tsW.players.FWD!).toBeGreaterThanOrEqual(10)
+    for (const key of ["distance", "hsr"] as const) for (const g of Object.keys(pyW[key])) tsW[key][g]!.forEach((v, i) => expect(v, `${key} ${g}[${i}]`).toBeCloseTo(pyW[key][g]![i]!, 6))
+    expect(tsW.lateRatio.distance).toBeCloseTo(pyW.late_ratio.distance!, 9)
+    expect(tsW.lateRatio.hsr).toBeCloseTo(pyW.late_ratio.hsr!, 9)
   })
 })

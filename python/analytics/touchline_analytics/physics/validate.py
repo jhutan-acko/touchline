@@ -8,6 +8,9 @@ line-for-line port checked by the parity test):
 - Per frame, by position group: speed and change of speed. Per player with 30 minutes or more on the
   pitch: maximum speed, metres per 90 minutes above 20 and 25 km/h, and accelerations and decelerations
   past 3 m/s^2 per 90 minutes (each crossing of the threshold counts once).
+- Work rate (reported, not gated): for outfielders on the pitch for at least 90 % of every 15-minute period of
+  both halves, metres per minute and metres per minute above 20 km/h in each period, by position group and for
+  all outfielders, and the late-to-early ratio (last 15 minutes of a half over its first 15, averaged over halves).
 Each statistic is a histogram on fixed edges (values outside go in the end bins); two histograms differ
 by W1, the area between their CDFs, in the statistic's own units. A statistic passes when the simulation's
 W1 to the real matches is within the largest W1 between two real matches (the inter-match envelope).
@@ -147,6 +150,49 @@ def player_samples(tracks: dict[str, tuple[str, np.ndarray]]) -> dict[str, list[
     return out
 
 
+PERIOD_S = 15 * 60
+PERIODS_PER_HALF = 3
+FULL_SHARE = 0.9
+OUTFIELD = ("DEF", "MID", "FWD")
+
+
+def work_rate(players: dict[str, tuple[str, list[np.ndarray]]]) -> dict:
+    """Work rate by 15-minute period; `players` maps player id to (position group, [first half, second half] at 10 Hz)."""
+    n = int(PERIOD_S * HZ)
+    rows: dict[str, list[tuple[list[float], list[float]]]] = {g: [] for g in OUTFIELD}
+    for _, (group, halves) in sorted(players.items()):
+        if group not in OUTFIELD or len(halves) != 2:
+            continue
+        dist: list[float] = []
+        hsr: list[float] = []
+        for xy in halves:
+            speed = np.hypot(_central(xy[:, 0]), _central(xy[:, 1]))
+            for p in range(PERIODS_PER_HALF):
+                s = speed[p * n : (p + 1) * n]
+                ok = np.isfinite(s)
+                if ok.sum() < FULL_SHARE * n:
+                    break
+                minutes = ok.sum() * DT / 60
+                dist.append(float(s[ok].sum() * DT / minutes))
+                hsr.append(float(s[ok & (s > HSR20)].sum() * DT / minutes))
+        if len(dist) == 2 * PERIODS_PER_HALF:
+            rows[group].append((dist, hsr))
+    every = [r for g in OUTFIELD for r in rows[g]]
+    mean = lambda rs, i: [float(np.mean([r[i][p] for r in rs])) for p in range(2 * PERIODS_PER_HALF)] if rs else []  # noqa: E731
+
+    def late(v: list[float]) -> float:
+        last = PERIODS_PER_HALF - 1
+        ratios = [v[h + last] / v[h] for h in (0, PERIODS_PER_HALF) if v and v[h] > 0]
+        return float(np.mean(ratios)) if ratios else 0.0
+
+    out = {
+        "players": {g: len(rows[g]) for g in OUTFIELD},
+        "distance": {**{g: mean(rows[g], 0) for g in OUTFIELD}, "ALL": mean(every, 0)},
+        "hsr": {**{g: mean(rows[g], 1) for g in OUTFIELD}, "ALL": mean(every, 1)},
+    }
+    return {**out, "late_ratio": {"distance": late(out["distance"]["ALL"]), "hsr": late(out["hsr"]["ALL"])}}
+
+
 def player_metrics(tracks: dict[str, tuple[str, np.ndarray]]) -> dict[str, list[float]]:
     s = player_samples(tracks)
     return {k: hist(s[k], e) for k, e in PLAYER_EDGES.items()}
@@ -272,12 +318,17 @@ def replay_span(pos: np.ndarray, p: BallPhysics) -> Replay:
 
 
 def _main() -> None:
-    """Player statistics of tracks given as JSON {id: {group, xy: [[x, y] or null, ...]}} at 10 Hz (parity test)."""
+    """Player statistics of tracks given as JSON {id: {group, xy: [[x, y] or null, ...]}} at 10 Hz (parity test);
+    with --work-rate, the work rate of {id: {group, halves: [[[x, y] or null, ...], ...]}}."""
     import json
     import sys
 
+    arr = lambda xy: np.array([[np.nan, np.nan] if p is None else p for p in xy], dtype=float)  # noqa: E731
     raw = json.loads(open(sys.argv[1]).read())
-    tracks = {pid: (t["group"], np.array([[np.nan, np.nan] if p is None else p for p in t["xy"]], dtype=float)) for pid, t in raw.items()}
+    if "--work-rate" in sys.argv:
+        print(json.dumps(work_rate({pid: (t["group"], [arr(h) for h in t["halves"]]) for pid, t in raw.items()})))
+        return
+    tracks = {pid: (t["group"], arr(t["xy"])) for pid, t in raw.items()}
     print(json.dumps(player_metrics(tracks)))
 
 

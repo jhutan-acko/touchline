@@ -15,6 +15,7 @@ from touchline_analytics.physics.validate import (
     resample_10hz,
     span_metrics,
     w1,
+    work_rate,
 )
 
 
@@ -79,6 +80,25 @@ def test_player_metrics_are_histograms_on_fixed_edges():
     assert set(m) == set(PLAYER_EDGES)
     for k, h in m.items():
         assert len(h) == len(PLAYER_EDGES[k]) - 1
+
+
+def test_work_rate_by_15_minute_period_for_full_match_outfielders():
+    steady = [_player([(2.0, 2700.0)]), _player([(2.0, 2700.0)])]  # 120 m/min throughout
+    fades = [_player([(6.0, 900.0), (2.0, 900.0), (1.0, 900.0)]) for _ in range(2)]  # sprints early, walks late
+    w = work_rate({
+        "s": ("MID", steady),
+        "f": ("FWD", fades),
+        "gk": ("GK", steady),
+        "sub": ("DEF", [steady[0], np.full_like(steady[0], np.nan)]),  # off at half-time
+    })
+    assert w["players"] == {"DEF": 0, "MID": 1, "FWD": 1}
+    assert w["distance"]["MID"] == pytest.approx([120.0] * 6, rel=1e-3)
+    assert w["distance"]["FWD"] == pytest.approx([360.0, 120.0, 60.0] * 2, rel=1e-2)
+    assert w["hsr"]["FWD"] == pytest.approx([360.0, 0.0, 0.0] * 2, rel=1e-2) and w["hsr"]["MID"] == [0.0] * 6
+    assert w["distance"]["ALL"] == pytest.approx([240.0, 120.0, 90.0] * 2, rel=1e-2)
+    assert w["late_ratio"]["distance"] == pytest.approx(90.0 / 240.0, rel=1e-2)
+    assert w["late_ratio"]["hsr"] == pytest.approx(0.0)
+    assert w["distance"]["DEF"] == [] and w["hsr"]["DEF"] == []
 
 
 P = BallPhysics(k=0.013, e=0.7, mu=0.25, mu_s=0.35)

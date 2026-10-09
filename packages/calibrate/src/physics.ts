@@ -8,6 +8,10 @@
  * 20 and 25 km/h, and accelerations and decelerations past 3 m/s^2 per 90 minutes. Each statistic is a histogram on
  * fixed edges; W1 between two histograms is the area between their CDFs. The simulation passes a statistic when its
  * W1 to the real matches is within the largest W1 between two real matches (data/params/physics.json).
+ *
+ * Work rate (reported, not gated): for outfielders on the pitch for at least 90 % of every 15-minute period of both
+ * halves, metres per minute and metres per minute above 20 km/h in each period, by position group and for all
+ * outfielders, and the late-to-early ratio (last 15 minutes of a half over its first 15, averaged over the halves).
  */
 import { GROUP_OF, type Frame, type Group, type MatchConfig, type Role } from "@touchline/sim-core"
 
@@ -136,6 +140,83 @@ export const simTracks = (frames: ReadonlyArray<Frame>, roles: ReadonlyMap<strin
     for (const id of ids) xy.get(id)!.push(here.get(id) ?? null)
   }
   return new Map(ids.filter((id) => xy.get(id)!.some((p) => p !== null)).map((id) => [id, { group: GROUP_OF[roles.get(id)!], xy: xy.get(id)! }]))
+}
+
+const PERIOD_S = 15 * 60
+const PERIODS_PER_HALF = 3
+const FULL_SHARE = 0.9
+const OUTFIELD: ReadonlyArray<Group> = ["DEF", "MID", "FWD"]
+
+export type Halves = ReadonlyMap<string, { readonly group: Group; readonly halves: ReadonlyArray<ReadonlyArray<Point>> }>
+
+export interface WorkRate {
+  readonly players: Record<string, number>
+  readonly distance: Record<string, number[]>
+  readonly hsr: Record<string, number[]>
+  readonly lateRatio: { readonly distance: number; readonly hsr: number }
+}
+
+/** Work rate by 15-minute period of each half (port of validate.work_rate). */
+export const workRate = (players: Halves): WorkRate => {
+  const n = Math.trunc(PERIOD_S / DT + 1e-9)
+  const rows = new Map<Group, Array<[number[], number[]]>>(OUTFIELD.map((g) => [g, []]))
+  for (const id of [...players.keys()].sort()) {
+    const { group, halves } = players.get(id)!
+    if (!OUTFIELD.includes(group) || halves.length !== 2) continue
+    const dist: number[] = []
+    const hsr: number[] = []
+    for (const xy of halves) {
+      const vx = central(xy.map((p) => (p ? p[0] : NaN)))
+      const vy = central(xy.map((p) => (p ? p[1] : NaN)))
+      const speed = vx.map((x, i) => Math.hypot(x, vy[i]!))
+      let complete = true
+      for (let p = 0; p < PERIODS_PER_HALF && complete; p++) {
+        let count = 0
+        let d = 0
+        let h = 0
+        for (let i = p * n; i < Math.min((p + 1) * n, speed.length); i++) {
+          const v = speed[i]!
+          if (!Number.isFinite(v)) continue
+          count++
+          d += v
+          if (v > HSR20) h += v
+        }
+        if (count < FULL_SHARE * n) {
+          complete = false
+          break
+        }
+        const minutes = (count * DT) / 60
+        dist.push((d * DT) / minutes)
+        hsr.push((h * DT) / minutes)
+      }
+    }
+    if (dist.length === 2 * PERIODS_PER_HALF) rows.get(group)!.push([dist, hsr])
+  }
+  const every = OUTFIELD.flatMap((g) => rows.get(g)!)
+  const mean = (rs: ReadonlyArray<[number[], number[]]>, k: 0 | 1): number[] =>
+    rs.length ? Array.from({ length: 2 * PERIODS_PER_HALF }, (_, p) => rs.reduce((a, r) => a + r[k][p]!, 0) / rs.length) : []
+  const late = (v: ReadonlyArray<number>): number => {
+    const last = PERIODS_PER_HALF - 1
+    const ratios = [0, PERIODS_PER_HALF].filter((h) => v.length && v[h]! > 0).map((h) => v[h + last]! / v[h]!)
+    return ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0
+  }
+  const distance: Record<string, number[]> = { ...Object.fromEntries(OUTFIELD.map((g) => [g, mean(rows.get(g)!, 0)])), ALL: mean(every, 0) }
+  const hsr: Record<string, number[]> = { ...Object.fromEntries(OUTFIELD.map((g) => [g, mean(rows.get(g)!, 1)])), ALL: mean(every, 1) }
+  return { players: Object.fromEntries(OUTFIELD.map((g) => [g, rows.get(g)!.length])), distance, hsr, lateRatio: { distance: late(distance.ALL!), hsr: late(hsr.ALL!) } }
+}
+
+/** Every player's track in each half of a simulated match (10 Hz frames). */
+export const simHalves = (frames: ReadonlyArray<Frame>, roles: ReadonlyMap<string, Role>): Halves => {
+  const ids = [...roles.keys()]
+  const halves = new Map<string, Point[][]>(ids.map((id) => [id, []]))
+  let period: string | null = null
+  for (const f of frames) {
+    if (f.period !== period) for (const id of ids) halves.get(id)!.push([])
+    period = f.period
+    const here = new Map<string, Point>([...f.home, ...f.away].map((p) => [p.id, [p.x, p.y] as const]))
+    for (const id of ids) halves.get(id)!.at(-1)!.push(here.get(id) ?? null)
+  }
+  return new Map(ids.filter((id) => halves.get(id)!.some((h) => h.some((p) => p !== null))).map((id) => [id, { group: GROUP_OF[roles.get(id)!], halves: halves.get(id)! }]))
 }
 
 export interface PhysicsFile {

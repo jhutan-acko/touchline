@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from touchline_analytics.physics.build import LITERATURE_E, MIN_BOUNCES, GuardError, check_guards, engine_block, restitution_or_fallback, sync_params, write
+from touchline_analytics.physics.build import LITERATURE_E, MIN_BOUNCES, GuardError, check_guards, engine_block, real_work_rate, restitution_or_fallback, sync_params, write
 from touchline_analytics.physics.stats import Constant
 
 
@@ -92,3 +92,14 @@ def test_nothing_is_written_when_a_guard_fails(tmp_path):
     write({"fit": _fit()}, out, params)
     assert json.loads(out.read_text())["engine"] == engine_block(_fit())
     assert json.loads(params.read_text())["physics"] == engine_block(_fit())
+
+
+def test_real_work_rate_averages_matches_and_keeps_their_spread():
+    a = {"players": {"DEF": 4, "MID": 3, "FWD": 1}, "distance": {"MID": [120.0] * 6, "ALL": [110.0] * 6}, "hsr": {"MID": [8.0] * 6, "ALL": [6.0] * 6}, "late_ratio": {"distance": 0.9, "hsr": 0.7}}
+    b = {"players": {"DEF": 2, "MID": 4, "FWD": 2}, "distance": {"MID": [100.0] * 6, "ALL": [90.0] * 6}, "hsr": {"MID": [4.0] * 6, "ALL": [2.0] * 6}, "late_ratio": {"distance": 0.8, "hsr": 0.9}}
+    r = real_work_rate({"m1": a, "m2": b})
+    assert r["players"] == {"DEF": 6, "MID": 7, "FWD": 3}
+    assert r["distance"]["MID"] == [110.0] * 6 and r["hsr"]["ALL"] == [4.0] * 6
+    assert r["late_ratio"]["distance"] == {"mean": 0.85, "min": 0.8, "max": 0.9}
+    assert r["late_ratio"]["hsr"] == {"mean": 0.8, "min": 0.7, "max": 0.9}
+    assert r["per_match"] == {"m1": {"distance": 0.9, "hsr": 0.7}, "m2": {"distance": 0.8, "hsr": 0.9}}

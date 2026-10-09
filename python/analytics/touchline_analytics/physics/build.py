@@ -27,7 +27,7 @@ from .fit_players import GROUPS, braking_cap, clean_track, group_of, lateral_cap
 from .load import kick_events, load_match, player_positions
 from .segment import segment_half
 from .stats import Constant, bootstrap_ci
-from .validate import BALL_EDGES, PLAYER_EDGES, ball_metrics, envelope, player_metrics, replay, replay_span, resample_10hz, w1
+from .validate import BALL_EDGES, OUTFIELD, PLAYER_EDGES, ball_metrics, envelope, player_metrics, replay, replay_span, resample_10hz, w1, work_rate
 
 FIT_MATCHES = ["J03WMX", "J03WN1", "J03WOH", "J03WOY", "J03WPY"]
 HELD_OUT = ["J03WQQ", "J03WR9"]
@@ -139,6 +139,30 @@ def _player_tracks(halves, positions) -> dict:
     return tracks
 
 
+def _player_halves(halves, positions) -> dict:
+    """Player id -> (group, [first half, second half] at 10 Hz), for players tracked in both halves."""
+    out = {}
+    for pid in sorted({p for h in halves for p in h.players}):
+        g = group_of(positions.get(pid, ""))
+        if g is not None and len(halves) == 2 and all(pid in h.players for h in halves):
+            out[pid] = (g, [resample_10hz(clean_track(h.players[pid])[0]) for h in halves])
+    return out
+
+
+def real_work_rate(per_match: dict[str, dict]) -> dict:
+    """Work rate averaged over the real matches, with each match's late-to-early ratios and their range."""
+    ms = list(per_match.values())
+    avg = lambda key, g: [round(float(x), 4) for x in np.mean([m[key][g] for m in ms if m[key].get(g)], axis=0)] if any(m[key].get(g) for m in ms) else []  # noqa: E731
+    spread = lambda key: {"mean": round(float(np.mean([m["late_ratio"][key] for m in ms])), 4), "min": round(float(min(m["late_ratio"][key] for m in ms)), 4), "max": round(float(max(m["late_ratio"][key] for m in ms)), 4)}  # noqa: E731
+    return {
+        "players": {g: sum(m["players"][g] for m in ms) for g in OUTFIELD},
+        "distance": {g: avg("distance", g) for g in (*OUTFIELD, "ALL")},
+        "hsr": {g: avg("hsr", g) for g in (*OUTFIELD, "ALL")},
+        "late_ratio": {"distance": spread("distance"), "hsr": spread("hsr")},
+        "per_match": {mid: {k: round(float(m["late_ratio"][k]), 4) for k in ("distance", "hsr")} for mid, m in per_match.items()},
+    }
+
+
 def _mean_hist(hs: list[list[float]]) -> list[float]:
     return [round(float(x), 6) for x in np.mean(np.array(hs), axis=0)]
 
@@ -203,6 +227,7 @@ def build(root: Path, cache: Path, log=print) -> dict:
 
     # Validation: every statistic on every real match, the envelope, and the held-out replays.
     per_match_players = {mid: player_metrics(_player_tracks(data[mid][0], data[mid][2])) for mid in MATCHES}
+    work = real_work_rate({mid: work_rate(_player_halves(data[mid][0], data[mid][2])) for mid in MATCHES})
     spans = {mid: [h.ball[sp.start:sp.end] for h, s in zip(data[mid][0], data[mid][1]) for sp in s.spans] for mid in MATCHES}
     per_match_ball = {mid: ball_metrics(spans[mid]) for mid in MATCHES}
     env = {**envelope(list(per_match_players.values()), PLAYER_EDGES), **envelope(list(per_match_ball.values()), BALL_EDGES)}
@@ -228,6 +253,7 @@ def build(root: Path, cache: Path, log=print) -> dict:
         "threshold": REPLAY_RATIO,
         "pass": float(np.median(ratios)) <= REPLAY_RATIO,
     }
+    log(f"work rate: late/early distance {work['late_ratio']['distance']['mean']}, above 20 km/h {work['late_ratio']['hsr']['mean']}")
     log(f"held-out: ball statistics {sum(v['pass'] for v in held_ball.values())}/{len(held_ball)} inside the envelope; replay median ratio {replay_result['median_ratio']}")
 
     return {
@@ -247,6 +273,7 @@ def build(root: Path, cache: Path, log=print) -> dict:
             "real": {
                 "players": {k: _mean_hist([m[k] for m in per_match_players.values()]) for k in PLAYER_EDGES},
                 "ball": {k: _mean_hist([m[k] for m in per_match_ball.values()]) for k in BALL_EDGES},
+                "work_rate": work,
             },
             "edges": {"players": PLAYER_EDGES, "ball": BALL_EDGES},
             "held_out": {"ball": held_ball, "replay": replay_result},
