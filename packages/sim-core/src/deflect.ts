@@ -51,7 +51,7 @@ export const keeperCanCome = (keeper: PlayerState, at: Vec3, t: number, p: Param
   const k = p.keeper
   if (!inOwnBox(keeper.side, at)) return false
   if (PITCH.halfL + attackX(keeper.side, at.x) > k.claimDepthM) return false
-  const reach = Math.min(k.claimRangeM, p.kinematics.reachM + 0.8 * vmaxFor(keeper.attrs, keeper.energy, p) * t)
+  const reach = Math.min(k.claimRangeM, p.kinematics.reachM + 0.8 * vmaxFor(keeper, keeper.energy, p) * t)
   return dist(keeper.pos, at) <= reach
 }
 

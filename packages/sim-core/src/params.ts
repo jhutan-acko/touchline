@@ -80,6 +80,19 @@ export interface Params {
       readonly rollC0: number
       readonly rollC1: number
     }
+    readonly players: {
+      /** Acceleration-speed line a = A0 (1 - v / S0) by position group: the 10/25/50/75/90th percentiles of A0 and S0. */
+      readonly a0: Readonly<Record<"GK" | "DEF" | "MID" | "FWD", readonly [number, number, number, number, number]>>
+      readonly s0: Readonly<Record<"GK" | "DEF" | "MID" | "FWD", readonly [number, number, number, number, number]>>
+      /** The league's 10/25/50/75/90th percentiles of the pace and acceleration attributes, mapped onto those of S0 and A0. */
+      readonly paceKnots: readonly [number, number, number, number, number]
+      readonly accelerationKnots: readonly [number, number, number, number, number]
+      /** Braking cap and cap across the direction of running (m/s^2). */
+      readonly brake: number
+      readonly lateral: number
+      /** Delay before a player who is not the intended receiver starts to respond to a kick (s). */
+      readonly reactionS: number
+    }
   }
   readonly timing: {
     readonly decisionMinS: number
@@ -274,7 +287,16 @@ export const DEFAULT_PARAMS: Params = {
   ball: { drag: 0.013, rollDecel: 1.2, bounce: 0.55, gravity: 9.81, substeps: 4 },
   physics: {
     enabled: false,
-    ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 }
+    ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },
+    players: {
+      a0: { GK: [7.6, 8, 8.5, 9, 9.4], DEF: [7.6, 8, 8.5, 9, 9.4], MID: [7.6, 8, 8.5, 9, 9.4], FWD: [7.6, 8, 8.5, 9, 9.4] },
+      s0: { GK: [8.4, 8.8, 9.3, 9.6, 10], DEF: [8.4, 8.8, 9.3, 9.6, 10], MID: [8.4, 8.8, 9.3, 9.6, 10], FWD: [8.4, 8.8, 9.3, 9.6, 10] },
+      paceKnots: [0.43, 0.52, 0.59, 0.66, 0.77],
+      accelerationKnots: [0.48, 0.52, 0.57, 0.61, 0.65],
+      brake: 7,
+      lateral: 6,
+      reactionS: 0.3
+    }
   },
   timing: {
     decisionMinS: 0.9,

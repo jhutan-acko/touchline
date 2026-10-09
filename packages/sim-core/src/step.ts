@@ -22,7 +22,7 @@ import {
   type Vec3
 } from "./geometry.js"
 import { assignMarks, markTarget, shieldTarget, steerCarry, supportSpot } from "./offball.js"
-import { accelFor, arrive, arriveBy, drainEnergy, interceptPoint, separation, vmaxFor } from "./kinematics.js"
+import { accelFor, approach, approachBy, arrive, arriveBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
@@ -983,7 +983,7 @@ const moveTarget = (
   marks: ReadonlyMap<string, Vec2> | null
 ): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
-  const vmax = vmaxFor(pl.attrs, pl.energy, w.p)
+  const vmax = vmaxFor(pl, pl.energy, w.p)
   const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, ballFlat, team.style, possSide === pl.side, w.p.shape), speedCap: vmax * w.p.movement.shapeSpeedShare })
   const ph = w.phase
   if (ph.kind === "restart") {
@@ -1092,14 +1092,20 @@ const moveAll = (w: Work): void => {
     if (pl.sentOff) continue
     const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, marks)
     const cur = w.player(id)
-    const vmax = Math.min(speedCap, vmaxFor(cur.attrs, cur.energy, w.p))
+    const vmax = Math.min(speedCap, vmaxFor(cur, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)
     const sep = separation(cur.pos, mates)
     // Chasing a ball that will arrive at a known tick uses on-time steering (matches resolveFlight's reach model).
+    const m = w.p.physics.enabled ? motionFor(cur, w.p) : null
+    const v = Math.max(0.5, vmax)
     const next =
       timeLeft !== undefined
-        ? arriveBy(cur.pos, cur.vel, target, Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt, timeLeft)
-        : arrive(cur.pos, cur.vel, add(target, scale(sep, 2)), Math.max(0.5, vmax), accelFor(cur.attrs, w.p), w.dt)
+        ? m
+          ? approachBy(cur.pos, cur.vel, target, v, m, w.dt, timeLeft)
+          : arriveBy(cur.pos, cur.vel, target, v, accelFor(cur.attrs, w.p), w.dt, timeLeft)
+        : m
+          ? approach(cur.pos, cur.vel, add(target, scale(sep, 2)), v, m, w.dt)
+          : arrive(cur.pos, cur.vel, add(target, scale(sep, 2)), v, accelFor(cur.attrs, w.p), w.dt)
     const speed = len(next.vel)
     const energy = drainEnergy(cur.energy, speed, cur.attrs.stamina, w.dt, w.p)
     w.setPlayer({ ...cur, pos: clampToPitch(next.pos, -2), vel: next.vel, energy })

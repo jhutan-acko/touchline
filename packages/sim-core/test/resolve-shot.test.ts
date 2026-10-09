@@ -101,7 +101,7 @@ describe("resolveFlight — review fixes", () => {
       if (res.result !== "reached" || !res.winnerId) continue
       let w = players.find((p) => p.id === res.winnerId)!
       let s = { pos: w.pos, vel: w.vel }
-      for (let k = 0; k < res.ticks; k++) s = arriveBy(s.pos, s.vel, { x: res.ball.pos.x, y: res.ball.pos.y }, vmaxFor(w.attrs, w.energy, P), accelFor(w.attrs, P), 0.1, (res.ticks - k) * 0.1)
+      for (let k = 0; k < res.ticks; k++) s = arriveBy(s.pos, s.vel, { x: res.ball.pos.x, y: res.ball.pos.y }, vmaxFor(w, w.energy, P), accelFor(w.attrs, P), 0.1, (res.ticks - k) * 0.1)
       expect(Math.hypot(s.pos.x - res.ball.pos.x, s.pos.y - res.ball.pos.y)).toBeLessThanOrEqual(1.5)
       checked++
     }
