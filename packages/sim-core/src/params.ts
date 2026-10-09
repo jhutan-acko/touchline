@@ -53,11 +53,33 @@ export interface Params {
     readonly headerHeightM: number
   }
   readonly ball: {
+    /** Before the fitted physics (physics.enabled false): quadratic drag, constant rolling deceleration, restitution. */
     readonly drag: number
     readonly rollDecel: number
     readonly bounce: number
     readonly gravity: number
     readonly substeps: number
+  }
+  /**
+   * Physics constants measured on real tracking: data/params/physics.json, copied into the parameter file by
+   * `pnpm physics:fit`. The defaults are literature values (spec docs/superpowers/specs/2026-10-09-physics-fit-design.md).
+   */
+  readonly physics: {
+    /** Off until the recalibration switches it on, so the engine's output (and the realism baseline) stays put meanwhile. */
+    readonly enabled: boolean
+    readonly ball: {
+      /** Quadratic drag per metre (a = -drag |v| v). */
+      readonly drag: number
+      /** Normal coefficient of restitution at a bounce. */
+      readonly restitution: number
+      /** Ball-grass friction during a bounce. */
+      readonly bounceFriction: number
+      /** Ball-grass friction while a ball skids along the ground. */
+      readonly skidFriction: number
+      /** Rolling resistance rollC0 + rollC1 v (m/s^2). */
+      readonly rollC0: number
+      readonly rollC1: number
+    }
   }
   readonly timing: {
     readonly decisionMinS: number
@@ -250,6 +272,10 @@ export const DEFAULT_PARAMS: Params = {
   },
   kinematics: { vmaxBase: 9.2, accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   ball: { drag: 0.013, rollDecel: 1.2, bounce: 0.55, gravity: 9.81, substeps: 4 },
+  physics: {
+    enabled: false,
+    ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 }
+  },
   timing: {
     decisionMinS: 0.9,
     decisionMaxS: 2.2,
@@ -394,7 +420,7 @@ const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.s
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
-  "kinematics.reachMargin", "ball.bounce", "execution.mishitBase", "movement.shapeSpeedShare",
+  "kinematics.reachMargin", "ball.bounce", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",

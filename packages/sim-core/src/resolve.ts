@@ -61,7 +61,7 @@ export const resolveFlight = (
   let b = start
   for (let k = 1; k <= maxTicks; k++) {
     const prev = b
-    b = stepBall(b, dt, p.ball)
+    b = stepBall(b, dt, p)
     const cross = goalLineCrossing(prev.pos, b.pos)
     if (cross?.inGoal) return { ticks: k, winnerId: null, result: "goal", ball: { pos: { x: cross.x, y: cross.y, z: cross.z }, vel: b.vel }, aerial: null }
     if (!inPitch({ x: b.pos.x, y: b.pos.y })) return { ticks: k, winnerId: null, result: "out", ball: b, aerial: null }

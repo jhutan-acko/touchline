@@ -122,7 +122,7 @@ describe("goal line and parries — review fixes", () => {
       let b = parryBall("home", saveAt, "parried_safe", r)
       for (let k = 0; k < 60; k++) {
         const prev = b
-        b = stepBall(b, 0.1, P.ball)
+        b = stepBall(b, 0.1, P)
         const c = goalLineCrossing(prev.pos, b.pos)
         if (c) { expect(c.inGoal).toBe(false); break }
       }

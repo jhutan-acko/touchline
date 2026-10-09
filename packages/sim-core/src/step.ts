@@ -927,13 +927,13 @@ const ballTick = (w: Work): void => {
       const prev = w.ball.pos
       const next: Vec3 = { x: lerp(f.path.from.x, f.path.to.x), y: lerp(f.path.from.y, f.path.to.y), z: lerp(f.path.from.z, f.path.to.z) }
       w.ball = { pos: next, vel: { x: (next.x - prev.x) / w.dt, y: (next.y - prev.y) / w.dt, z: (next.z - prev.z) / w.dt } }
-    } else w.ball = stepBall(w.ball, w.dt, w.p.ball)
+    } else w.ball = stepBall(w.ball, w.dt, w.p)
     if (w.tick >= f.resolveTick) resolveFlightNow(w, f)
     return
   }
   // loose
   const prevPos = w.ball.pos
-  w.ball = stepBall(w.ball, w.dt, w.p.ball)
+  w.ball = stepBall(w.ball, w.dt, w.p)
   const flat = { x: w.ball.pos.x, y: w.ball.pos.y }
   const cross = goalLineCrossing(prevPos, w.ball.pos)
   if (cross?.inGoal) {
