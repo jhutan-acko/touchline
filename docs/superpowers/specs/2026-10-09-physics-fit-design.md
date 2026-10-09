@@ -180,6 +180,27 @@ is going, which the tuned 0.7 s absorbs. A "pace and drift" movement policy, tun
 recalibration; report P3 as a known gap and add the work-rate check. A movement policy that matches real work rate is a
 follow-up plan.
 
+## Results (2026-10-09)
+
+| ID | Result |
+|---|---|
+| P1 | Met. `physics.json` from IDSSE with provenance, 95 % intervals and reject counts (15 fast spans, 284 flights over 0.3 m RMSE, 863 tracking jumps); restitution from 171 bounces (the fallback is precision-based, interval 0.738–0.761); fit-recovery tests pass |
+| P2 | Met. Held-out ball statistics 7 of 7 inside the inter-match envelope |
+| P3 | Known gap, reported: 1 of 13 player statistics inside the envelope (top speed); speed and acceleration distributions, distance above 20 and 25 km/h and effort counts are outside (players stand still, then dash) |
+| P4 | Met. Median error ratio 1.09 on 200 held-out spans (threshold 1.5); 77 % of spans within 1.5 |
+| P5 | Met without recalibration. Gate matches: loss 24.8 (30.0 before), 12 of 19 within 1 SD, 19 of 19 within 2 SD; the realism gate test asserts at least 11 and 17 |
+| P6 | Met. Bit-identical replays; no transcendental call in the ball or movement step; fixtures re-pinned in the switch-on commit |
+| P7 | Reported. Real: 122 m/min in the first 15 minutes, 99 in the last 15, late-to-early ratio 0.91 (0.84–0.99). Simulated: 0.95 within a half, but no decline across the match |
+
+Related change: the scenario script's hand-set goal nudge `script.goalShotLogit` rose from 1.25 to 1.5. With the fitted
+physics, late_comeback succeeded unforced in 8 of 10 seeds (spec §5.1.1 asks 9); at 1.5 it does in 9, and the other
+scripted scenarios stay at 10 of 10. Fixtures pinned to seeds were re-pinned (keeper claims, a lapsed forced outcome,
+the agents' test matches); the stats engine's plausibility test now runs on the committed parameters (the hand-set
+priors' players run about 14.5 km with the fitted movement).
+
+Write-up: `docs/physics-calibration.md`. Realism report with the player movement and work-rate sections:
+`docs/realism/realism-report.md`.
+
 ## Testing
 
 Test-driven throughout; each test is written and seen failing first.
