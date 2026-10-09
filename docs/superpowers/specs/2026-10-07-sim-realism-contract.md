@@ -64,7 +64,8 @@ that moved: `long_bias` 1.75 -> 2.25, `reach_margin` 0.725 -> 0.775, `save_b0` 1
 
 The realism gate (seeds 3000-3015) passes on the 19 scalar statistics against the real targets. All |z| are below 3
 (largest: pass length -2.14, completion -2.10), and drift against the refreshed baseline is 0. The margin is thin: the
-loss is 29.98 against `GATE_LOSS` 30, so almost any engine change will need a recalibration before it passes. The seven
+loss is 29.98 against `GATE_LOSS` 30 (the loss sums all 26 statistics, the seven spatial ones at weight 0.3,
+while the |z| < 3 check covers the 19 scalar ones), so almost any engine change will need a recalibration before it passes. The seven
 spatial targets are not enforced against the real figures. With them enforced the gate fails on defending length
 (z +3.37), while width out of possession (z +2.97) and the other five pass. The gate has not been widened.
 
@@ -77,7 +78,7 @@ their keeper. The change removes the mechanism instead of hiding its outcome.
 
 Related changes: the scenario script's hand-set goal nudge `script.goalShotLogit` rose from 1.0 to 1.25. Scripted
 comebacks had relied on these own goals: without the nudge change, late_comeback succeeded unforced in 7 of 10 seeds,
-and with it in 10. Forced script outcomes now lapse at the end of their window, a runner fix.
+and with it in 10 of seeds 1-10 (28 of 30 on seeds 1-30). Forced script outcomes now lapse at the end of their window, a runner fix.
 
 ### Not met / future work
 
