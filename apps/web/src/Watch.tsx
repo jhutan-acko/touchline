@@ -60,7 +60,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
       <TopBar match={match} board={pane.board} lang={lang} />
       {view === "3d" ? (
-        <Live3D match={match} frame={pane.frame} lang={lang}>
+        <Live3D match={match} frame={pane.frame} playback={pane.playback} lang={lang}>
           <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </Live3D>
       ) : (

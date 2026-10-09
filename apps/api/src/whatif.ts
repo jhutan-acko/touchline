@@ -109,24 +109,41 @@ export const readWhatIfs = (dir: string): Map<string, WhatIfClip> => {
   return new Map(clips.map((c) => [c.event_id, c]))
 }
 
-/** One job in a worker thread: its answer, or its error as a rejection; terminated after `timeoutMs`. */
-const inWorker = <A>(job: WorkerJob, timeoutMs: number): Promise<A> =>
+const live = new Set<Worker>()
+/** Worker threads running now (tests). */
+export const activeWorkers = (): number => live.size
+
+/**
+ * Run a worker script on `data`: its answer, or its error as a rejection. It is terminated after `timeoutMs` or when
+ * `signal` aborts, and a worker that exits without answering is an error at once.
+ */
+export const runWorker = <A>(url: URL, data: unknown, timeoutMs: number, execArgv: string[] = ["--import", "tsx"], signal?: AbortSignal): Promise<A> =>
   new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./whatif-worker.ts", import.meta.url), { workerData: job, execArgv: ["--import", "tsx"] })
-    const timer = setTimeout(() => {
-      void worker.terminate()
-      reject(new Error(`timed out after ${timeoutMs / 1000} s`))
-    }, timeoutMs)
-    worker.once("message", (m: { ok?: A; error?: string }) => {
+    const worker = new Worker(url, { workerData: data, execArgv })
+    live.add(worker)
+    let settled = false
+    const done = (finish: () => void) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
+      signal?.removeEventListener("abort", stop)
       void worker.terminate()
-      m.error === undefined ? resolve(m.ok as A) : reject(new Error(m.error))
-    })
-    worker.once("error", (e) => {
-      clearTimeout(timer)
-      reject(e)
+      finish()
+    }
+    const timer = setTimeout(() => done(() => reject(new Error(`timed out after ${timeoutMs / 1000} s`))), timeoutMs)
+    const stop = () => done(() => reject(new Error("stopped")))
+    if (signal?.aborted) stop()
+    else signal?.addEventListener("abort", stop)
+    worker.once("message", (m: { ok?: A; error?: string }) => done(() => (m.error === undefined ? resolve(m.ok as A) : reject(new Error(m.error)))))
+    worker.once("error", (e) => done(() => reject(e)))
+    worker.once("exit", () => {
+      live.delete(worker)
+      done(() => reject(new Error("the worker exited without an answer")))
     })
   })
+
+const WORKER = new URL("./whatif-worker.ts", import.meta.url)
+const inWorker = <A>(job: WorkerJob, timeoutMs: number, signal?: AbortSignal): Promise<A> => runWorker<A>(WORKER, job, timeoutMs, ["--import", "tsx"], signal)
 
 export type WorkerJob = { readonly kind: "clip"; readonly dir: string; readonly eventId: string } | { readonly kind: "scan"; readonly dir: string; readonly eventIds: ReadonlyArray<string> }
 
@@ -141,7 +158,16 @@ export const scanPasses = async (dir: string, o: { readonly workers?: number; re
   const ids = o.eventIds ?? scanCandidates(dir)
   const n = Math.max(1, Math.min(o.workers ?? SCAN_WORKERS, ids.length))
   const chunks = Array.from({ length: n }, (_, i) => ids.filter((_, j) => j % n === i)).filter((c) => c.length > 0)
-  const parts = await Promise.all(chunks.map((eventIds) => inWorker<{ clips: WhatIfClip[]; examined: number }>({ kind: "scan", dir, eventIds }, 60 * 60_000)))
+  // One failing thread stops the others: the scan has failed either way.
+  const stop = new AbortController()
+  const parts = await Promise.all(
+    chunks.map((eventIds) =>
+      inWorker<{ clips: WhatIfClip[]; examined: number }>({ kind: "scan", dir, eventIds }, 60 * 60_000, stop.signal).catch((e: unknown) => {
+        stop.abort()
+        throw e
+      })
+    )
+  )
   return { clips: parts.flatMap((p) => p.clips).sort((a, b) => a.real[a.pass_index]!.frame - b.real[b.pass_index]!.frame), examined: parts.reduce((a, p) => a + p.examined, 0) }
 }
 
@@ -170,10 +196,30 @@ export interface WhatIfOptions {
   readonly compute?: (dir: string, eventId: string) => Promise<WhatIfClip>
   /** The time limit for a clip computed on request (default WHATIF_TIMEOUT_MS). */
   readonly timeoutMs?: number
+  /** Clips computed at once, at most (default WHATIF_MAX_WORKERS); more requests wait their turn. */
+  readonly maxConcurrent?: number
 }
+
+/** Clips computed on request at once, at most: each is a worker thread rebuilding a match (sessions must keep streaming). */
+export const WHATIF_MAX_WORKERS = Math.max(1, availableParallelism() - 2)
 
 export const makeWhatIf = (library: ReadonlyMap<string, LibraryMatch>, o: WhatIfOptions = {}) => {
   const compute = o.compute ?? ((dir: string, id: string) => computeInWorker(dir, id, o.timeoutMs ?? WHATIF_TIMEOUT_MS))
+  const max = o.maxConcurrent ?? WHATIF_MAX_WORKERS
+  let running = 0
+  const waiting: Array<() => void> = []
+  const limited = <A>(f: () => Promise<A>): Promise<A> =>
+    new Promise<A>((resolve, reject) => {
+      const go = () => {
+        running++
+        f().then(resolve, reject).finally(() => {
+          running--
+          waiting.shift()?.()
+        })
+      }
+      if (running < max) go()
+      else waiting.push(go)
+    })
   const cached = new Map<string, Map<string, WhatIfClip>>()
   const pending = new Map<string, Promise<WhatIfClip>>()
   const events = new Map<string, ReadonlyArray<DomainEvent>>()
@@ -209,7 +255,7 @@ export const makeWhatIf = (library: ReadonlyMap<string, LibraryMatch>, o: WhatIf
         const key = `${matchId}/${eventId}`
         let p = pending.get(key)
         if (!p) {
-          p = compute(m.dir, eventId).finally(() => pending.delete(key))
+          p = limited(() => compute(m.dir, eventId)).finally(() => pending.delete(key))
           pending.set(key, p)
         }
         const got = yield* Effect.tryPromise({ try: () => p!, catch: (err) => unavailable(err instanceof Error ? err.message : String(err)) })

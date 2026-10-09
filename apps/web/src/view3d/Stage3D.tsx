@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
-import { useEffect, useRef, useState, type MouseEvent } from "react"
+import { Component, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react"
 import type { MatchInfo } from "@touchline/rpc"
 import { loadAssets } from "./assets.js"
 import type { CameraKind } from "./cameras.js"
@@ -89,6 +89,20 @@ const Scene = ({ props, vps, onReady, onFail, pickRef }: { props: Stage3DProps; 
   return null
 }
 
+/** Catches the canvas failing to start (no WebGL, a lost GPU), so the page keeps working and says so. */
+class CanvasBoundary extends Component<{ children: ReactNode; onError: () => void }, { failed: boolean }> {
+  override state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  override componentDidCatch() {
+    this.props.onError()
+  }
+  override render() {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
 /**
  * The 3D view (Plan 7): one WebGL canvas holding every camera of the layout, each viewport with its caption.
  * React Three Fiber hosts the canvas, its size and pixel ratio, and the frame loop.
@@ -113,9 +127,11 @@ export const Stage3D = (props: Stage3DProps) => {
   }
   return (
     <div ref={box} className="relative h-full w-full overflow-hidden rounded-lg bg-black" onClick={click}>
-      <Canvas dpr={[1, 2]} gl={{ antialias: false, powerPreference: "high-performance" }} shadows frameloop="always">
-        <Scene props={props} vps={vps} onReady={() => setState("ready")} onFail={() => setState("failed")} pickRef={pick} />
-      </Canvas>
+      <CanvasBoundary onError={() => setState("failed")}>
+        <Canvas dpr={[1, 2]} gl={{ antialias: false, powerPreference: "high-performance" }} shadows frameloop="always">
+          <Scene props={props} vps={vps} onReady={() => setState("ready")} onFail={() => setState("failed")} pickRef={pick} />
+        </Canvas>
+      </CanvasBoundary>
       {vps.map((v) => (
         <div key={v.key} className="pointer-events-none absolute border border-white/20" style={{ left: v.x, top: v.y, width: v.w, height: v.h }}>
           <span className={`absolute left-2 top-2 whitespace-nowrap rounded bg-slate-950/80 px-2 py-0.5 font-semibold uppercase tracking-wide ${v.inset ? "text-xs" : "text-sm"}`}>{props.label(v)}</span>

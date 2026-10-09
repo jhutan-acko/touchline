@@ -7,7 +7,7 @@ import { decodeMomentTrace, type DomainEvent, type MomentTrace } from "@touchlin
 import { makeEvidence } from "../src/evidence.js"
 import { readMatch, type LibraryMatch } from "../src/library.js"
 import { betterMomentId } from "../src/betterpass.js"
-import { betterOptionEvents, computeClip, computeInWorker, makeWhatIf, readWhatIfs, scanCandidates, scanChunk, scanPasses, SCAN_MIN_OPTIONS, WHATIF_FILE, WHATIF_SEEDS, writeWhatIfs } from "../src/whatif.js"
+import { activeWorkers, betterOptionEvents, computeClip, computeInWorker, makeWhatIf, readWhatIfs, runWorker, scanCandidates, scanChunk, scanPasses, SCAN_MIN_OPTIONS, WHATIF_FILE, WHATIF_SEEDS, writeWhatIfs } from "../src/whatif.js"
 import { league, makeLibrary, MATCH_ID, type TestLibrary } from "./fixture.js"
 
 let lib: TestLibrary
@@ -177,4 +177,36 @@ describe("better-pass moments", () => {
     expect(e.what_if).toEqual({ event_id: pass.id, verdict: "better_option_found" })
     expect(e.model).toBeNull()
   }, 60_000)
+})
+
+describe("what-if workers", () => {
+  it("fail at once when a worker exits without answering, instead of waiting out the time limit", async () => {
+    const t0 = Date.now()
+    await expect(runWorker(new URL("./workers/silent.mjs", import.meta.url), {}, 60_000, [])).rejects.toThrow(/exited without an answer/)
+    expect(Date.now() - t0).toBeLessThan(10_000)
+  })
+
+  it("stop every thread of a scan when one of them fails", async () => {
+    const some = scanCandidates(lib.run).slice(200, 206)
+    await expect(scanPasses(lib.run, { workers: 3, eventIds: ["nope", ...some] })).rejects.toThrow(/nope/)
+    for (let i = 0; i < 50 && activeWorkers() > 0; i++) await new Promise((r) => setTimeout(r, 100))
+    expect(activeWorkers()).toBe(0)
+  }, 120_000)
+
+  it("compute at most a few clips at once, however many viewers ask", async () => {
+    const passes = readFileSync(join(lib.run, "domain.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as DomainEvent).filter((e) => e.type === "pass").slice(0, 4)
+    let running = 0
+    let most = 0
+    const compute = async (_dir: string, id: string) => {
+      most = Math.max(most, ++running)
+      await new Promise((r) => setTimeout(r, 50))
+      running--
+      return { ...computed, event_id: id }
+    }
+    mkdirSync(join(lib.run, "agents"), { recursive: true })
+    writeFileSync(join(lib.run, "agents", WHATIF_FILE), "")
+    const w = makeWhatIf(new Map([[MATCH_ID, readMatch(lib.run, league)]]), { compute, maxConcurrent: 2 })
+    await Promise.all(passes.map((p) => Effect.runPromise(w.clip(MATCH_ID, p.id, 10_000_000))))
+    expect(most).toBe(2)
+  })
 })

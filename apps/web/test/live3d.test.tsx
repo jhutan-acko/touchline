@@ -13,7 +13,7 @@ import { fakeClient } from "./fake-client.js"
 vi.mock("../src/view3d/webgl.js", () => ({ hasWebGL: vi.fn(() => true) }))
 vi.mock("../src/view3d/Stage3D.js", () => ({
   Stage3D: (p: Stage3DProps) => (
-    <div data-testid="stage" data-camera={p.camera} data-layout={p.layout} data-mode={p.mode} data-followed={p.followed ?? ""}>
+    <div data-testid="stage" data-camera={p.camera} data-layout={p.layout} data-mode={p.mode} data-followed={p.followed ?? ""} data-rate={p.plays.real.rate()}>
       <button type="button" onClick={() => p.onPick?.("p-lar-09")}>pick the striker</button>
       <span data-testid="caption">{p.label({ key: "main", x: 0, y: 0, w: 100, h: 100, world: "real", camera: p.camera, inset: false })}</span>
     </div>
@@ -104,6 +104,27 @@ describe("the 3D view", () => {
     act(() => client.push({ kind: "frame", frame: frame(2, [9, 0], false) }))
     expect(stage().camera).toBe("broadcast")
     expect(screen.getByRole("status").textContent).toMatch(/#9 Feseo Wylford left the pitch/)
+  })
+
+  it("animates the bodies at the session's speed, and not at all while it is paused, so feet do not slide", async () => {
+    const client = await watch3d()
+    act(() => client.push({ kind: "playback", playback: { state: "playing", frame: 1, speed: 4, live: false } }))
+    expect(stage().rate).toBe("4")
+    act(() => client.push({ kind: "playback", playback: { state: "paused", frame: 1, speed: 4, live: false } }))
+    expect(stage().rate).toBe("0")
+  })
+
+  it("follows someone still on the pitch after the followed player leaves, and says so whatever the camera", async () => {
+    const client = await watch3d()
+    await userEvent.click(within(screen.getByRole("group", { name: "Layout" })).getByRole("button", { name: "Grid 2×2" }))
+    await userEvent.click(within(screen.getByRole("group", { name: "Camera" })).getByRole("button", { name: "Tactical" }))
+    act(() => client.push({ kind: "frame", frame: frame(1, [9, 0]) }))
+    expect(stage().followed).toBe("p-lar-09")
+    act(() => client.push({ kind: "frame", frame: frame(2, [9, 0], false) }))
+    expect(screen.getByRole("status").textContent).toMatch(/#9 Feseo Wylford left the pitch/)
+    expect(stage().camera).toBe("tactical")
+    expect(stage().followed).toBe("p-nor-01")
+    expect((screen.getByLabelText("Following") as HTMLSelectElement).value).toBe("p-nor-01")
   })
 
   it("shows both demo profiles in 3D", async () => {

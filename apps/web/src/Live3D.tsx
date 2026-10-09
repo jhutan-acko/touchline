@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import type { MatchInfo, PitchFrame } from "@touchline/rpc"
+import type { MatchInfo, PitchFrame, Playback } from "@touchline/rpc"
 import { t, type Key, type Lang } from "./i18n.js"
 import { CAMERAS, type CameraKind } from "./view3d/cameras.js"
 import { findKicks, type Kick } from "./view3d/kick.js"
@@ -35,7 +35,7 @@ export const Choice = <A extends string>({ label, options, value, onChange, name
  * The live match in 3D (Plan 7): the session's frames played a little behind on the 3D stage, with the camera, the
  * layout and the player followed chosen here (click a player, keys 1–4 and [ ]). `children` (the cue overlays) go on top.
  */
-export const Live3D = ({ match, frame, lang, children }: { match: MatchInfo; frame: PitchFrame | null; lang: Lang; children?: ReactNode }) => {
+export const Live3D = ({ match, frame, playback = null, lang, children }: { match: MatchInfo; frame: PitchFrame | null; playback?: Playback | null; lang: Lang; children?: ReactNode }) => {
   const [camera, setCamera] = useState<CameraKind>("follow")
   const [layout, setLayout] = useState<Layout>("pip")
   const [followed, setFollowed] = useState<string | null>(null)
@@ -51,10 +51,12 @@ export const Live3D = ({ match, frame, lang, children }: { match: MatchInfo; fra
     if (!frame) return
     buffer.push(frame, performance.now())
     if (followed === null) setFollowed(nearestBall(frame))
-    else if ((camera === "follow" || camera === "fp") && !onPitch(frame).includes(followed)) {
-      // Substituted or sent off: the broadcast camera takes over, and the viewer is told why.
+    else if (!onPitch(frame).includes(followed)) {
+      // Substituted or sent off: the viewer is told why, the player nearest the ball is followed instead, and a camera
+      // that was on the player hands over to the broadcast camera.
       setNotice(`${who(followed)} ${t(lang, "leftPitch")}`)
-      setCamera("broadcast")
+      setFollowed(nearestBall(frame))
+      if (camera === "follow" || camera === "fp") setCamera("broadcast")
     }
   }, [frame])
   const ids = onPitch(frame)
@@ -74,6 +76,9 @@ export const Live3D = ({ match, frame, lang, children }: { match: MatchInfo; fra
     window.addEventListener("keydown", key)
     return () => window.removeEventListener("keydown", key)
   })
+  // Bodies animate at the session's speed (still while it is paused), so their feet keep pace with the positions.
+  const speed = useRef(1)
+  speed.current = playback ? (playback.state === "playing" ? playback.speed : 0) : 1
   const play: Play = useMemo(
     () => ({
       sample: (now) => buffer.sample(now),
@@ -83,7 +88,7 @@ export const Live3D = ({ match, frame, lang, children }: { match: MatchInfo; fra
         if (last !== kicks.current.upTo) kicks.current = { upTo: last, list: findKicks(frames, match.fps) }
         return kicks.current.list
       },
-      rate: () => 1
+      rate: () => speed.current
     }),
     [buffer, match.fps]
   )

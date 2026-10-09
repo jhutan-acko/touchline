@@ -24,6 +24,13 @@ export const setUpRenderer = (gl: THREE.WebGLRenderer): void => {
   gl.setScissorTest(true)
 }
 
+/** Free a chain's GPU memory: the composer's own targets and each pass's (ambient occlusion and bloom hold several). */
+export const disposeChain = (c: { readonly passes: ReadonlyArray<{ dispose?: () => void }>; dispose(): void } | null | undefined): void => {
+  if (!c) return
+  for (const p of c.passes) p.dispose?.()
+  c.dispose()
+}
+
 interface View {
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
   rig: Rig | null
@@ -52,7 +59,7 @@ export class MultiView {
     let x = this.views.get(v.key)
     const ortho = v.camera === "tactical"
     if (!x || (x.camera instanceof THREE.OrthographicCamera) !== ortho) {
-      x?.composer?.dispose()
+      disposeChain(x?.composer)
       const camera = ortho ? new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300) : new THREE.PerspectiveCamera(50, 1, 0.05, 400)
       if (ortho) camera.layers.enable(MAP_LAYER)
       x = { camera, rig: null, composer: null, scene: null, w: 0, h: 0 }
@@ -80,7 +87,7 @@ export class MultiView {
     const w = Math.max(1, Math.round(v.w))
     const h = Math.max(1, Math.round(v.h))
     if (!view.composer || view.scene !== scene) {
-      view.composer?.dispose()
+      disposeChain(view.composer)
       const target = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4 })
       const c = new EffectComposer(this.gl, target)
       c.addPass(new RenderPass(scene, view.camera))
@@ -124,7 +131,7 @@ export class MultiView {
     // Views no longer on screen give back their GPU memory.
     for (const [key, view] of this.views) {
       if (vps.some((v) => v.key === key)) continue
-      view.composer?.dispose()
+      disposeChain(view.composer)
       this.views.delete(key)
     }
     this.last = vps
@@ -144,7 +151,7 @@ export class MultiView {
   }
 
   dispose(): void {
-    for (const v of this.views.values()) v.composer?.dispose()
+    for (const v of this.views.values()) disposeChain(v.composer)
     this.views.clear()
   }
 }
