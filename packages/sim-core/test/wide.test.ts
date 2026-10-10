@@ -18,10 +18,10 @@ const play = (cfg: MatchConfig) => {
 const run = (seed: number) => ({ cfg: makeConfig(seed, { params }), events: play(makeConfig(seed, { params })) })
 const runs = Array.from({ length: 16 }, (_, i) => i + 1).map(run)
 // Keepers claim far less often than before support, marking and shielding (46 claims and 23 punches over seeds 1-16 on the
-// pre-plan engine, 5 and 4 now with the fitted physics): crosses are blocked more or land short of the box, a known
-// realism regression. To keep a real check on claims, these are the seeds of 1-40 on which a keeper claims (14 claims,
-// 3 punches in 13 matches).
-const CLAIM_SEEDS = [1, 5, 9, 12, 13, 18, 21, 23, 24, 25, 33, 36, 37]
+// pre-plan engine, 5 and 4 with the fitted physics): crosses are blocked more or land short of the box, a known
+// realism regression. To keep a real check on claims, these are the seeds of 1-40 on which a keeper claims (13 claims,
+// 7 punches over all 40 since carriers stopped standing on the ball, 2026-10-10; 14 and 3 before).
+const CLAIM_SEEDS = [2, 7, 9, 10, 12, 13, 17, 19, 35, 36]
 const claimRuns = CLAIM_SEEDS.map((seed) => runs[seed - 1] ?? run(seed))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
@@ -41,7 +41,7 @@ describe("high balls into the box", () => {
       }
     }
     // At least one claim per match on these seeds.
-    expect(claims).toBeGreaterThanOrEqual(13)
+    expect(claims).toBeGreaterThanOrEqual(CLAIM_SEEDS.length)
     expect(punches).toBeGreaterThanOrEqual(2)
   })
   it("a claim gives the keeper the ball; a punch leaves it loose", () => {
