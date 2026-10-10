@@ -35,7 +35,7 @@ export interface FakeClient extends TouchlineClient {
   pushGraphics(t: Tick): void
 }
 
-export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip>; decisions?: ReadonlyArray<Decision> } = {}): FakeClient => {
+export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip>; decisions?: ReadonlyArray<Decision>; info?: MatchInfo } = {}): FakeClient => {
   const watchers: FakeClient["watchers"] = []
   const studios: FakeClient["studios"] = []
   const outputs: FakeClient["outputs"] = []
@@ -77,7 +77,7 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
     startSession: async (id, s) => {
       calls.push(`start ${id} x${s.speed} live=${s.live}`)
       playback = { ...playback, speed: s.speed, live: s.live }
-      return { session_id: "s1", match: INFO }
+      return { session_id: "s1", match: o.info ?? INFO }
     },
     watch: (_id, segment, onTick, onEnd) => {
       watched++

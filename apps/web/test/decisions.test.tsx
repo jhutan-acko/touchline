@@ -6,7 +6,7 @@ import { App } from "../src/App.js"
 import { MatchList } from "../src/MatchList.js"
 import { minuteLabel } from "../src/Decisions.js"
 import { DECISION_CARD_MS } from "../src/Watch.js"
-import { fakeClient, MATCH } from "./fake-client.js"
+import { fakeClient, INFO, MATCH } from "./fake-client.js"
 
 const estimate = (mean: number, se: number) => ({ mean, se })
 const DECISION: Decision = {
@@ -25,8 +25,8 @@ const cue = (d: Decision): Cue => ({
   segment: { mode: "casual", lang: "en", club: null }, text: { headline: "Northwick Mariners: Press higher", body: d.reason }, data: {}, evidence: [`decision-${d.tick}-${d.side}`], verified: true
 })
 
-const watching = async (decisions: ReadonlyArray<Decision> = [DECISION]) => {
-  const client = fakeClient({ decisions })
+const watching = async (decisions: ReadonlyArray<Decision> = [DECISION], managed = false) => {
+  const client = fakeClient({ decisions, ...(managed ? { info: { ...INFO, managers: { home: "agent", away: "agent" } } } : {}) })
   const user = userEvent.setup(vi.isFakeTimers() ? { advanceTimers: vi.advanceTimersByTime } : {})
   render(<App client={client} />)
   await user.click(await screen.findByRole("button", { name: "Watch" }))
@@ -77,6 +77,16 @@ describe("a manager's decision", () => {
     const { client } = await watching([fell])
     act(() => client.push({ kind: "cue", cue: cue(fell) }))
     expect(await screen.findByText("The manager agent could not decide here; this is its fallback.")).toBeTruthy()
+  })
+})
+
+describe("watching a managed match from a later minute", () => {
+  it("shows the decisions already reached on the strip at once, before any new one", async () => {
+    const { client } = await watching([DECISION], true)
+    const strip = await screen.findByRole("navigation", { name: "Manager decisions" })
+    expect(await within(strip).findByRole("button", { name: "60' NOR" })).toBeTruthy()
+    expect(client.calls).toContain("decisions s1")
+    expect(screen.queryByRole("dialog")).toBeNull()
   })
 })
 

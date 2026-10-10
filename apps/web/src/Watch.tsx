@@ -127,6 +127,10 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
       const d = ds.find((x) => decisionKey(x) === key)
       if (d) setDecision({ tick: d.tick, auto })
     }, () => {}) // a lost session shows on the pane
+  // A managed match watched from a later minute: the decisions already reached go on the strip at once.
+  useEffect(() => {
+    if (match.managers) client.decisions(sessionId).then(setDecisions, () => {})
+  }, [sessionId])
   useEffect(() => {
     if (!decision?.auto) return
     const timer = setTimeout(() => setDecision(null), DECISION_CARD_MS)
