@@ -73,6 +73,8 @@ export interface MatchConfig {
   readonly dt: number
   /** Scenario script whose nudges apply inside their windows (none when absent). */
   readonly script?: Script
+  /** Teams whose manager decides their substitutions (orders.ts); they make no automatic ones. */
+  readonly managed?: ReadonlyArray<Side>
 }
 
 export type Intent =
@@ -330,6 +332,8 @@ export interface MatchState {
   readonly eventSeq: number
   /** A pass to force at the player's next decision (what-if forks only; absent in played matches). */
   readonly override?: PassOverride
+  /** Substitutions a manager ordered, made at the start of the next tick (orders.ts). */
+  readonly subOrders?: Readonly<Partial<Record<Side, ReadonlyArray<{ readonly off: string; readonly on: string }>>>>
 }
 
 export interface StepResult {

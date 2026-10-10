@@ -26,6 +26,7 @@ import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separatio
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
+import { MAX_SUBS, MAX_SUB_WINDOWS, type SubOrder } from "./orders.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
 import { countGoal, inWindow, modsFor, outstandingForces, type Mods, type ScenarioEffect, type ScriptEntry } from "./script.js"
 import { parryBall, planShot, type ShotMods } from "./shot.js"
@@ -55,11 +56,11 @@ import {
 
 const HALF_TIME_MS = 15 * 60 * 1000
 const OUTCOME_IN_ATTRS: ReadonlySet<string> = new Set(["take_on", "tackle"])
-/** Laws of the game: five substitutions, made in at most three stoppages during play (half time does not count). */
-const MAX_SUBS = 5
-const MAX_SUB_WINDOWS = 3
 
 const teamOf = (cfg: MatchConfig, side: Side): TeamSetup => (side === "home" ? cfg.home : cfg.away)
+
+/** A team whose manager decides its substitutions (no automatic ones). */
+const isManaged = (cfg: MatchConfig, side: Side): boolean => cfg.managed?.includes(side) ?? false
 
 const samplePeriodTicks = (cfg: MatchConfig, rng: Rng): number => {
   const [lo, hi] = cfg.params.timing.addedTimeMinS
@@ -165,6 +166,9 @@ class Work {
   forced: ScriptEntry[]
   scriptGoals: number[]
   override: PassOverride | null
+  subOrders: Partial<Record<Side, ReadonlyArray<SubOrder>>>
+  /** The step after the half-time break's pause (the state was the second-half kickoff, before play). */
+  readonly halfTimeBreak: boolean
   rng: Record<Concern, Rng>
   seq: number
   events: DomainEvent[] = []
@@ -193,6 +197,8 @@ class Work {
     this.scriptGoals = [...s.scriptGoals]
     // A what-if override lives for its tick only: if the player has no decision to make then, it lapses.
     this.override = s.override && this.tick <= s.override.untilTick ? s.override : null
+    this.subOrders = { ...s.subOrders }
+    this.halfTimeBreak = s.period === "second_half" && s.periodTick === 0
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
@@ -300,7 +306,8 @@ class Work {
       scriptGoals: this.scriptGoals,
       rng: out,
       eventSeq: this.seq,
-      ...(this.override ? { override: this.override } : {})
+      ...(this.override ? { override: this.override } : {}),
+      ...(Object.values(this.subOrders).some((q) => q.length > 0) ? { subOrders: this.subOrders } : {})
     }
   }
 }
@@ -336,6 +343,19 @@ const pickIncoming = (bench: ReadonlyArray<PlayerSetup>, off: PlayerState): Play
   bench.find((b) => b.role === off.role) ?? bench.find((b) => LINE[b.role] === LINE[off.role]) ?? bench[0] ?? null
 
 /**
+ * `on` takes `off`'s formation slot and role, fresh, entering at the halfway line during play or where `off` stood at
+ * half time.
+ */
+const bringOn = (w: Work, off: PlayerState, on: PlayerSetup, halfTime: boolean): void => {
+  const entry = halfTime ? off.pos : { x: 0, y: -PITCH.halfW }
+  w.setPlayerAt(off.id, {
+    id: on.id, side: off.side, role: off.role, slot: off.slot, jersey: on.jersey, attrs: on.attrs, foot: on.preferredFoot ?? "right",
+    pos: entry, vel: { x: 0, y: 0 }, intent: { kind: "shape" }, intentUntil: 0, energy: 1, yellow: 0, sentOff: false
+  })
+  if (w.lastTouch?.playerId === off.id) w.lastTouch = { playerId: on.id, side: off.side }
+}
+
+/**
  * Replace up to `n` tired (or booked) outfield players. The player coming on takes the same formation slot and role,
  * fresh, entering at `entry` (the halfway line during play, the kickoff position at half time).
  */
@@ -357,12 +377,7 @@ const makeSubs = (w: Work, side: Side, n: number, halfTime: boolean): number => 
     if (!on) break
     bench = bench.filter((b) => b.id !== on.id)
     used.push(on.id)
-    const entry = halfTime ? off.pos : { x: 0, y: -PITCH.halfW }
-    w.setPlayerAt(off.id, {
-      id: on.id, side, role: off.role, slot: off.slot, jersey: on.jersey, attrs: on.attrs, foot: on.preferredFoot ?? "right",
-      pos: entry, vel: { x: 0, y: 0 }, intent: { kind: "shape" }, intentUntil: 0, energy: 1, yellow: 0, sentOff: false
-    })
-    if (w.lastTouch?.playerId === off.id) w.lastTouch = { playerId: on.id, side }
+    bringOn(w, off, on, halfTime)
     const reason = off.yellow > 0 && 1 - off.energy < 0.5 ? "booked" : "fatigue"
     w.emit(w.pending("substitution", off, off.pos, { player_off: off.id, player_on: on.id, reason, half_time: halfTime }))
     made++
@@ -373,6 +388,7 @@ const makeSubs = (w: Work, side: Side, n: number, halfTime: boolean): number => 
 
 /** At a stoppage in the second half, make every planned change that is due, as one window. */
 const subWindow = (w: Work, side: Side): void => {
+  if (isManaged(w.cfg, side)) return
   const st = w.subs[side]
   if (st.windows >= MAX_SUB_WINDOWS || st.made >= MAX_SUBS) return
   const due = st.plan.filter((x) => x.minute <= w.minute())
@@ -380,6 +396,28 @@ const subWindow = (w: Work, side: Side): void => {
   w.subs[side] = { ...st, plan: st.plan.slice(due.length) }
   const made = makeSubs(w, side, due.reduce((a, x) => a + x.players, 0), false)
   if (made > 0) w.subs[side] = { ...w.subs[side], windows: w.subs[side].windows + 1 }
+}
+
+/** Make the substitutions the team's manager ordered (orders.ts): one window during play, none at half time. */
+const orderedSubs = (w: Work, side: Side): void => {
+  const orders = w.subOrders[side] ?? []
+  if (orders.length === 0) return
+  w.subOrders = { ...w.subOrders, [side]: [] }
+  const st = w.subs[side]
+  const bench = teamOf(w.cfg, side).bench ?? []
+  const used = [...st.used]
+  let made = 0
+  for (const o of orders) {
+    const off = w.players.find((p) => p.id === o.off && p.side === side && !p.sentOff)
+    const on = bench.find((b) => b.id === o.on)
+    // Checked when ordered; a player sent off since, or the limit reached, cancels the change.
+    if (!off || !on || used.includes(on.id) || st.made + made >= MAX_SUBS) continue
+    used.push(on.id)
+    bringOn(w, off, on, w.halfTimeBreak)
+    w.emit(w.pending("substitution", off, off.pos, { player_off: off.id, player_on: on.id, reason: "manager", half_time: w.halfTimeBreak }))
+    made++
+  }
+  w.subs[side] = { ...st, made: st.made + made, used, windows: st.windows + (made > 0 && !w.halfTimeBreak ? 1 : 0) }
 }
 
 const takerFor = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): PlayerState => {
@@ -1164,8 +1202,10 @@ const endPeriod = (w: Work): StepResult => {
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
   w.emit(w.pending("period_start", null, null, { period: "second_half" }))
-  for (const side of ["home", "away"] as const) if ((teamOf(w.cfg, side).bench ?? []).length > 0 && w.rng.bench.chance(w.p.substitutions.halfTimeChance)) makeSubs(w, side, 1, true)
-  handleRestart(w)
+  for (const side of ["home", "away"] as const)
+    if ((teamOf(w.cfg, side).bench ?? []).length > 0 && w.rng.bench.chance(w.p.substitutions.halfTimeChance) && !isManaged(w.cfg, side)) makeSubs(w, side, 1, true)
+  // With a manager the kickoff waits one tick: the state at the break is when they decide (Plan 4b).
+  if (!w.cfg.managed?.length) handleRestart(w)
   return { state: w.toState(), frame: frameOf(w), events: w.events }
 }
 
@@ -1184,7 +1224,10 @@ export const step = (s: MatchState): StepResult => {
   // The hard stop a minute later still lets a ball in the air land (a flight lasts at most MAX_FLIGHT_S).
   const hardStop = w.periodTicks + Math.round(60 / w.dt)
   if (w.periodTick >= hardStop && (w.possession.kind !== "in_flight" || w.periodTick >= hardStop + Math.round(MAX_FLIGHT_S / w.dt))) return endPeriod(w)
-  if (w.phase.kind === "restart") handleRestart(w)
+  if (w.phase.kind === "restart") {
+    for (const side of ["home", "away"] as const) orderedSubs(w, side)
+    handleRestart(w)
+  }
   if (w.phase.kind === "open_play") ownedTick(w)
   moveAll(w)
   ballTick(w)

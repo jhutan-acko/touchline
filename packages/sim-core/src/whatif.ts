@@ -5,6 +5,7 @@
  */
 import { buildCandidates, nearestOpponent } from "./decide.js"
 import { attackX, clampToPitch, dist, type Side, type Vec2 } from "./geometry.js"
+import { applyOrders, OrderError, STYLE_RANGES, type ManagerOrder } from "./orders.js"
 import { substream } from "./rng.js"
 import { runScript } from "./runner.js"
 import { initMatch, isFinished, step } from "./step.js"
@@ -18,19 +19,11 @@ export type Intervention =
   | { readonly kind: "move_player"; readonly playerId: string; readonly to: Vec2 }
   /** The team plays with these style settings from now on. */
   | { readonly kind: "tactic"; readonly side: Side; readonly style: Partial<TeamStyle> }
+  /** A manager's orders for the team (style changes and substitutions; orders.ts). */
+  | { readonly kind: "orders"; readonly side: Side; readonly orders: ReadonlyArray<ManagerOrder> }
 
 /** An intervention that cannot be applied to the state (wrong player, unknown id, style out of range). */
 export class WhatIfError extends Error {}
-
-const STYLE_RANGES: Readonly<Record<keyof Omit<TeamStyle, "archetype">, readonly [number, number]>> = {
-  pressIntensity: [0, 1],
-  lineHeight: [-1, 1],
-  compactness: [0, 1],
-  tempo: [0, 1],
-  longBallBias: [-1, 1],
-  crossBias: [-1, 1],
-  riskTolerance: [0, 1]
-}
 
 /**
  * The k-th fork of a state: fresh random sub-streams for every concern, distinct from the match's and from scenario
@@ -93,6 +86,12 @@ export const applyIntervention = (s: MatchState, iv: Intervention): MatchState =
       const team = s.config[iv.side]
       return { ...s, config: { ...s.config, [iv.side]: { ...team, style: { ...team.style, ...iv.style } } } }
     }
+    case "orders":
+      try {
+        return applyOrders(s, iv.side, iv.orders)
+      } catch (e) {
+        throw e instanceof OrderError ? new WhatIfError(e.message) : e
+      }
   }
 }
 
