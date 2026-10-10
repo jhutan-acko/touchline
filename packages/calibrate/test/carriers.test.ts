@@ -5,7 +5,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import type { League } from "@touchline/league"
-import { DEFAULT_PARAMS } from "@touchline/sim-core"
+import { DEFAULT_PARAMS, paramsFromJson } from "@touchline/sim-core"
 import { MIN_S, simCarrierHalves, stillCarriers, type CarrierHalf } from "../src/carriers.js"
 import { runMatch } from "../src/evaluate.js"
 import { rolesOf } from "../src/physics.js"
@@ -50,4 +50,19 @@ describe("frozen ball carriers", () => {
     expect(ts).toEqual(py)
     expect(ts.GK.count + ts.outfield.count).toBeGreaterThan(0)
   }, 120_000)
+})
+
+describe("the engine's ball carriers", () => {
+  /** Real football (data/params/still-carriers.json): outfielders freeze on the ball 0–1 times a match, keepers stand still with it for at most 15.8 s. */
+  const real = JSON.parse(readFileSync(join(root, "data/params/still-carriers.json"), "utf8")) as { real: Record<"GK" | "outfield", Record<"count" | "seconds", { max: number }>> }
+  const params = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
+
+  it("keep the ball moving about as rarely still as real players do: never frozen on it for seconds at a time", () => {
+    for (const [seed, home, away] of [[11, 0, 3], [12, 4, 6]] as const) {
+      const cfg = { matchId: `carriers-${seed}`, seed, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[home]!, away: league.clubs[away]!, params, dt: 0.1 }
+      const s = stillCarriers(simCarrierHalves(runMatch(cfg).frames, rolesOf(cfg)))
+      expect(s.outfield.count, `seed ${seed}: outfield stretches`).toBeLessThanOrEqual(real.real.outfield.count.max + 1)
+      expect(s.GK.seconds, `seed ${seed}: keeper seconds`).toBeLessThanOrEqual(real.real.GK.seconds.max)
+    }
+  }, 300_000)
 })

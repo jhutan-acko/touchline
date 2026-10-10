@@ -11,7 +11,7 @@ const play = (cfg: MatchConfig) => {
 const opp = (x: number, y: number): PlayerState => ({ ...kickoffPlayersFor(makeConfig(1))[11]!, id: `o-${x}-${y}`, pos: { x, y } })
 const withParams = (over: (p: Params) => Params) => makeConfig(5, { params: over(DEFAULT_PARAMS) })
 /** The behaviours are on by default; "off" is the engine as it was before them. */
-const behavioursOff = (p: Params): Params => ({ ...p, support: { ...p.support, count: 0 }, marking: { ...p.marking, weight: 0 }, carry: { ...p.carry, avoidM: 0, shieldM: 0 } })
+const behavioursOff = (p: Params): Params => ({ ...p, support: { ...p.support, count: 0 }, marking: { ...p.marking, weight: 0 }, carry: { ...p.carry, avoidM: 0, shieldM: 0, holdSpeed: 0 } })
 
 describe("support play", () => {
   it("offers the open side, away from a cluster of opponents", () => {

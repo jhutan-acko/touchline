@@ -17,11 +17,13 @@ const play = () => {
   return { events, states }
 }
 const match = play()
-/** The first state from `from` on where a player is on the ball with at least two pass options. */
+/** The first state from `from` on where an outfielder is on the ball with at least two pass options (keepers wait out their hold before any decision). */
 const onBall = (from: number): MatchState => {
   for (let t = from; ; t++) {
     const s = match.states.get(t)!
-    if (s.possession.kind === "owned" && passOptions(s).length >= 2) return s
+    if (s.possession.kind !== "owned") continue
+    const owner = s.players.find((p) => p.id === (s.possession as { playerId: string }).playerId)!
+    if (owner.role !== "GK" && passOptions(s).length >= 2) return s
   }
 }
 
@@ -47,7 +49,8 @@ describe("states and forks", () => {
   it("drop forced outcomes whose window has ended, so a state taken inside a forced window plays on like the main run", () => {
     // A goal forced for the home side in minutes 0-2 that never came: from a state inside the window, it must lapse at minute 2.
     const script: Script = { name: "t", entries: [{ window: [0, 2], team: "home", effect: "goal", count: 9 }] }
-    let s: MatchState = { ...initMatch(makeConfig(2, { script })), forced: [script.entries[0]!] }
+    // Seed 1: no goal in the first two minutes (a goal would use the entry up before its window ends).
+    let s: MatchState = { ...initMatch(makeConfig(1, { script })), forced: [script.entries[0]!] }
     const minute = (st: MatchState) => (st.period === "first_half" ? 0 : 45) + (st.periodTick * st.config.dt) / 60
     while (minute(s) < 2) s = step(s).state
     expect(s.forced.length).toBeGreaterThan(0)

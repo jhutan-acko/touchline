@@ -38,6 +38,8 @@ export interface DecisionInput {
   readonly restart: RestartKind | null
   /** Additive logit bias from scenario scripts. */
   readonly scriptBias: Partial<Record<Action, number>>
+  /** Seconds the player has had the ball (0 when not given). */
+  readonly onBallS?: number
 }
 
 export interface Decision {
@@ -239,7 +241,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (a === "hold") l += sw * (0.4 * (1 - style.tempo) - 0.2)
     if (a === "clear") l += pw * 1.5 * pressure
     if (a === "long_pass") l += pw * 0.6 * pressure
-    if (a === "hold") l -= pw * 1.0 * pressure
+    if (a === "hold") l -= pw * 1.0 * pressure + p.actions.holdDecayPerS * (input.onBallS ?? 0)
     if (a === "carry") l -= pw * 0.6 * pressure
     if (a === "take_on") l += pw * 0.3 * pressure
     if (a === "short_pass") l -= pw * 0.2 * pressure
