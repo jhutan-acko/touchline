@@ -56,7 +56,8 @@ export const handlersLayer = (o: ApiOptions) =>
         StudioWatch: ({ session_id, segment }) => studio.watch(sessions, session_id, segment),
         StudioAct: ({ session_id, moment_id, action }) => sessions.get(session_id).pipe(Effect.flatMap((s) => studio.act(s, moment_id, action))),
         WatchGraphics: ({ session_id, segment }) => sessions.graphics(session_id, segment),
-        GetOps: ({ session_id }) => sessions.get(session_id).pipe(Effect.flatMap((s) => Effect.map(Ref.get(s.playback), (p) => ops.report(s, p.frame))))
+        GetOps: ({ session_id }) => sessions.get(session_id).pipe(Effect.flatMap((s) => Effect.map(Ref.get(s.playback), (p) => ops.report(s, p.frame)))),
+        GetDecisions: ({ session_id }) => view(session_id).pipe(Effect.map(({ s, v }) => s.match.decisions.filter((d) => d.tick <= v.frame)))
       })
     })
   )

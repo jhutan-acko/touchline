@@ -1,7 +1,7 @@
 import type { MatchSummary } from "@touchline/rpc"
 import { t, type Lang } from "./i18n.js"
 
-/** The library: one card per match, with its teams in their kit colours and whether it has agent cues. */
+/** The library: one card per match, with its teams in their kit colours, whether it has agent cues, and its managers. */
 export const MatchList = ({ matches, lang, onWatch }: { matches: ReadonlyArray<MatchSummary>; lang: Lang; onWatch: (m: MatchSummary) => void }) => {
   if (!matches.length) return <p className="text-slate-400">{t(lang, "noMatches")}</p>
   return (
@@ -14,7 +14,7 @@ export const MatchList = ({ matches, lang, onWatch }: { matches: ReadonlyArray<M
             <span className="flex items-center gap-2">{m.away.name}<span className="inline-block h-3 w-3 rounded-full" style={{ background: m.away.kit.primary }} /></span>
           </div>
           <div className="mt-2 flex items-center justify-between text-sm text-slate-400">
-            <span>{m.scenario ?? "—"} · {m.model ?? t(lang, "stats")}</span>
+            <span>{m.managers ? `${t(lang, "managed")}: ${m.managers.home ?? "—"} v ${m.managers.away ?? "—"}` : (m.scenario ?? "—")} · {m.model ?? t(lang, "stats")}</span>
             <button type="button" className="rounded-lg bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-500" onClick={() => onWatch(m)}>{t(lang, "watch")}</button>
           </div>
         </li>

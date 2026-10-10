@@ -4,7 +4,7 @@
  */
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
-import { ClaimKind, Cue, MetricId, Moment, Recap, Segment } from "@touchline/schema"
+import { ClaimKind, Cue, Decision, MetricId, Moment, Recap, Segment } from "@touchline/schema"
 
 const Id = Schema.String.check(Schema.isMinLength(1))
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
@@ -37,7 +37,9 @@ export const MatchSummary = Schema.Struct({
   /** Segment keys the cue cache has variants for (empty: no agent cues; the match plays with stats only). */
   segments: Schema.Array(Schema.String),
   /** What produced the cached cues ("stub", "openai:gpt-6.1-sol"), or null. */
-  model: Schema.NullOr(Schema.String)
+  model: Schema.NullOr(Schema.String),
+  /** A managed match's managers ("agent", "rules", "replay"; null: none for that team), or null for a plain match. */
+  managers: Schema.NullOr(Schema.Struct({ home: Schema.NullOr(Schema.String), away: Schema.NullOr(Schema.String) }))
 })
 export type MatchSummary = typeof MatchSummary.Type
 
@@ -282,8 +284,13 @@ export class TouchlineRpcs extends RpcGroup.make(
   /** The broadcast graphics output for a segment: the scoreboard and the cues the producer sent, nothing else. */
   Rpc.make("WatchGraphics", { payload: { session_id: Schema.String, segment: Segment }, success: Tick, error: SessionNotFound, stream: true }),
   /** The session's ops numbers (spec §5.6 ops view), as of its frame. */
-  Rpc.make("GetOps", { payload: { session_id: Schema.String }, success: OpsReport, error: SessionNotFound })
+  Rpc.make("GetOps", { payload: { session_id: Schema.String }, success: OpsReport, error: SessionNotFound }),
+  /** A managed match's manager decisions the session has reached (empty for a match without managers). */
+  Rpc.make("GetDecisions", { payload: { session_id: Schema.String }, success: Schema.Array(Decision), error: SessionNotFound })
 ) {}
+
+/** A manager decision's cue and evidence key: `decision-<tick>-<side>` (the strip opens its card by it). */
+export const decisionKey = (d: Pick<Decision, "tick" | "side">): string => `decision-${d.tick}-${d.side}`
 
 export const decodeTick = Schema.decodeUnknownSync(Tick)
 export const decodeStudioTick = Schema.decodeUnknownSync(StudioTick)
