@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs"
 import { join } from "node:path"
 import { Effect, Stream } from "effect"
-import { runScript, type DomainEvent, type Frame, type MatchConfig, type WindowResult } from "@touchline/sim-core"
+import { runScript, type DomainEvent, type Frame, type MatchConfig, type StepOutput, type WindowResult } from "@touchline/sim-core"
 import { cdfEventLine, cdfMeta, cdfTrackingLine, periodsFromFrames } from "./cdf.js"
 import { hasScript, matchSteps } from "./run.js"
 import { addRealismNoise, REALISM_NOISE } from "./noise.js"
@@ -23,6 +23,8 @@ export interface RunManifest {
   readonly stats: { readonly frames: number; readonly events: number; readonly cdf_events: number; readonly score: string }
   /** The noise added to the CDF events (see noise.ts), or null when they are exact. */
   readonly realism_noise: typeof REALISM_NOISE | null
+  /** A managed match (Plan 4b): each team's manager and how many decisions decisions.jsonl holds. */
+  readonly managers?: { readonly home: string | null; readonly away: string | null; readonly decisions: number }
   /**
    * Ground truth for the evaluation harness (spec §5.1.12, §5.3.1); kept out of CDF. Its frame ids (`frames`,
    * `frame_id`) are global ticks, as in domain.jsonl and the stats engine; CDF frame ids restart at 0 each period.
@@ -45,11 +47,21 @@ const sha256 = (path: string) => "sha256:" + createHash("sha256").update(readFil
 export interface WriteOptions {
   /** Add realism noise to the CDF events (default off). */
   readonly noise?: boolean
+  /**
+   * A managed match (Plan 4b): its steps (decisions included), each team's manager, and its decision log lines, read
+   * once the steps have run; they are written to decisions.jsonl. Managed matches have no scenario script.
+   */
+  readonly managed?: {
+    readonly steps: Stream.Stream<StepOutput>
+    readonly managers: { readonly home: string | null; readonly away: string | null }
+    readonly decisions: () => ReadonlyArray<unknown>
+  }
 }
 
 export const writeMatch = (cfg: MatchConfig, dir: string, opts: WriteOptions = {}) =>
   Effect.gen(function* () {
     // A scripted match is resolved first so its window results are known; a plain match streams step by step.
+    if (opts.managed && hasScript(cfg)) return yield* Effect.die(new Error("a managed match has no scenario script"))
     const run = hasScript(cfg) ? runScript(cfg) : null
     const windows: ReadonlyArray<WindowResult> = run?.windows ?? []
     mkdirSync(dir, { recursive: true })
@@ -60,7 +72,7 @@ export const writeMatch = (cfg: MatchConfig, dir: string, opts: WriteOptions = {
     const events: DomainEvent[] = []
     let frames = 0
     let last: Frame | null = null
-    yield* Stream.runForEach(run ? Stream.fromIterable(run.steps) : matchSteps(cfg), (r) =>
+    yield* Stream.runForEach(run ? Stream.fromIterable(run.steps) : (opts.managed?.steps ?? matchSteps(cfg)), (r) =>
       Effect.sync(() => {
         events.push(...r.events)
         const f = r.frame
@@ -94,6 +106,8 @@ export const writeMatch = (cfg: MatchConfig, dir: string, opts: WriteOptions = {
     writeFileSync(join(dir, "domain.jsonl"), ordered.map((e) => JSON.stringify(e)).join("\n") + "\n")
     writeFileSync(join(dir, "spadl.csv"), spadlCsv(ordered, cfg))
     writeFileSync(join(dir, "meta.json"), JSON.stringify(cdfMeta(cfg, periodsFromFrames(periods)), null, 1))
+    const decisions = opts.managed?.decisions() ?? null
+    if (decisions) writeFileSync(join(dir, "decisions.jsonl"), decisions.map((d) => JSON.stringify(d) + "\n").join(""))
     const goals = events.filter((e) => e.type === "goal")
     const score = `${goals.filter((g) => g.team_id === cfg.home.id).length}-${goals.filter((g) => g.team_id === cfg.away.id).length}`
     const manifest: RunManifest = {
@@ -105,9 +119,10 @@ export const writeMatch = (cfg: MatchConfig, dir: string, opts: WriteOptions = {
       fps: Math.round(1 / cfg.dt),
       params_version: cfg.params.provenance.version,
       engine: { name: "touchline-sim", version: "0.1.0" },
-      outputs: Object.fromEntries(["meta.json", "event.jsonl", "tracking.jsonl", "domain.jsonl", "spadl.csv"].map((f) => [f, sha256(join(dir, f))])),
+      outputs: Object.fromEntries([...["meta.json", "event.jsonl", "tracking.jsonl", "domain.jsonl", "spadl.csv"], ...(decisions ? ["decisions.jsonl"] : [])].map((f) => [f, sha256(join(dir, f))])),
       stats: { frames, events: events.length, cdf_events: cdfLines.length, score },
       realism_noise: opts.noise ? REALISM_NOISE : null,
+      ...(opts.managed && decisions ? { managers: { ...opts.managed.managers, decisions: decisions.length } } : {}),
       truths: {
         script: scriptTruths(windows, cfg),
         scripted_events: ordered.filter((e) => e.attrs.scripted === true).map((e) => ({ id: e.id, type: e.type, frame_id: e.frame_id, team_id: e.team_id, player_id: e.player_id })),

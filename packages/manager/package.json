@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p ." },
+  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "manage": "tsx src/cli.ts" },
   "dependencies": {
     "@touchline/agent-gateway": "workspace:*",
     "@touchline/schema": "workspace:*",
+    "@touchline/sim": "workspace:*",
     "@touchline/sim-core": "workspace:*",
     "@touchline/stats": "workspace:*",
     "effect": "4.0.1"
