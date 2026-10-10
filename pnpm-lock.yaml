@@ -195,6 +195,9 @@ importers:
 
   packages/manager:
     dependencies:
+      '@touchline/agent-gateway':
+        specifier: workspace:*
+        version: link:../agent-gateway
       '@touchline/schema':
         specifier: workspace:*
         version: link:../schema

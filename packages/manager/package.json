@@ -6,6 +6,7 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p ." },
   "dependencies": {
+    "@touchline/agent-gateway": "workspace:*",
     "@touchline/schema": "workspace:*",
     "@touchline/sim-core": "workspace:*",
     "@touchline/stats": "workspace:*",
