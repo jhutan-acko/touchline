@@ -28,6 +28,11 @@ describe("the situation sent to the manager agent", () => {
     for (const word of ["seed", "rng", "script", "forced", "truth", "periodTicks", "scripted"]) expect(text).not.toContain(word)
     expect(text).not.toContain(String(at60.state.periodTicks))
   })
+  it("never names the match by its id (the id carries the seed): an opaque reference instead, the same for the whole match", () => {
+    expect(situationJson(sit)).not.toContain(cfg.matchId)
+    expect(sit.match_id).toMatch(/^match-[0-9a-f]{12}$/)
+    expect(situationAt(at60.state, "away", at60.reasons, run.watch).match_id).toBe(sit.match_id)
+  })
   it("depends only on the match up to the pause: hidden state does not change it", () => {
     const hidden: MatchState = {
       ...at60.state,

@@ -52,6 +52,9 @@ describe("the agent manager", () => {
     const d = await decide(send)
     expect(send.calls.map((c) => c.task)).toEqual(["propose", "choose"])
     expect(send.calls[0]!.situation).toEqual(situation)
+    // The request names the match only by the situation's opaque reference, never by its id (which carries the seed).
+    expect(send.calls.map((c) => c.match_id)).toEqual([situation.match_id, situation.match_id])
+    expect(JSON.stringify(send.calls)).not.toContain(m.state.config.matchId)
     expect(d.options.map((o) => [o.index, o.label, o.source])).toEqual([[0, "No change", "no_change"], [1, "Press higher", "agent"], [2, "Fresh striker", "agent"]])
     expect(d.options.slice(1).every((o) => o.xg_diff_vs_no_change !== null && !o.untested)).toBe(true)
     // The agent was shown exactly the tested numbers, rounded.

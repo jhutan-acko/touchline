@@ -58,7 +58,8 @@ export const agentManager = (send: Sender, config: AgentManagerOptions = {}): Ma
           timings_ms: { propose: Math.round(timings.propose), whatif: Math.round(timings.whatif), choose: Math.round(timings.choose) },
           tokens: { in: tokensIn, out: tokensOut }, cost_usd: cost, model
         })
-        const request = (task: ManageRequest["task"], whatif: ManageRequest["whatif"]): ManageRequest => ({ kind: "manage", task, match_id: base.match_id, situation: input.situation, whatif })
+        // The agent knows the match only by the situation's opaque reference (the match id carries the seed).
+        const request = (task: ManageRequest["task"], whatif: ManageRequest["whatif"]): ManageRequest => ({ kind: "manage", task, match_id: input.situation.match_id, situation: input.situation, whatif })
         const unreachable = (reason: string) => {
           failures += 1
           if (failures >= breaker.failures) skip = breaker.cooldown

@@ -2,7 +2,8 @@
  * What the manager agent sees (spec §4): `situationAt` builds the Situation from the paused state and from what the
  * match produced up to that tick (its events, fed to the stats engine), from the managed team's side. Nothing else
  * reaches the model: no seed, random state, script, forced outcome or truth, nothing after the pause, and not the
- * added time the engine has already drawn (only the expected added time).
+ * added time the engine has already drawn (only the expected added time). The match is named by an opaque reference,
+ * never by its id, which carries the seed ("m-11", "ab-5003").
  */
 import { createHash } from "node:crypto"
 import { availableBench, isHalfTimeBreak, STYLE_RANGES, subsLeft, windowsLeft, type DomainEvent, type MatchConfig, type MatchState, type Side, type StepOutput, type StyleKey } from "@touchline/sim-core"
@@ -42,6 +43,9 @@ export class MatchWatch {
     if (r.frame) this.engine.ingest({ kind: "frame", frame: r.frame })
   }
 }
+
+/** The name the model knows a match by: a hash of its id, so the seed in the id never reaches it. */
+export const matchRef = (matchId: string): string => `match-${createHash("sha256").update(matchId).digest("hex").slice(0, 12)}`
 
 const round = (x: number, digits: number) => Math.round(x * 10 ** digits) / 10 ** digits
 const other = (side: Side): Side => (side === "home" ? "away" : "home")
@@ -117,7 +121,7 @@ export const situationAt = (s: MatchState, side: Side, reasons: ReadonlyArray<Mo
   const by = (id: string) => events.filter((e) => e.player_id === id)
 
   return {
-    match_id: cfg.matchId,
+    match_id: matchRef(cfg.matchId),
     team_id: team.id,
     moment: {
       reasons: [...reasons],
