@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "manage": "tsx src/cli.ts" },
+  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "manage": "tsx src/cli.ts", "ab": "tsx src/ab/cli.ts" },
   "dependencies": {
     "@touchline/agent-gateway": "workspace:*",
     "@touchline/schema": "workspace:*",

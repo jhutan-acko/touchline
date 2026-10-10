@@ -29,15 +29,16 @@ export const managedSteps = (config: MatchConfig, managers: Managers, opts: Mana
   const cfg = managedConfig(config, managers)
   const sides = SIDES.filter((s) => managers[s] !== undefined)
   return Stream.suspend(() => {
-    const watch = new MatchWatch(cfg, opts.models, opts.xt)
+    // The stats engine is only needed to show managers the match; a match with none skips it.
+    const watch = sides.length > 0 ? new MatchWatch(cfg, opts.models, opts.xt) : null
     return Stream.unfold({ state: initMatch(cfg), memory: NO_MOMENTS as MomentMemory }, ({ state, memory }) =>
       Effect.gen(function* () {
         if (isFinished(state)) return undefined
         const r = step(state)
-        watch.add(r)
+        watch?.add(r)
         const k = keyMoment(r.state, r.events, memory)
         let next: MatchState = r.state
-        if (k.reasons.length > 0 && sides.length > 0) {
+        if (k.reasons.length > 0 && watch) {
           // Both managers decide from the same paused state; their orders apply afterwards.
           const decisions = yield* Effect.forEach(sides, (side) => {
             const situation = situationAt(r.state, side, k.reasons, watch)

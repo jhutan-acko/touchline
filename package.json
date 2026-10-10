@@ -10,6 +10,7 @@
     "typecheck": "turbo run typecheck",
     "sim": "pnpm --filter @touchline/sim run sim",
     "manage": "pnpm --filter @touchline/manager run manage",
+    "managers:ab": "pnpm --filter @touchline/manager run ab",
     "league": "pnpm --filter @touchline/league run generate",
     "calibrate": "pnpm --filter @touchline/calibrate run calibrate",
     "realism": "pnpm --filter @touchline/calibrate run realism",
