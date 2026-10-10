@@ -30,7 +30,7 @@ slows match generation.
 
 ```ts
 type ManagerOrder =
-  | { kind: "style"; style: Partial<Omit<TeamStyle, "archetype">> }
+  | { kind: "style"; setting: StyleKey; value: number }   // one setting per order
   | { kind: "sub"; off: string; on: string }   // player ids
 ```
 
@@ -53,7 +53,7 @@ type ManagerOrder =
 - `after_goal`: the kickoff restart following a goal.
 - `minute_60`, `minute_75`: the first restart (any `Phase.kind === "restart"`) at or after that match minute.
 - One decision per team per moment; if two moments coincide (a goal at 61') they merge into one decision listing both
-  reasons.
+  reasons. A minute moment that comes due within 5 minutes of a decision is absorbed by it (revision, §9).
 
 At each of these the ball is dead until `resumeTick`, so the state is frozen while the manager decides.
 
@@ -90,7 +90,8 @@ tokens {in, out}, cost_usd, model`.
 - **Replay:** `runManaged` with `replayManager(decisions)` applies the logged orders at their ticks; the match is
   bit-identical to the original and makes no model calls. A test asserts it.
 - The manifest gains `managers: {home, away}` and the sha256 of `decisions.jsonl`.
-- `pnpm sim … --manage home=agent,away=rules` produces a managed match; `--replay-decisions <file>` replays one.
+- `pnpm manage --home-manager agent --away-manager rules …` produces a managed match; `--replay <decisions.jsonl>`
+  replays one (revision, §9).
 
 ## 3. Manager agent (Python, `services/agents`)
 
@@ -124,7 +125,8 @@ decision continues with the rest.
 
 **Cost:** `Outcome` gains token usage read from the OpenAI response; a price table in `config.py` turns it into
 `cost_usd` per call. **Stub model** (tests, CI): `propose` returns the rules manager's options; `choose` picks the best
-what-if mean (or no change if none is positive). No network in tests or CI.
+what-if mean (or no change if none is positive). No network in tests or CI. (Revision, §9: the Python stub proposes a
+fixed menu — press higher, sit deeper, fresh legs — rather than the TypeScript rules.)
 
 ## 4. What the model receives
 
@@ -138,9 +140,9 @@ tick only, as the managed team sees it. Every numeric field names its unit.
   `stats` so far: `xg`, `shots`, `possession_pct`, `pass_completion_pct`, `ppda`, `yellow_cards`, `red_cards`
   (computed with `packages/stats` from the events up to the pause tick).
 - `players` (own team only): on the pitch — `id`, `name`, `number`, `role`, `energy_pct`, `minutes_played`,
-  `yellow_card`, `xg`, `key_actions`; bench — `id`, `name`, `number`, `role`, `available`.
-- `limits`: `subs_left`, `windows_left`, `style_ranges`.
-- `recent`: the last 10 minutes per side — `xg`, `shots`, `press_regains`. No raw event stream.
+  `yellow_card`, `shots`, `xg`, `passes_completed`, `tackles_won`; bench — `id`, `name`, `number`, `role`, `available`.
+- `limits`: `subs_left`, `windows_left`, `half_time_break` (each style setting carries its own `min` and `max`).
+- `recent`: the last 10 minutes per side — `xg`, `shots`, `ball_regains`. No raw event stream.
 - `whatif` (`choose` only): per option `label`, `orders`, `xg_diff_vs_no_change {mean, se}`,
   `goal_diff_vs_no_change {mean, se}`, `seeds`, `horizon_min`, or `untested`; plus one sentence explaining the numbers.
 
@@ -170,7 +172,7 @@ secrets; the user's email.
   rate, dropped-option rate, how often the pick was the best what-if option.
 - **Honesty rule:** the headline follows the interval — "better", "no detectable difference" or "worse" — including
   when the agent does not beat `rules`.
-- **Command:** `pnpm managers:ab --seeds 120 --llm openai` writes `docs/evals/manager-ab.md` and
+- **Command:** `pnpm managers:ab --seeds 120 --llm openai` (or `--llm stub`, or `--llm external --agents-url …`) writes `docs/evals/manager-ab.md` and
   `docs/evals/manager-ab.json`. Matches run in parallel; estimate ≈ 600 agent decisions, ≈ 1,200 model calls,
   ≈ 40 minutes. **The real-model run needs the user's go-ahead** (it spends OpenAI credit); everything before it uses
   the stub.
@@ -198,3 +200,24 @@ Every failure ends in a logged fallback, never a crashed match; the A/B report c
 
 Formation changes; live (in-session) manager calls; corner-setup optimiser; manager vs manager evaluation; learned
 (RL) control; changing the latency budgets or the model choice.
+
+## 9. Revision (prototype rulings, 2026-10-10)
+
+The prototype (`touchline-worktrees/proto-4b`) settled these points; the sections above are updated to match.
+
+| Point | Ruling | Why |
+|---|---|---|
+| Back-to-back decisions | A minute-60 or minute-75 moment due within 5 minutes of a decision is absorbed by it; half time and goals always call for a decision | The prototype decided at 59.6' (after a goal) and again at 60.0'; no manager rethinks seconds later |
+| Style order shape | `{kind: "style", setting, value}`, one setting per order | A fixed shape every model can produce as structured output; several settings are several orders |
+| Situation fields | `ball_regains` (tackles won, interceptions, recoveries) instead of `press_regains`; per-player `shots`, `passes_completed`, `tackles_won` instead of `key_actions`; ranges on each style setting; `limits.half_time_break` | Named for what they count; nothing for the model to guess |
+| Situation values | Minutes played on the match clock; possession as each team's share of the time either had the ball (sums to 100); minutes left from the expected added time, never the time the engine drew | The reviewed example showed 63 minutes played at minute 60 and possession summing to 95.7 %; the drawn added time is hidden state |
+| Both managers at one moment | Both decide from the same paused state; orders apply after both have decided | Otherwise the second manager would see the first one's change at once |
+| Rule-based manager | No substitutions before half time; when chasing, attackers replace only midfielders and forwards | A substitute takes the outgoing player's slot and role (formation is fixed); the prototype brought an attacker on at centre-back at 32' |
+| Python stub | `propose` returns a fixed menu (press higher, sit deeper, fresh legs); `choose` picks the best tested gain | The rules manager is TypeScript; the stub only has to be deterministic |
+| Number check | A reason may quote the what-if numbers (rounded), the seeds and horizon, the score and the minute | The score and minute are what a manager naturally cites |
+| Cost | Computed only from a configured price (`TOUCHLINE_PRICE_USD_PER_MTOK`); otherwise the report gives tokens and says the price is unset | No invented prices |
+| Commands | `pnpm manage` and `pnpm managers:ab` in `packages/manager` (not `pnpm sim --manage`) | The managed loop needs the stats engine and the gateway; `packages/sim` must not depend on them |
+| Decision cues | English only, casual and analyst; other languages fall back to them | The cue's body is the manager's own reason, in English |
+| Re-simulating managed matches | `statesAt` and the advisor's `Session` apply the logged orders at their ticks; `pnpm library --managed home:away:seed` builds managed matches | The better-pass scan and the what-if split rebuild matches from their run folders |
+| Viewer data | `MatchSummary.managers`; RPC `GetDecisions` (never past the session's frame) | The match list names managed matches; the strip and card need every option |
+
