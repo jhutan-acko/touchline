@@ -21,6 +21,13 @@ export interface AbOptions {
   readonly onResult?: (r: MatchResult, done: number, total: number) => void
 }
 
+/**
+ * How an A/B match's agent tests its options: inline, in the match's own worker. Matches already run one per core, so
+ * nested worker threads would oversubscribe the machine, and a wall-clock limit would then mark options untested
+ * depending on load: inline, the same seeds give the same results on any machine.
+ */
+export const abWhatIf = (whatif: AbJob["whatif"]) => ({ ...whatif, runner: "inline" as const })
+
 const playInWorker = (job: AbJob) =>
   Effect.tryPromise(
     () =>

@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { a2aSender } from "@touchline/agent-gateway"
 import { agentManager } from "../agent.js"
 import { playArm, type Arm, type Fixture } from "./match.js"
+import { abWhatIf } from "./run.js"
 import { loadSetup } from "./setup.js"
 
 export interface AbJob {
@@ -15,7 +16,7 @@ export interface AbJob {
 
 const job = workerData as AbJob
 const setup = loadSetup()
-Effect.runPromise(playArm(setup.config(job.fixture), job.fixture, job.arm, () => agentManager(a2aSender(job.agentsUrl), { whatif: job.whatif }), setup.stats)).then(
+Effect.runPromise(playArm(setup.config(job.fixture), job.fixture, job.arm, () => agentManager(a2aSender(job.agentsUrl), { whatif: abWhatIf(job.whatif) }), setup.stats)).then(
   (ok) => parentPort!.postMessage({ ok }),
   (e) => parentPort!.postMessage({ error: e instanceof Error ? e.message : String(e) })
 )

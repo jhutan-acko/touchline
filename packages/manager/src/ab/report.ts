@@ -35,6 +35,7 @@ export const decisionStats = (decisions: ReadonlyArray<Decision>, matches: numbe
   const called = (k: "propose" | "choose") => decisions.map((d) => d.timings_ms[k]).filter((ms) => ms > 0)
   const total = decisions.map((d) => d.timings_ms.propose + d.timings_ms.whatif + d.timings_ms.choose)
   const agentOptions = decisions.flatMap((d) => d.options.filter((o) => o.source === "agent"))
+  const candidates = decisions.flatMap((d) => d.options.filter((o) => o.index > 0))
   const tested = decisions.filter((d) => d.options.some((o) => o.index > 0 && o.xg_diff_vs_no_change !== null))
   const bestPick = tested.filter((d) => {
     const best = d.options.filter((o) => o.xg_diff_vs_no_change !== null && !o.untested).reduce((a, o) => (o.xg_diff_vs_no_change!.mean > a.xg_diff_vs_no_change!.mean ? o : a))
@@ -51,6 +52,8 @@ export const decisionStats = (decisions: ReadonlyArray<Decision>, matches: numbe
       service: share(decisions.filter((d) => d.fallback === "service").length, n)
     },
     dropped_option_rate: share(agentOptions.filter((o) => o.dropped.length > 0).length, agentOptions.length),
+    /** Options whose re-simulation failed or ran out of time (the agent could not weigh them). */
+    untested_option_rate: share(candidates.filter((o) => o.untested).length, candidates.length),
     best_pick_rate: share(bestPick.length, tested.length),
     latency_ms: {
       propose: { p50: percentile(called("propose"), 0.5), p95: percentile(called("propose"), 0.95) },
@@ -131,7 +134,7 @@ export const markdown = (s: AbSummary): string => {
       const priced = d.cost_usd_per_match !== null && d.cost_usd_per_match > 0
       out.push(
         `- Fallbacks: propose ${pct(d.fallback_rate.propose)}, choose ${pct(d.fallback_rate.choose)}, service ${pct(d.fallback_rate.service)} of decisions.`,
-        `- Options with orders the engine refused: ${pct(d.dropped_option_rate)}. Picked the option with the best what-if xG: ${pct(d.best_pick_rate)}.`,
+        `- Options with orders the engine refused: ${pct(d.dropped_option_rate)}. Options that could not be tested: ${pct(d.untested_option_rate)}. Picked the option with the best what-if xG: ${pct(d.best_pick_rate)}.`,
         `- Latency: propose p50 ${ms(d.latency_ms.propose.p50)} / p95 ${ms(d.latency_ms.propose.p95)}; choose p50 ${ms(d.latency_ms.choose.p50)} / p95 ${ms(d.latency_ms.choose.p95)}; whole decision p50 ${ms(d.latency_ms.decision.p50)} / p95 ${ms(d.latency_ms.decision.p95)}.`,
         `- Tokens per match: ${f2(d.tokens_per_match.in)} in, ${f2(d.tokens_per_match.out)} out. Cost per match: ${priced ? `$${d.cost_usd_per_match!.toFixed(4)}` : "not known (no price configured: TOUCHLINE_PRICE_USD_PER_MTOK)"}.`
       )

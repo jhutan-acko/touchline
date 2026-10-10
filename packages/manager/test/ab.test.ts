@@ -6,7 +6,8 @@ import { Effect } from "effect"
 import type { DomainEvent } from "@touchline/sim-core"
 import { describe, expect, it } from "vitest"
 import { fixtures, playArm, resultOf, type MatchResult } from "../src/ab/match.js"
-import { headline, markdown, summarize, type AbSummary } from "../src/ab/report.js"
+import { decisionStats, headline, markdown, summarize, type AbSummary } from "../src/ab/report.js"
+import { abWhatIf } from "../src/ab/run.js"
 import { rulesManager } from "../src/rules.js"
 import { runManaged } from "../src/run.js"
 import { loadSetup } from "../src/ab/setup.js"
@@ -76,6 +77,20 @@ describe("the A/B report", () => {
   })
 })
 
+describe("the agent arm's option tests", () => {
+  it("run inline in the match's own worker: no nested threads and no wall-clock limit, so busy machines give the same results", () => {
+    expect(abWhatIf({ seeds: 20, horizonS: 600 })).toEqual({ seeds: 20, horizonS: 600, runner: "inline" })
+  })
+  it("are reported: the share of options that could not be tested", () => {
+    const option = (untested: boolean) => ({ index: 1, label: "x", source: "agent" as const, orders: [], rationale: null, xg_diff_vs_no_change: null, goal_diff_vs_no_change: null, untested, dropped: [] })
+    const decision = (flags: boolean[]) => ({ ...decisionBase, options: flags.map(option) }) as never
+    const decisionBase = { match_id: "m", tick: 1, minute: 60, side: "home", team_id: "t", manager: "agent", reasons: ["minute_60"], situation_hash: "h", pick: 0, reason: "r", orders_applied: [], fallback: null, timings_ms: { propose: 1, whatif: 1, choose: 1 }, tokens: { in: 0, out: 0 }, cost_usd: 0, model: "stub" }
+    expect(decisionStats([decision([true, false]), decision([true, true])], 2).untested_option_rate).toBe(0.75)
+    const s = summarize([{ ...row(5000, "agent", 0, 0), decisions: [decision([true, false])] }, row(5000, "rules", 0, 0)], { ...meta, arms: ["rules", "agent"] })
+    expect(markdown(s)).toContain("Options that could not be tested: 50 %")
+  })
+})
+
 describe("pnpm managers:ab (the CI suite: 4 seeds on the stub model)", () => {
   it("plays every arm, reports, and keeps every decision", () => {
     const dir = mkdtempSync(join(tmpdir(), "ab-"))
@@ -91,6 +106,7 @@ describe("pnpm managers:ab (the CI suite: 4 seeds on the stub model)", () => {
     const md = readFileSync(join(dir, "manager-ab.md"), "utf8")
     expect(md).toContain("## The agent manager's decisions")
     expect(md).toContain("not known (no price configured")
+    expect(md).toContain("Options that could not be tested: 0 %")
     const decisions = readFileSync(join(dir, "runs/decisions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { arm: string })
     expect(decisions.length).toBe(agent.decisions.decisions + (json.arms.rules as unknown as { decisions: { decisions: number } }).decisions.decisions)
   }, 600_000)
