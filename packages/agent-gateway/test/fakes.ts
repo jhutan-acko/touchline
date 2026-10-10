@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { AgentRequest, Cue, Signal } from "@touchline/schema"
+import type { AgentRequest, Cue, MatchRequest, Signal } from "@touchline/schema"
 import type { Artifact, Sender } from "../src/a2a.js"
 import type { MatchPlan } from "../src/gateway.js"
 import { root } from "../src/replay.js"
@@ -21,11 +21,11 @@ export const plan = (frames: number[], whistles = { half_time: 27000, full_time:
 })
 
 /** A sender that answers each request with `answer(req, n)` (n counts calls), waiting `delayMs` before each artifact. */
-export const fake = (answer: (req: AgentRequest, n: number) => Artifact[] | Error, delayMs = 0): Sender & { calls: AgentRequest[] } => {
-  const calls: AgentRequest[] = []
+export const fake = (answer: (req: MatchRequest, n: number) => Artifact[] | Error, delayMs = 0): Sender & { calls: MatchRequest[] } => {
+  const calls: MatchRequest[] = []
   const send = async function* (req: AgentRequest) {
-    calls.push(req)
-    const out = answer(req, calls.length)
+    calls.push(req as MatchRequest)
+    const out = answer(req as MatchRequest, calls.length)
     if (out instanceof Error) throw out
     for (const a of out) {
       if (delayMs) await new Promise((r) => setTimeout(r, delayMs))

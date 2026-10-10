@@ -11,6 +11,8 @@ from .contracts_gen import (
     Cue,
     Display,
     Draft,
+    ManagerReply,
+    ManageRequest,
     Moment,
     MomentTrace,
     Recap,
@@ -24,18 +26,19 @@ from .contracts_gen import (
 )
 
 __all__ = [
-    "MAX_SEGMENTS", "AgentRequest", "Analysis", "Anchor", "Claim", "Cue", "Display", "Draft", "Moment", "MomentTrace",
+    "MAX_SEGMENTS", "AgentRequest", "Analysis", "Anchor", "Claim", "Cue", "Display", "Draft", "ManageRequest", "ManagerReply",
+    "Moment", "MomentTrace",
     "Recap", "RecapRequest", "Segment", "SentenceCheck", "Signal", "SignalsRequest", "Text", "Verdict",
     "dump", "parse_request", "segment_key",
 ]
 
 MAX_SEGMENTS = 12
 
-AgentRequest = Annotated[SignalsRequest | RecapRequest, Field(discriminator="kind")]
+AgentRequest = Annotated[SignalsRequest | RecapRequest | ManageRequest, Field(discriminator="kind")]
 _request = TypeAdapter(AgentRequest)
 
 
-def parse_request(data: object) -> SignalsRequest | RecapRequest:
+def parse_request(data: object) -> SignalsRequest | RecapRequest | ManageRequest:
     """Validate the data part of an A2A message (raises pydantic.ValidationError)."""
     return _request.validate_python(data)
 

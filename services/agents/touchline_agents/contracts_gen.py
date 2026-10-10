@@ -212,6 +212,239 @@ class RecapRequest(BaseModel):
     at_frame: conint(ge=0)
 
 
+class StyleSetting(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    setting: Literal["pressIntensity", "lineHeight", "compactness", "tempo", "longBallBias", "crossBias", "riskTolerance"]
+    value: float
+    min: float
+    max: float
+    meaning: str
+
+
+class TeamStats(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    xg: float
+    shots: conint(ge=0)
+    possession_pct: float
+    pass_completion_pct: float | None
+    ppda: float | None
+    yellow_cards: conint(ge=0)
+    red_cards: conint(ge=0)
+
+
+class TeamView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    name: constr(min_length=1)
+    archetype: Literal["high_press", "possession", "direct", "low_block"]
+    formation: str
+    style: list[StyleSetting]
+    stats: TeamStats
+
+
+class PlayerView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: constr(min_length=1)
+    name: str
+    number: conint(ge=0)
+    role: Literal["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"]
+    energy_pct: float
+    minutes_played: float
+    yellow_card: bool
+    shots: conint(ge=0)
+    xg: float
+    passes_completed: conint(ge=0)
+    tackles_won: conint(ge=0)
+
+
+class BenchView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: constr(min_length=1)
+    name: str
+    number: conint(ge=0)
+    role: Literal["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"]
+    available: bool
+
+
+class RecentView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    xg: float
+    shots: conint(ge=0)
+    ball_regains: conint(ge=0)
+
+
+class Score(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    for_: conint(ge=0) = Field(..., alias="for")
+    against: conint(ge=0)
+
+
+class Moment1(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    reasons: list[Literal["half_time", "after_goal", "minute_60", "minute_75"]] = (
+        Field(..., min_length=1)
+    )
+    minute: float
+    minutes_left: float
+    added_time_expected_min: float
+    score: Score
+    score_state: str
+
+
+class Players(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    on_pitch: list[PlayerView]
+    bench: list[BenchView]
+
+
+class Limits(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    subs_left: conint(ge=0)
+    windows_left: conint(ge=0)
+    half_time_break: bool
+
+
+class Recent(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    window_min: float
+    team: RecentView
+    opponent: RecentView
+
+
+class Situation(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    match_id: constr(min_length=1)
+    team_id: constr(min_length=1)
+    moment: Moment1
+    team: TeamView
+    opponent: TeamView
+    players: Players
+    limits: Limits
+    recent: Recent
+
+
+class ManagerOrder1(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["style"]
+    setting: Literal["pressIntensity", "lineHeight", "compactness", "tempo", "longBallBias", "crossBias", "riskTolerance"]
+    value: float
+
+
+class ManagerOrder2(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["sub"]
+    off: constr(min_length=1)
+    on: constr(min_length=1)
+
+
+class Estimate(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    mean: float
+    se: float
+
+
+class OptionResult(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    index: conint(ge=0)
+    label: str
+    orders: list[ManagerOrder1 | ManagerOrder2]
+    xg_diff_vs_no_change: Estimate | None
+    goal_diff_vs_no_change: Estimate | None
+    untested: bool
+
+
+class WhatIfSummary(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    seeds: conint(ge=0)
+    horizon_min: float
+    explanation: str
+    options: list[OptionResult] = Field(..., min_length=1)
+
+
+class ManageRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["manage"]
+    task: Literal["propose", "choose"]
+    match_id: constr(min_length=1)
+    situation: Situation
+    whatif: WhatIfSummary | None
+
+
+class ManagerOption(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    label: constr(min_length=1, max_length=60)
+    orders: list[ManagerOrder1 | ManagerOrder2] = Field(..., min_length=1)
+    rationale: str
+
+
+class Proposal(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    options: list[ManagerOption] = Field(..., max_length=3, min_length=1)
+
+
+class Choice(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    pick: conint(ge=0)
+    reason: str
+
+
+class ManagerReply(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    task: Literal["propose", "choose"]
+    proposal: Proposal | None
+    choice: Choice | None
+    fallback: bool
+    reason: str | None
+    ms: float
+    tokens_in: conint(ge=0)
+    tokens_out: conint(ge=0)
+    cost_usd: float
+    model: str
+
+
 class AgentContracts(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -225,4 +458,5 @@ class AgentContracts(BaseModel):
     cue: Cue
     recap: Recap
     trace: MomentTrace
-    request: SignalsRequest | RecapRequest
+    request: SignalsRequest | RecapRequest | ManageRequest
+    manager_reply: ManagerReply

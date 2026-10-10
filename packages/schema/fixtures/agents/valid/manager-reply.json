@@ -1,0 +1,34 @@
+{
+ "contract": "manager_reply",
+ "value": {
+  "task": "propose",
+  "proposal": {
+   "options": [
+    {
+     "label": "Fresh striker, press higher",
+     "orders": [
+      {
+       "kind": "sub",
+       "off": "iro-09",
+       "on": "iro-19"
+      },
+      {
+       "kind": "style",
+       "setting": "pressIntensity",
+       "value": 1
+      }
+     ],
+     "rationale": "Marsh is tiring and we need a goal."
+    }
+   ]
+  },
+  "choice": null,
+  "fallback": false,
+  "reason": null,
+  "ms": 4812.5,
+  "tokens_in": 2104,
+  "tokens_out": 188,
+  "cost_usd": 0.0071,
+  "model": "openai:gpt-6.1-sol"
+ }
+}

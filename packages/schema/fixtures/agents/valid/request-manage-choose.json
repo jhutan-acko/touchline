@@ -1,0 +1,245 @@
+{
+ "contract": "request",
+ "value": {
+  "kind": "manage",
+  "task": "choose",
+  "match_id": "m-5001",
+  "situation": {
+   "match_id": "m-5001",
+   "team_id": "ironmoor",
+   "moment": {
+    "reasons": [
+     "minute_60"
+    ],
+    "minute": 61.2,
+    "minutes_left": 32.3,
+    "added_time_expected_min": 3.5,
+    "score": {
+     "for": 0,
+     "against": 1
+    },
+    "score_state": "losing by 1"
+   },
+   "team": {
+    "name": "Ironmoor Athletic",
+    "archetype": "high_press",
+    "formation": "4-3-3",
+    "style": [
+     {
+      "setting": "pressIntensity",
+      "value": 0.9,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 never press .. 1 press the ball carrier at every chance"
+     },
+     {
+      "setting": "lineHeight",
+      "value": 0.8,
+      "min": -1,
+      "max": 1,
+      "meaning": "-1 deep defensive line .. 1 high line"
+     },
+     {
+      "setting": "compactness",
+      "value": 0.6,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 spread wide .. 1 narrow, compact block"
+     },
+     {
+      "setting": "tempo",
+      "value": 0.8,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 patient build-up .. 1 quick, forward passing"
+     },
+     {
+      "setting": "longBallBias",
+      "value": -0.2,
+      "min": -1,
+      "max": 1,
+      "meaning": "-1 short passes only .. 1 long balls often"
+     },
+     {
+      "setting": "crossBias",
+      "value": 0,
+      "min": -1,
+      "max": 1,
+      "meaning": "-1 avoid crosses .. 1 cross often"
+     },
+     {
+      "setting": "riskTolerance",
+      "value": 0.6,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 safe passes and few shots .. 1 risky passes and shots"
+     }
+    ],
+    "stats": {
+     "xg": 0.84,
+     "shots": 7,
+     "possession_pct": 54.2,
+     "pass_completion_pct": 81.5,
+     "ppda": 8.1,
+     "yellow_cards": 1,
+     "red_cards": 0
+    }
+   },
+   "opponent": {
+    "name": "Kestrel Bay FC",
+    "archetype": "possession",
+    "formation": "4-3-3",
+    "style": [
+     {
+      "setting": "pressIntensity",
+      "value": 0.9,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 never press .. 1 press the ball carrier at every chance"
+     },
+     {
+      "setting": "lineHeight",
+      "value": 0.8,
+      "min": -1,
+      "max": 1,
+      "meaning": "-1 deep defensive line .. 1 high line"
+     },
+     {
+      "setting": "compactness",
+      "value": 0.6,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 spread wide .. 1 narrow, compact block"
+     },
+     {
+      "setting": "tempo",
+      "value": 0.8,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 patient build-up .. 1 quick, forward passing"
+     },
+     {
+      "setting": "longBallBias",
+      "value": -0.2,
+      "min": -1,
+      "max": 1,
+      "meaning": "-1 short passes only .. 1 long balls often"
+     },
+     {
+      "setting": "crossBias",
+      "value": 0,
+      "min": -1,
+      "max": 1,
+      "meaning": "-1 avoid crosses .. 1 cross often"
+     },
+     {
+      "setting": "riskTolerance",
+      "value": 0.6,
+      "min": 0,
+      "max": 1,
+      "meaning": "0 safe passes and few shots .. 1 risky passes and shots"
+     }
+    ],
+    "stats": {
+     "xg": 0.84,
+     "shots": 7,
+     "possession_pct": 54.2,
+     "pass_completion_pct": 81.5,
+     "ppda": 8.1,
+     "yellow_cards": 1,
+     "red_cards": 0
+    }
+   },
+   "players": {
+    "on_pitch": [
+     {
+      "id": "iro-09",
+      "name": "Theo Marsh",
+      "number": 9,
+      "role": "ST",
+      "energy_pct": 58.0,
+      "minutes_played": 61.2,
+      "yellow_card": false,
+      "shots": 3,
+      "xg": 0.41,
+      "passes_completed": 11,
+      "tackles_won": 0
+     }
+    ],
+    "bench": [
+     {
+      "id": "iro-19",
+      "name": "Rafe Dunmore",
+      "number": 19,
+      "role": "ST",
+      "available": true
+     }
+    ]
+   },
+   "limits": {
+    "subs_left": 5,
+    "windows_left": 3,
+    "half_time_break": false
+   },
+   "recent": {
+    "window_min": 10,
+    "team": {
+     "xg": 0.12,
+     "shots": 2,
+     "ball_regains": 3
+    },
+    "opponent": {
+     "xg": 0.3,
+     "shots": 3,
+     "ball_regains": 1
+    }
+   }
+  },
+  "whatif": {
+   "seeds": 20,
+   "horizon_min": 10,
+   "explanation": "Each option was played from this moment 20 times over the next 10 minutes; numbers are the difference from no change, plus or minus one standard error.",
+   "options": [
+    {
+     "index": 0,
+     "label": "No change",
+     "orders": [],
+     "xg_diff_vs_no_change": {
+      "mean": 0,
+      "se": 0
+     },
+     "goal_diff_vs_no_change": {
+      "mean": 0,
+      "se": 0
+     },
+     "untested": false
+    },
+    {
+     "index": 1,
+     "label": "Fresh striker, press higher",
+     "orders": [
+      {
+       "kind": "sub",
+       "off": "iro-09",
+       "on": "iro-19"
+      },
+      {
+       "kind": "style",
+       "setting": "pressIntensity",
+       "value": 1
+      }
+     ],
+     "xg_diff_vs_no_change": {
+      "mean": 0.06,
+      "se": 0.03
+     },
+     "goal_diff_vs_no_change": {
+      "mean": 0.05,
+      "se": 0.05
+     },
+     "untested": false
+    }
+   ]
+  }
+ }
+}
