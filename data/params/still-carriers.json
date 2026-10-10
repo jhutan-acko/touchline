@@ -1,0 +1,135 @@
+{
+  "provenance": {
+    "dataset": "IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
+    "licence": "CC-BY-4.0",
+    "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
+    "definition": "touchline_analytics.carriers",
+    "hz": 10,
+    "min_s": 1.5,
+    "ball_still_mps": 0.3,
+    "player_still_mps": 0.5,
+    "near_m": 1.5
+  },
+  "real": {
+    "GK": {
+      "count": {
+        "min": 0,
+        "max": 5,
+        "mean": 2.7143
+      },
+      "seconds": {
+        "min": 0.0,
+        "max": 15.8,
+        "mean": 7.8143
+      },
+      "longest": {
+        "min": 0.0,
+        "max": 7.8,
+        "mean": 3.8571
+      }
+    },
+    "outfield": {
+      "count": {
+        "min": 0,
+        "max": 1,
+        "mean": 0.1429
+      },
+      "seconds": {
+        "min": 0.0,
+        "max": 2.5,
+        "mean": 0.3571
+      },
+      "longest": {
+        "min": 0.0,
+        "max": 2.5,
+        "mean": 0.3571
+      }
+    }
+  },
+  "per_match": {
+    "J03WMX": {
+      "GK": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      },
+      "outfield": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      }
+    },
+    "J03WN1": {
+      "GK": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      },
+      "outfield": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      }
+    },
+    "J03WOH": {
+      "GK": {
+        "count": 4,
+        "seconds": 9.7,
+        "longest": 4.5
+      },
+      "outfield": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      }
+    },
+    "J03WOY": {
+      "GK": {
+        "count": 5,
+        "seconds": 15.8,
+        "longest": 7.8
+      },
+      "outfield": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      }
+    },
+    "J03WPY": {
+      "GK": {
+        "count": 3,
+        "seconds": 6.9,
+        "longest": 3.0
+      },
+      "outfield": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      }
+    },
+    "J03WQQ": {
+      "GK": {
+        "count": 3,
+        "seconds": 7.8,
+        "longest": 4.4
+      },
+      "outfield": {
+        "count": 1,
+        "seconds": 2.5,
+        "longest": 2.5
+      }
+    },
+    "J03WR9": {
+      "GK": {
+        "count": 4,
+        "seconds": 14.5,
+        "longest": 7.3
+      },
+      "outfield": {
+        "count": 0,
+        "seconds": 0.0,
+        "longest": 0.0
+      }
+    }
+  }
+}

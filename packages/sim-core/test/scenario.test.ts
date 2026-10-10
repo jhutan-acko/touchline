@@ -88,9 +88,11 @@ describe("nudges raise the scripted outcome's rate", () => {
       }
       return saved / on
     }
-    const base = rate()
-    expect(rate(one("keeper_heroics"))).toBeGreaterThan(base + 0.1)
-    expect(rate(one("keeper_howler"))).toBeLessThan(base - 0.1)
+    // Compared on the goals let in from shots on target: the calibrated keeper already saves about 90 % on these seeds,
+    // so heroics cannot add 10 points to the save rate, but they halve the goals let in (and howlers raise them a lot).
+    const base = 1 - rate()
+    expect(1 - rate(one("keeper_heroics"))).toBeLessThan(base * 0.6)
+    expect(1 - rate(one("keeper_howler"))).toBeGreaterThan(base * 1.5)
   })
   it("defensive error: the team's defenders mis-hit far more passes in their own half", () => {
     const cfg = cfgFor(1)

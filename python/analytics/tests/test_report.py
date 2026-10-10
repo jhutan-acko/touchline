@@ -56,3 +56,23 @@ def test_physics_section_reports_movement_statistics_and_work_rate(tmp_path):
     assert "| Top speed per player (m/s) |" in text and "Inside the real envelope:" in text
     assert "| 0–15 | 120.0 | 120.0 |" in text  # real and simulated metres per minute, first 15 minutes
     assert "late-to-early ratio" in text and "real 0.84–0.99" in text
+
+
+def test_carriers_section_compares_frozen_carriers_per_match_with_real_matches(tmp_path):
+    import json
+
+    from touchline_analytics.report import carriers_section, simulated_carrier_halves
+
+    run = tmp_path / "m"
+    run.mkdir()
+    still = {"frame_id": 0, "period": "first_half", "teams": {"home": {"players": [{"id": "a", "x": 0.4, "y": 0}]}, "away": {"players": [{"id": "k", "x": 40, "y": 0}]}}, "ball": {"x": 0, "y": 0, "z": 0, "status": True}}
+    (run / "tracking.jsonl").write_text("".join(json.dumps({**still, "frame_id": i}) + "\n" for i in range(30)))
+    halves = simulated_carrier_halves(run, {"a": "ST", "k": "GK"})
+    assert len(halves) == 1 and halves[0]["keepers"] == {"k"} and halves[0]["live"].all()
+    real = {"real": {"GK": {"count": {"min": 0, "max": 5, "mean": 2.7}, "seconds": {"min": 0, "max": 15.8, "mean": 7.8}},
+                     "outfield": {"count": {"min": 0, "max": 1, "mean": 0.1}, "seconds": {"min": 0, "max": 2.5, "mean": 0.4}}}}
+    text = "\n".join(carriers_section([{"GK": {"count": 1, "seconds": 3.0, "longest": 3.0}, "outfield": {"count": 0, "seconds": 0.0, "longest": 0.0}},
+                                       {"GK": {"count": 0, "seconds": 0.0, "longest": 0.0}, "outfield": {"count": 2, "seconds": 4.0, "longest": 2.5}}], real))
+    assert "## Frozen ball carriers" in text
+    assert "| Outfielders | 1.0 | 2 | 0–1 (mean 0.1) | 2.0 | 0.0–2.5 |" in text
+    assert "| Keepers | 0.5 | 1 | 0–5 (mean 2.7) | 1.5 | 0.0–15.8 |" in text

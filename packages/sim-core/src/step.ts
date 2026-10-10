@@ -781,7 +781,8 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     scoreDiff: w.score[side] - w.score[other(side)],
     minute: w.minute(),
     restart,
-    scriptBias: scriptBias(w, side)
+    scriptBias: scriptBias(w, side),
+    onBallS: (w.tick - poss.since) * w.dt
   }
   let decision = decide(input, w.p, w.rng.decision)
   if (w.override?.playerId === owner.id) {
@@ -975,6 +976,9 @@ const ballTick = (w: Work): void => {
 
 // ---------------------------------------------------------------- movement
 
+/** How far from the goal line a keeper walks with the ball before releasing it (inside the 16.5 m box). */
+const KEEPER_RELEASE_M = 14
+
 const moveTarget = (
   w: Work,
   pl: PlayerState,
@@ -1003,9 +1007,18 @@ const moveTarget = (
       const dir = steerCarry(pl.intent.dir, pl.pos, opps, w.p.carry.avoidM)
       return { target: clampToPitch(add(pl.pos, scale(dir, 5)), 1), speedCap: pl.intent.speed }
     }
-    const shield = pl.role === "GK" ? null : shieldTarget(pl.pos, opps, w.p.carry.shieldM)
+    // holdSpeed 0 switches the walking off: the carrier stands on the ball (the behaviour before it).
+    if (w.p.carry.holdSpeed <= 0) {
+      const shield = pl.role === "GK" ? null : shieldTarget(pl.pos, opps, w.p.carry.shieldM)
+      return shield ? { target: shield, speedCap: w.p.carry.shieldSpeed } : { target: pl.pos, speedCap: 1 }
+    }
+    // A keeper with the ball walks to the edge of the box before letting it go.
+    if (pl.role === "GK") return { target: { x: -dirOf(pl.side) * (PITCH.halfL - KEEPER_RELEASE_M), y: pl.pos.y * 0.5 }, speedCap: w.p.carry.holdSpeed }
+    const shield = shieldTarget(pl.pos, opps, w.p.carry.shieldM)
     if (shield) return { target: shield, speedCap: w.p.carry.shieldSpeed }
-    return { target: pl.pos, speedCap: 1 }
+    // Nobody close: walk the ball forwards into space (players do not stand on the ball).
+    const dir = steerCarry({ x: dirOf(pl.side), y: 0 }, pl.pos, opps, w.p.carry.avoidM)
+    return { target: clampToPitch(add(pl.pos, scale(dir, 3)), 1), speedCap: w.p.carry.holdSpeed }
   }
   if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id && pl.intent.kind === "chase")
     return { target: pl.intent.target, speedCap: vmax, timeLeft: Math.max(1, pos.flight.resolveTick - w.tick) * w.dt }

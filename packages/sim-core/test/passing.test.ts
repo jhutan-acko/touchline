@@ -55,6 +55,7 @@ describe("pitch-control-aware passing", () => {
     // On the hand-set priors (passes struck to arrive at 7 m/s, often intercepted), so recalibration does not move it.
     const before = completion(DEFAULT_PARAMS)
     const after = completion(withPass(DEFAULT_PARAMS, { pitchControlWeight: 0.5, safetyWeight: 3 }))
-    expect(after - before).toBeGreaterThan(0.02)
+    // About 1.7 points since carriers stopped standing on the ball (2026-10-10; over 2 before), on 4 seeds and on 8.
+    expect(after - before).toBeGreaterThan(0.015)
   })
 })

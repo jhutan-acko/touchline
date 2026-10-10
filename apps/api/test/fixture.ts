@@ -13,10 +13,11 @@ import { afterAll } from "vitest"
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 export const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
-// Seed 14: the session test starts at the first goal's minute and needs more than 10 streamed frames (×64: every 25th)
-// before the goal, so the goal must come at least about 25 s into its minute (seed 14: 51 s; seed 2's goal at 25 s no
-// longer cleared it after the 2026-10-08 engine changes). It also gives two goals, as the cue cache needs.
-const SEED = 14
+// Seed 12: the session test starts at the first goal's minute and needs more than 10 streamed frames (×64: every 25th)
+// before the goal, so the goal must come at least about 25 s into its minute, and in the first half, before the
+// half-time recap (seed 12: 26:57; seed 14's first goal moved to the second half when carriers stopped standing on the
+// ball, 2026-10-10). It also gives three goals; the cue cache needs two.
+const SEED = 12
 export const MATCH_ID = `lib-err-${SEED}`
 const fixture = (f: string) => (JSON.parse(readFileSync(join(root, "packages/schema/fixtures/agents/valid", f), "utf8")) as { value: unknown }).value
 

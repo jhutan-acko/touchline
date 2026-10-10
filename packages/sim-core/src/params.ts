@@ -99,6 +99,8 @@ export interface Params {
     readonly logits: Readonly<Record<ActionZone, Readonly<Record<Action, number>>>>
     readonly styleWeight: number
     readonly pressureWeight: number
+    /** Hold's logit falls by this much per second the player has had the ball (players do not stand on it). */
+    readonly holdDecayPerS: number
   }
   readonly pass: {
     readonly xpass: { readonly b0: number; readonly bDist: number; readonly bLane: number; readonly bPressure: number; readonly bHigh: number }
@@ -192,7 +194,8 @@ export interface Params {
    * Carries: speed and duration; opponents ahead within avoidM bend the heading away (0 = off); a holding carrier with an
    * opponent within shieldM moves away from them at shieldSpeed instead of standing still (0 = off).
    */
-  readonly carry: { readonly speed: number; readonly durationS: readonly [number, number]; readonly avoidM: number; readonly shieldM: number; readonly shieldSpeed: number }
+  /** On the ball: a carry's speed and length; shielding within shieldM of an opponent; otherwise walking the ball into space at holdSpeed (keepers to the edge of their box). */
+  readonly carry: { readonly speed: number; readonly durationS: readonly [number, number]; readonly avoidM: number; readonly shieldM: number; readonly shieldSpeed: number; readonly holdSpeed: number }
   readonly runs: { readonly runInBehindRatePerS: number }
   /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
   readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
@@ -309,7 +312,8 @@ export const DEFAULT_PARAMS: Params = {
       box: row({ short_pass: 0.6, through_ball: -0.4, cutback: 0.4, back_pass: -0.7, carry: 0.2, take_on: 0.1, shot: 0.3, clear: -2.0, hold: -0.8 })
     },
     styleWeight: 1.0,
-    pressureWeight: 1.0
+    pressureWeight: 1.0,
+    holdDecayPerS: 1.5
   },
   pass: {
     xpass: { b0: 3.24, bDist: -0.08, bLane: -1.0, bPressure: -0.8, bHigh: -0.4 },
@@ -360,7 +364,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
-  carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5 },
+  carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
   support: { count: 2, distM: 12, speedShare: 0.8 },
   marking: { weight: 0.5, radiusM: 10, goalSideM: 1.5, widthSlackM: 4 },
