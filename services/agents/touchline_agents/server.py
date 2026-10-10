@@ -2,7 +2,8 @@
 
 Each message carries one AgentRequest as a JSON data part. A signals request runs the moment workflow and streams
 an artifact per verified cue ("cue") and per moment ("trace"); a recap request streams the recap ("recap") and its
-recap cards ("cue"). Sessions are per match; requests for one match run one at a time, in order.
+recap cards ("cue"). Sessions are per match; requests for one match run one at a time, in order. A manage request
+(Plan 4b) needs no match session: the manager agent answers it with one "manager" artifact.
 """
 
 import argparse
@@ -23,8 +24,9 @@ from pydantic import ValidationError
 from starlette.applications import Starlette
 
 from .config import Settings, load_settings
-from .contracts import RecapRequest, SignalsRequest, dump, parse_request
-from .llm import deadline
+from .contracts import ManageRequest, RecapRequest, SignalsRequest, dump, parse_request
+from .llm import deadline, make_client
+from .manager import Manager
 from .session import Agents, MatchSession
 from .stats import StatsError
 from .workflow import build, run_moments, run_recap
@@ -47,6 +49,8 @@ def agent_card(url: str) -> AgentCard:
                        tags=["football", "commentary"], examples=['{"kind": "signals", ...}']),
             AgentSkill(id="recap", name="Recap", description="A fact-checked half-time or full-time recap and its recap cards.",
                        tags=["football", "recap"], examples=['{"kind": "recap", "recap": "half_time", ...}']),
+            AgentSkill(id="manage", name="Manager", description="A team's manager at a key moment: propose changes, or choose among re-simulated ones.",
+                       tags=["football", "tactics"], examples=['{"kind": "manage", "task": "propose", ...}']),
         ],
     )
 
@@ -108,8 +112,9 @@ class Sessions:
 
 
 class TouchlineExecutor(AgentExecutor):
-    def __init__(self, sessions: Sessions) -> None:
+    def __init__(self, sessions: Sessions, manager: Manager | None = None) -> None:
         self.sessions = sessions
+        self.manager = manager or Manager(make_client(sessions.settings, "large"), sessions.settings)
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task_from_user_message(context.message)
@@ -121,6 +126,9 @@ class TouchlineExecutor(AgentExecutor):
             if len(data) != 1:
                 raise ValueError(f"expected one JSON data part, got {len(data)}")
             req = parse_request(data[0])
+            if isinstance(req, ManageRequest):
+                await self._manage(req, up, task)
+                return
             session, workflow, lock = await self.sessions.get(req)
         except (ValueError, ValidationError, StatsError) as e:
             await up.failed(new_text_message(f"bad request: {e}", context_id=task.context_id, task_id=task.id))
@@ -150,15 +158,23 @@ class TouchlineExecutor(AgentExecutor):
                 await self.sessions.finish(req)
         await up.complete()
 
+    async def _manage(self, req: ManageRequest, up: TaskUpdater, task) -> None:
+        """One manager answer as the "manager" artifact (a failed model call is a fallback reply, not a failed task)."""
+        await up.start_work(new_text_message(f"manage {req.task} for {req.match_id}", context_id=task.context_id, task_id=task.id))
+        reply = await self.manager.handle(req)
+        await up.add_artifact([new_data_part(dump(reply), JSON)], artifact_id=f"{req.match_id}-{req.situation.team_id}-{req.task}", name="manager", last_chunk=True)
+        await up.complete()
+
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         await TaskUpdater(event_queue, context.task_id, context.context_id).cancel()
 
 
-def create_app(url: str, settings: Settings | None = None, agents: Agents | None = None) -> Starlette:
+def create_app(url: str, settings: Settings | None = None, agents: Agents | None = None, manager: Manager | None = None) -> Starlette:
     """The A2A app: the agent card at /.well-known/agent-card.json and JSON-RPC at /."""
-    sessions = Sessions(settings or load_settings(), agents)
+    settings = settings or load_settings()
+    sessions = Sessions(settings, agents)
     card = agent_card(url)
-    handler = DefaultRequestHandler(agent_executor=TouchlineExecutor(sessions), task_store=InMemoryTaskStore(), agent_card=card)
+    handler = DefaultRequestHandler(agent_executor=TouchlineExecutor(sessions, manager), task_store=InMemoryTaskStore(), agent_card=card)
 
     @asynccontextmanager
     async def lifespan(_app):

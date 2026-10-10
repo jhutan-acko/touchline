@@ -31,6 +31,8 @@ TIMEOUTS_S: Mapping[str, float] = {
     "personalizer": 3.0,
     "recap": 20.0,
     "judge": 20.0,
+    # The manager decides ahead of time (Plan 4b), so a slow model only slows match generation.
+    "manager": 30.0,
 }
 
 
@@ -51,6 +53,15 @@ class Settings:
     request_budget_s: float | None = None
     # Kept out of repr so the key never reaches a log line or a test report.
     openai_api_key: str | None = field(default=None, repr=False)
+    # US dollars per million (input, output) tokens, from TOUCHLINE_PRICE_USD_PER_MTOK="in,out"; None: cost not known.
+    price_usd_per_mtok: tuple[float, float] | None = None
+
+    def cost_usd(self, tokens_in: int, tokens_out: int) -> float:
+        """What a call cost, or 0 when no price is configured (the A/B report then says the price is unset)."""
+        if self.price_usd_per_mtok is None:
+            return 0.0
+        p_in, p_out = self.price_usd_per_mtok
+        return (tokens_in * p_in + tokens_out * p_out) / 1_000_000
 
     def model(self, tier: Tier) -> str:
         return self.small_model if tier == "small" else self.large_model
@@ -103,6 +114,13 @@ def load_settings(env: Mapping[str, str] | None = None, env_file: Path | None = 
         budget_s = float(budget) if budget else None
     except ValueError:
         raise SettingsError("TOUCHLINE_REQUEST_BUDGET_S must be a number of seconds") from None
+    price = merged.get("TOUCHLINE_PRICE_USD_PER_MTOK")
+    try:
+        price_pair = tuple(float(x) for x in price.split(",")) if price else None
+    except ValueError:
+        raise SettingsError('TOUCHLINE_PRICE_USD_PER_MTOK must be "input,output" dollars per million tokens') from None
+    if price_pair is not None and (len(price_pair) != 2 or min(price_pair) < 0):
+        raise SettingsError('TOUCHLINE_PRICE_USD_PER_MTOK must be "input,output" dollars per million tokens')
     hosts = merged.get("TOUCHLINE_MCP_HOSTS", "127.0.0.1,localhost,::1")
     cp = merged.get("TOUCHLINE_CHECKPOINTS")
     return Settings(
@@ -115,4 +133,5 @@ def load_settings(env: Mapping[str, str] | None = None, env_file: Path | None = 
         reasoning_effort=effort,
         request_budget_s=budget_s,
         openai_api_key=key,
+        price_usd_per_mtok=price_pair,
     )

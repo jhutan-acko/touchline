@@ -44,7 +44,7 @@ async def test_serves_its_agent_card(server):
         card = (await http.get(f"{server}.well-known/agent-card.json")).json()
     assert card["name"] == "touchline-agents" and card["capabilities"]["streaming"]
     assert card["supportedInterfaces"][0] == {"url": server, "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}
-    assert {s["id"] for s in card["skills"]} == {"moments", "recap"}
+    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage"}
 
 
 async def test_signals_stream_back_as_cues_and_traces(server, stats_url, stats):
@@ -97,3 +97,17 @@ async def test_the_full_time_recap_closes_the_match(stats_url, stats):
     assert sessions.open_matches() == [MATCH_ID]
     await sessions.finish(req)
     assert sessions.open_matches() == []
+
+
+async def test_a_manage_request_needs_no_match_session_and_answers_with_a_manager_artifact(server):
+    from pathlib import Path
+    import json
+
+    from touchline_agents.contracts import ManagerReply
+
+    fixture = Path(__file__).resolve().parents[3] / "packages/schema/fixtures/agents/valid/request-manage-propose.json"
+    req = json.loads(fixture.read_text())["value"]
+    state, arts, _ = await send(server, [new_data_part(req, "application/json")])
+    assert state == TaskState.TASK_STATE_COMPLETED
+    [reply] = [ManagerReply.model_validate(a) for a in arts["manager"]]
+    assert reply.task == "propose" and not reply.fallback and len(reply.proposal.options) >= 2
