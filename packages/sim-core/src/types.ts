@@ -105,6 +105,8 @@ export interface PlayerState {
 export interface BallState {
   readonly pos: Vec3
   readonly vel: Vec3
+  /** Spin about the horizontal axis across the ball's path (rad/s, topspin positive); absent means none. */
+  readonly spin?: number
 }
 
 export type ActionKind = "pass" | "shot" | "clearance" | "deflection"

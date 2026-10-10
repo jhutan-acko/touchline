@@ -12,6 +12,7 @@
     "league": "pnpm --filter @touchline/league run generate",
     "calibrate": "pnpm --filter @touchline/calibrate run calibrate",
     "realism": "pnpm --filter @touchline/calibrate run realism",
+    "physics:fit": "uv run --locked --project python/analytics python -m touchline_analytics.physics fit",
     "stats": "pnpm --filter @touchline/stats run stats",
     "mcp-stats": "pnpm --filter @touchline/mcp-stats run serve",
     "agents": "pnpm --filter @touchline/agent-gateway run agents",

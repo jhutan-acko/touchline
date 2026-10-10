@@ -61,7 +61,7 @@ export const resolveFlight = (
   let b = start
   for (let k = 1; k <= maxTicks; k++) {
     const prev = b
-    b = stepBall(b, dt, p.ball)
+    b = stepBall(b, dt, p)
     const cross = goalLineCrossing(prev.pos, b.pos)
     if (cross?.inGoal) return { ticks: k, winnerId: null, result: "goal", ball: { pos: { x: cross.x, y: cross.y, z: cross.z }, vel: b.vel }, aerial: null }
     if (!inPitch({ x: b.pos.x, y: b.pos.y })) return { ticks: k, winnerId: null, result: "out", ball: b, aerial: null }
@@ -80,7 +80,7 @@ export const resolveFlight = (
       // can be anywhere within ~½·a·t² (capped by top speed) of pos + vel·t. arriveBy() steers to match.
       const tc = (k - 1 + f) * dt
       const reaction = pl.id === intendedId ? 0 : p.kinematics.reactionS
-      const vmax = vmaxFor(pl.attrs, pl.energy, p)
+      const vmax = vmaxFor(pl, pl.energy, p)
       const drift = { x: pl.pos.x + pl.vel.x * tc, y: pl.pos.y + pl.vel.y * tc }
       const radius = p.kinematics.reachM + p.kinematics.reachMargin * reachIn(tc - reaction, 0, vmax, accelFor(pl.attrs, p))
       const fromDrift = Math.hypot(contact.x - drift.x, contact.y - drift.y)

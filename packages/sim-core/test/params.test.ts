@@ -23,7 +23,7 @@ describe("params from JSON", () => {
   it("merges a partial file onto the defaults and keeps provenance", () => {
     const p = paramsFromJson({ provenance: { ...DEFAULT_PARAMS.provenance, version: "calib-x" }, kinematics: { reachMargin: 0.6 } })
     expect(p.kinematics.reachMargin).toBe(0.6)
-    expect(p.kinematics.vmaxBase).toBe(DEFAULT_PARAMS.kinematics.vmaxBase)
+    expect(p.kinematics.reachM).toBe(DEFAULT_PARAMS.kinematics.reachM)
     expect(p.provenance.version).toBe("calib-x")
   })
   it("ignores keys the engine does not know (e.g. the calibration record)", () => {
@@ -41,7 +41,7 @@ describe("params from JSON: review fixes", () => {
   const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
   it("refuses values whose type differs from the default's", () => {
     for (const bad of [
-      { kinematics: { vmaxBase: "fast" } },
+      { kinematics: { reachM: "far" } },
       { ball: null },
       { shot: 5 },
       { timing: { addedTimeMinS: [1] } },
@@ -77,7 +77,7 @@ describe("params from JSON: value ranges", () => {
       expect(() => paramsFromJson({ provenance: prov, ...bad }), JSON.stringify(bad)).toThrow(/must be between 0 and 1/)
   })
   it("refuses negative values where only magnitudes make sense, but allows signed model coefficients", () => {
-    for (const bad of [{ substitutions: { windowSdMin: -1 } }, { kinematics: { vmaxBase: -9 } }, { timing: { restartDelayS: { corner: -5 } } }])
+    for (const bad of [{ substitutions: { windowSdMin: -1 } }, { kinematics: { reachM: -9 } }, { timing: { restartDelayS: { corner: -5 } } }])
       expect(() => paramsFromJson({ provenance: prov, ...bad }), JSON.stringify(bad)).toThrow(/must not be negative/)
     expect(() => paramsFromJson({ provenance: prov, shot: { xg: { b0: -2 } }, firstTouch: { bSkill: -4 }, defending: { tackleBase: -0.5 } })).not.toThrow()
   })

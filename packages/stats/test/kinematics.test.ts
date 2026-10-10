@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { initMatch, isFinished, step } from "@touchline/sim-core"
+import { initMatch, isFinished, paramsFromJson, step } from "@touchline/sim-core"
 import { makeConfig } from "@touchline/sim-core/testing"
 import { StatsEngine, StatsError } from "../src/engine.js"
 import { infoFromConfig } from "../src/input.js"
-import { event, frame, INFO, models } from "./helpers.js"
+import { event, frame, INFO, models, root } from "./helpers.js"
 
 /** Player h2 runs along x at `speeds[i]` m/s during second i (10 ticks per second). */
 const run = (eng: StatsEngine, speeds: number[], startTick = 0) => {
@@ -103,7 +105,9 @@ describe("kinematics", () => {
   })
 
   it("take a whole simulated match in emission order and give plausible totals", () => {
-    const cfg = makeConfig(7)
+    // The committed parameters: the hand-set priors are not calibrated (with the fitted movement their players run ~14.5 km).
+    const params = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
+    const cfg = makeConfig(7, { params })
     const eng = new StatsEngine(infoFromConfig(cfg), models())
     let s = initMatch(cfg)
     const t0 = performance.now()
