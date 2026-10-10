@@ -6,6 +6,7 @@ import {
   isFinished,
   isHalfTimeBreak,
   OrderError,
+  statesAt,
   step,
   subsLeft,
   whatIf,
@@ -140,5 +141,16 @@ describe("the orders intervention", () => {
     const r = whatIf(stoppage, { kind: "orders", side: "home", orders: [{ kind: "sub", off: onPitch(stoppage, "ST").id, on: bench("ST").id }] }, { seeds: 3, horizonS: 30, side: "home" })
     expect([r.seeds, r.side]).toEqual([3, "home"])
     expect(() => whatIf(stoppage, { kind: "orders", side: "home", orders: [{ kind: "style", setting: "tempo", value: -1 }] }, { seeds: 1, horizonS: 10 })).toThrow(WhatIfError)
+  })
+})
+
+describe("a managed match rebuilt from its logged orders", () => {
+  it("reaches the same states as the match that applied them", () => {
+    const off = onPitch(stoppage, "ST").id, on = bench("ST").id
+    const logged = [{ tick: stoppage.tick, side: "home" as const, orders: [{ kind: "sub" as const, off, on }, { kind: "style" as const, setting: "tempo" as const, value: 0.9 }] }]
+    const played = playUntil(managed, (s) => s.tick >= stoppage.tick + 300, applyOrders(stoppage, "home", logged[0]!.orders)).s
+    const rebuilt = statesAt(managed, [stoppage.tick + 300], logged).get(stoppage.tick + 300)!
+    expect(rebuilt).toEqual(played)
+    expect(rebuilt.players.some((p) => p.id === on)).toBe(true)
   })
 })

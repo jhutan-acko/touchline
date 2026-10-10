@@ -233,8 +233,8 @@ export const whatIf = (s: MatchState, variant: Intervention, opts: WhatIfOptions
   return { side, at_tick: s.tick, horizon_s: horizonS, seeds, baseline: per(runs.baseline), variant: per(runs.variant), difference, forced_applied: forcedApplied }
 }
 
-/** The match states (after the step of each tick) at the given ticks, for a plain or scripted match. */
-export const statesAt = (cfg: MatchConfig, ticks: Iterable<number>): Map<number, MatchState> => {
+/** The match states (after the step of each tick) at the given ticks, for a plain, scripted or managed match (with its logged orders). */
+export const statesAt = (cfg: MatchConfig, ticks: Iterable<number>, logged: LoggedOrders = []): Map<number, MatchState> => {
   const want = new Set(ticks)
   if ((cfg.script?.entries.length ?? 0) > 0) return new Map(runScript(cfg, { statesAt: want }).states)
   const out = new Map<number, MatchState>()
@@ -242,8 +242,18 @@ export const statesAt = (cfg: MatchConfig, ticks: Iterable<number>): Map<number,
   let s = initMatch(cfg)
   if (want.has(s.tick)) out.set(s.tick, s)
   while (!isFinished(s) && s.tick < last) {
-    s = step(s).state
+    s = withLoggedOrders(step(s).state, logged)
     if (want.has(s.tick)) out.set(s.tick, s)
   }
+  return out
+}
+
+/** A managed match's orders as its decision log recorded them: applied after the step of `tick` (Plan 4b). */
+export type LoggedOrders = ReadonlyArray<{ readonly tick: number; readonly side: Side; readonly orders: ReadonlyArray<ManagerOrder> }>
+
+/** The state with the logged orders of its tick applied, as the managed match applied them. */
+export const withLoggedOrders = (s: MatchState, logged: LoggedOrders): MatchState => {
+  let out = s
+  for (const l of logged) if (l.tick === s.tick) out = applyOrders(out, l.side, l.orders)
   return out
 }
