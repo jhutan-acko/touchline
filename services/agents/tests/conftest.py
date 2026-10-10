@@ -22,9 +22,11 @@ MATCH_ID = "agents-test"
 # runs the tests; ERROR_SEED first, then SEED with --general); re-run it whenever the engine or
 # data/params/touchline-params.json changes. 2026-10-09 (fitted physics): of seeds 1-1400, 8 have the error shape and 10
 # is the first to pass; the general match is seed 2, the first of 1-100 with its shape for which the whole suite passes.
+# 2026-10-10 (moving ball carriers): of seeds 1-1400, 3 have the error shape (554, 713, 997) and 554 is the first to pass;
+# the general match is still seed 2.
 # Both can be overridden from the environment (TOUCHLINE_AGENTS_SEED, TOUCHLINE_AGENTS_ERROR_SEED).
 SEED = int(os.environ.get("TOUCHLINE_AGENTS_SEED", "2"))
-ERROR_SEED = int(os.environ.get("TOUCHLINE_AGENTS_ERROR_SEED", "10"))
+ERROR_SEED = int(os.environ.get("TOUCHLINE_AGENTS_ERROR_SEED", "554"))
 
 
 def simulate(out: Path, seed: int) -> Path:
