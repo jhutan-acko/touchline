@@ -4,7 +4,7 @@
  * of everything that comes back. Late cues (received after their ttl) and unverified cues are dropped.
  */
 import { Data, Effect } from "effect"
-import { decodeCue, decodeMomentTrace, decodeRecap, type AgentRequest, type Cue, type MomentTrace, type Recap, type Segment, type Signal } from "@touchline/schema"
+import { decodeCue, decodeMomentTrace, decodeRecap, type Cue, type MatchRequest, type MomentTrace, type Recap, type Segment, type Signal } from "@touchline/schema"
 import { TaskFailed, type Sender } from "./a2a.js"
 
 export class AgentUnavailable extends Data.TaggedError("AgentUnavailable")<{ readonly reason: string }> {}
@@ -40,7 +40,7 @@ export interface MatchPlan {
 export type Outcome = "ok" | "failed" | "timeout" | "unavailable" | "invalid" | "skipped"
 
 export interface RequestLog {
-  readonly kind: AgentRequest["kind"]
+  readonly kind: MatchRequest["kind"]
   readonly frame: number
   readonly outcome: Outcome
   readonly ms: number
@@ -58,7 +58,7 @@ export interface GatewayResult {
 }
 
 /** The requests for a match in order: a signals batch per `batchS` seconds that raised any, and a recap at each whistle. */
-export const timeline = (plan: MatchPlan, opts: GatewayOptions): AgentRequest[] => {
+export const timeline = (plan: MatchPlan, opts: GatewayOptions): MatchRequest[] => {
   const base = { match_id: plan.matchId, mcp_url: plan.mcpUrl, segments: [...opts.segments] }
   const width = Math.max(1, Math.round(opts.batchS * plan.fps))
   const groups = new Map<number, Signal[]>()
@@ -66,7 +66,7 @@ export const timeline = (plan: MatchPlan, opts: GatewayOptions): AgentRequest[] 
     const k = Math.floor(s.frame_id / width)
     groups.set(k, [...(groups.get(k) ?? []), s])
   }
-  const out: Array<{ frame: number; order: number; req: AgentRequest }> = [...groups.values()].map((g) => {
+  const out: Array<{ frame: number; order: number; req: MatchRequest }> = [...groups.values()].map((g) => {
     const frame = g[g.length - 1]!.frame_id
     return { frame, order: 0, req: { kind: "signals" as const, ...base, now_frame: frame, signals: g } }
   })
@@ -77,7 +77,7 @@ export const timeline = (plan: MatchPlan, opts: GatewayOptions): AgentRequest[] 
   return out.sort((a, b) => a.frame - b.frame || a.order - b.order).map((x) => x.req)
 }
 
-const frameOf = (req: AgentRequest) => (req.kind === "signals" ? req.now_frame : req.at_frame)
+const frameOf = (req: MatchRequest) => (req.kind === "signals" ? req.now_frame : req.at_frame)
 
 /** What a request has received so far; the caller keeps it, so cues that arrived before a timeout are not lost. */
 export interface Received {
@@ -99,7 +99,7 @@ const decode = <A>(name: string, f: (u: unknown) => A, data: unknown): A => {
 }
 
 /** One request: stream its artifacts into `got`, validating each and dropping late and unverified cues. */
-export const exchange = (send: Sender, req: AgentRequest, budgetMs: number, got: Received = received()) => {
+export const exchange = (send: Sender, req: MatchRequest, budgetMs: number, got: Received = received()) => {
   const run = Effect.tryPromise({
     try: async (signal) => {
       const t0 = performance.now()

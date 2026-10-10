@@ -1,0 +1,17 @@
+{
+  "name": "@touchline/manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit -p .", "manage": "tsx src/cli.ts", "ab": "tsx src/ab/cli.ts" },
+  "dependencies": {
+    "@touchline/agent-gateway": "workspace:*",
+    "@touchline/schema": "workspace:*",
+    "@touchline/sim": "workspace:*",
+    "@touchline/sim-core": "workspace:*",
+    "@touchline/stats": "workspace:*",
+    "effect": "4.0.1"
+  },
+  "devDependencies": { "@touchline/league": "workspace:*" }
+}

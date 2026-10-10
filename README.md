@@ -109,6 +109,20 @@ Each session in the fan app links to three more pages, each in its own tab:
 - **Graphics output** (`#/graphics/<session>?seg=…&match=…`): a transparent page for a vision mixer or OBS, with the scoreboard and only the cues the producer sent.
 - **Ops view** (`#/ops/<session>`): Fact-Checker pass/retry/drop counts, fallbacks, time per agent, requests by outcome, and latency against the spec's budgets: goal to scoreboard under 250 ms, and, live, signal to cue under 4 s (p95). A recorded session reports the request times measured when its cache was made.
 
+## Manager agents
+
+A team's manager agent decides at key moments: half time, the restart after a goal, and the first stoppage after 60' and 75' (a minute moment within 5 minutes of a decision is absorbed by it). The engine pauses the match there and sends the agent a `Situation`: the match from its own team's side up to that tick, and nothing else (no seed, script or future; see `packages/schema/src/manager.ts`). The agent proposes up to three changes (style settings and substitutions). The engine tests each against "no change" on 20 forked futures over the next 10 minutes. The agent then chooses, giving a reason whose numbers must come from those results. Every decision goes to `decisions.jsonl`, so a managed match replays exactly without the model.
+
+```bash
+uv run --project services/agents touchline-agents --port 8100     # the agent service (TOUCHLINE_LLM=stub|openai)
+pnpm manage --seed 5001 --home ironmoor --away saltmarsh --home-manager agent --away-manager rules   # out/m-5001 with decisions.jsonl
+pnpm manage --seed 5001 --home ironmoor --away saltmarsh --replay out/m-5001/decisions.jsonl       # the same match, no model calls
+pnpm library --managed ironmoor:saltmarsh:5001,northwick:larkspur:5004   # managed matches in the fan app's library (agent v agent)
+pnpm managers:ab --seeds 120 --llm openai                       # A/B: no manager, rule-based, agent (docs/evals/manager-ab.md)
+```
+
+`pnpm managers:ab --llm stub` runs the pipeline without a model. With `--llm openai` the A/B run starts the agent service on OpenAI; the key stays in `.env.local` and only the Python service reads it. Cost per match is reported only when `TOUCHLINE_PRICE_USD_PER_MTOK="input,output"` gives the model's price; otherwise the report gives tokens. If the agent cannot propose, the rule-based option stands in. If it cannot choose, or the service cannot be reached, the previous plan stays. Each fallback is counted in the report. In the fan app a managed match shows each decision as a cue, a card with every option's tested gain, and a strip of decisions to reopen them.
+
 ## Packages
 
 | Package | What it does |
@@ -125,6 +139,7 @@ Each session in the fan app links to three more pages, each in its own tab:
 | `apps/web` | The fan app (React, Vite, Tailwind): pitch, overlays, profiles, "Why?" drawer, recaps, split screen; the studio console, graphics output and ops view |
 | `packages/agent-gateway` | A2A client of the agent service: signal batches, recaps, time budget, retry, circuit breaker, cue cache |
 | `services/agents` | The six agents, their workflow, the A2A server and the ground-truth evaluation harness (`evals/`) |
+| `packages/manager` | Manager agents: key moments, the Situation sent to the model, rule-based and agent managers, option testing by re-simulation, decision log and replay; `pnpm manage`, `pnpm managers:ab` |
 | `packages/calibrate` | Match statistics (identical to the Python definitions), tuning knobs, tuner, realism gate |
 | `python/analytics` | CDF validation, IDSSE download, real-match targets, realism report, stats-model fitting |
 

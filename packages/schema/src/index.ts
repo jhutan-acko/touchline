@@ -1,4 +1,5 @@
 export * from "./agents.js"
+export * from "./manager.js"
 export * from "./domain.js"
 export * from "./json.js"
 export * from "./stats.js"

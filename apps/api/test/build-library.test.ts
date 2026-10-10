@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, describe, expect, it } from "vitest"
 import { decodeMomentTrace, segmentKey } from "@touchline/schema"
-import { BuildError, buildLibrary, librarySegments } from "../src/build-library.js"
+import { BuildError, buildLibrary, librarySegments, parseManaged } from "../src/build-library.js"
 import { scanLibrary } from "../src/library.js"
 import { betterMomentId } from "../src/betterpass.js"
 import { betterOptionEvents, readWhatIfs } from "../src/whatif.js"
@@ -19,6 +19,8 @@ const freePort = () => new Promise<number>((ok) => {
 })
 
 let agents: ChildProcess | undefined
+let started = ""
+const agentsUrl = () => started
 const dirs: string[] = []
 const tmp = () => {
   const d = mkdtempSync(join(tmpdir(), "lib-"))
@@ -52,6 +54,7 @@ describe("library builder", () => {
     const port = await freePort()
     agents = spawn("uv", ["run", "--project", "services/agents", "touchline-agents", "--port", String(port)], { cwd: root, env: { ...process.env, TOUCHLINE_LLM: "stub" }, detached: true, stdio: "ignore" })
     const url = `http://127.0.0.1:${port}/`
+    started = url
     for (let i = 0; i < 300 && !(await fetch(`${url}.well-known/agent-card.json`).then((r) => r.ok, () => false)); i++) await new Promise((r) => setTimeout(r, 200))
     const out = tmp()
     await buildLibrary({ out, scenarios: ["costly_error"], seed: 2, agentsUrl: url })
@@ -68,5 +71,24 @@ describe("library builder", () => {
     const found = [...clips.values()].filter((c) => c.verdict === "better_option_found")
     expect(found.length).toBeGreaterThan(0)
     for (const c of found) expect(m.cues.filter((q) => q.moment_id === betterMomentId(c.event_id))).toHaveLength(6)
+  }, 600_000)
+
+  it("reads managed matches as home:away:seed and builds them only with the agent service", async () => {
+    expect(parseManaged("ironmoor:saltmarsh:5001, northwick:larkspur:7")).toEqual([{ home: "ironmoor", away: "saltmarsh", seed: 5001 }, { home: "northwick", away: "larkspur", seed: 7 }])
+    expect(parseManaged("")).toEqual([])
+    expect(() => parseManaged("ironmoor:saltmarsh")).toThrow(/is not home:away:seed/)
+    await expect(buildLibrary({ out: tmp(), scenarios: [], seed: 1, managed: parseManaged("ironmoor:saltmarsh:1"), agentsUrl: null })).rejects.toThrow("managed matches need the agent service")
+  })
+
+  it("adds a managed match: the manager agent for both teams, its decisions shown as cues, annotated like any match (stub model)", async () => {
+    const url = (await fetch(`${agentsUrl()}.well-known/agent-card.json`).then((r) => r.ok, () => false)) ? agentsUrl() : null
+    expect(url).not.toBeNull() // started by the test above
+    const out = tmp()
+    await buildLibrary({ out, scenarios: [], seed: 1, managed: [{ home: "northwick", away: "larkspur", seed: 3 }], agentsUrl: url, whatif: { seeds: 2, horizonS: 60 } })
+    const m = scanLibrary(out, league).get("lib-managed-northwick-larkspur-3")!
+    expect(m.info.managers).toEqual({ home: "agent", away: "agent" })
+    expect(m.info.segments).toHaveLength(12)
+    expect(m.decisions.length).toBeGreaterThanOrEqual(6)
+    expect(m.cues.filter((c) => c.display.template === "manager_decision")).toHaveLength(2 * m.decisions.length)
   }, 600_000)
 })

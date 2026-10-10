@@ -156,6 +156,9 @@ class Outcome[T]:
     # Why the fallback was used (exception type or "invalid"); None when the model answered.
     reason: str | None
     ms: float
+    # Tokens the model call used (0 for the stub, a fallback without a call, or a provider that reports none).
+    tokens_in: int = 0
+    tokens_out: int = 0
 
 
 async def run_structured[T: BaseModel](
@@ -172,19 +175,22 @@ async def run_structured[T: BaseModel](
     `fallback()` instead (spec §6: every agent has a deterministic fallback, so the match never goes silent)."""
     t0 = time.perf_counter()
     reason: str | None = None
+    tokens = (0, 0)
     if (end := _DEADLINE.get()) is not None:
         timeout_s = min(timeout_s, end - time.monotonic())
         if timeout_s <= 0.05:
             return Outcome(fallback(), True, "deadline", 0.0)
     try:
         r = await asyncio.wait_for(agent.run(envelope(task, payload), options={"response_format": output}), timeout_s)
+        usage = getattr(r, "usage_details", None) or {}
+        tokens = (int(usage.get("input_token_count") or 0), int(usage.get("output_token_count") or 0))
         value = r.value
         if isinstance(value, output) and accept(value):
-            return Outcome(value, False, None, (time.perf_counter() - t0) * 1000)
+            return Outcome(value, False, None, (time.perf_counter() - t0) * 1000, *tokens)
         reason = "invalid"
     except TimeoutError:
         reason = "timeout"
     except Exception as e:  # any model or parsing failure means: use the fallback
         reason = type(e).__name__
         log.warning("%s: model failed (%s), using the fallback", task, reason)
-    return Outcome(fallback(), True, reason, (time.perf_counter() - t0) * 1000)
+    return Outcome(fallback(), True, reason, (time.perf_counter() - t0) * 1000, *tokens)

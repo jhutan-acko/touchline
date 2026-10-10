@@ -6,7 +6,7 @@ import { BrowserSocket } from "@effect/platform-browser"
 import { Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import { TouchlineRpcs, type Evidence, type MatchInfo, type MatchSummary, type OpsReport, type Playback, type QueueStatus, type RecapView, type StudioAction, type StudioTick, type Tick, type WhatIfClip } from "@touchline/rpc"
-import type { Segment } from "@touchline/schema"
+import type { Decision, Segment } from "@touchline/schema"
 
 export interface StartOptions {
   readonly speed: number
@@ -34,6 +34,8 @@ export interface TouchlineClient {
   graphics(sessionId: string, segment: Segment, onTick: (t: Tick) => void, onEnd?: (error: string | null) => void): () => void
   /** The session's ops numbers, as of its frame. */
   ops(sessionId: string): Promise<OpsReport>
+  /** A managed match's manager decisions the session has reached. */
+  decisions(sessionId: string): Promise<ReadonlyArray<Decision>>
   close(): Promise<void>
 }
 
@@ -66,6 +68,7 @@ export const connect = async (url: string): Promise<TouchlineClient> => {
     act: (session_id, moment_id, action) => call(client.StudioAct({ session_id, moment_id, action })),
     graphics: (session_id, segment, onTick, onEnd) => follow(client.WatchGraphics({ session_id, segment }), onTick, onEnd),
     ops: (session_id) => call(client.GetOps({ session_id })),
+    decisions: (session_id) => call(client.GetDecisions({ session_id })),
     close: async () => {
       await runtime.runPromise(Scope.close(scope, Exit.void))
       await runtime.dispose()

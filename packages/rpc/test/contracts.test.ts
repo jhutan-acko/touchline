@@ -20,13 +20,13 @@ describe("API contracts", () => {
   })
 
   it("describe a match in the library", () => {
-    const m = { match_id: "eval-costly_error-1", scenario: "costly_error", seed: 1, home: team("northwick", "home"), away: team("larkspur", "away"), score: { home: 1, away: 2 }, fps: 10, frames: 58007, segments: ["casual.en.neutral"], model: "stub" }
+    const m = { match_id: "eval-costly_error-1", scenario: "costly_error", seed: 1, home: team("northwick", "home"), away: team("larkspur", "away"), score: { home: 1, away: 2 }, fps: 10, frames: 58007, segments: ["casual.en.neutral"], model: "stub", managers: null }
     expect(Schema.decodeUnknownSync(MatchSummary)(m)).toEqual(m)
     expect(() => Schema.decodeUnknownSync(MatchSummary)({ ...m, score: { home: -1, away: 0 } })).toThrow()
   })
 
   it("offer the endpoints of spec §5.7", () => {
-    expect([...TouchlineRpcs.requests.keys()].sort()).toEqual(["Control", "GetEvidence", "GetMatch", "GetOps", "GetRecap", "GetWhatIf", "ListMatches", "StartSession", "StudioAct", "StudioWatch", "Watch", "WatchGraphics"])
+    expect([...TouchlineRpcs.requests.keys()].sort()).toEqual(["Control", "GetDecisions", "GetEvidence", "GetMatch", "GetOps", "GetRecap", "GetWhatIf", "ListMatches", "StartSession", "StudioAct", "StudioWatch", "Watch", "WatchGraphics"])
   })
 
   it("refuse playback speeds out of range", () => {

@@ -1,13 +1,13 @@
 /** A TouchlineClient for component tests: canned answers, and ticks the test pushes to every watcher. */
 import type { Evidence, MatchInfo, MatchSummary, OpsReport, Playback, RecapView, StudioTick, Tick, WhatIfClip } from "@touchline/rpc"
-import type { Segment } from "@touchline/schema"
+import type { Decision, Segment } from "@touchline/schema"
 import type { TouchlineClient } from "../src/client.js"
 
 export const team = (id: string, side: "home" | "away", name: string, color: string) => ({ id, name, short: id.slice(0, 3).toUpperCase(), side, kit: { primary: color, secondary: "#ffffff" } })
 
 export const MATCH: MatchSummary = {
   match_id: "lib-costly_error-1", scenario: "costly_error", seed: 1, home: team("northwick", "home", "Northwick Mariners", "#1d4ed8"), away: team("larkspur", "away", "Larkspur City", "#dc2626"),
-  score: { home: 1, away: 2 }, fps: 10, frames: 58000, segments: ["casual.en.neutral"], model: "stub"
+  score: { home: 1, away: 2 }, fps: 10, frames: 58000, segments: ["casual.en.neutral"], model: "stub", managers: null
 }
 export const INFO: MatchInfo = {
   ...MATCH,
@@ -35,7 +35,7 @@ export interface FakeClient extends TouchlineClient {
   pushGraphics(t: Tick): void
 }
 
-export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip> } = {}): FakeClient => {
+export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip>; decisions?: ReadonlyArray<Decision>; info?: MatchInfo } = {}): FakeClient => {
   const watchers: FakeClient["watchers"] = []
   const studios: FakeClient["studios"] = []
   const outputs: FakeClient["outputs"] = []
@@ -77,7 +77,7 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
     startSession: async (id, s) => {
       calls.push(`start ${id} x${s.speed} live=${s.live}`)
       playback = { ...playback, speed: s.speed, live: s.live }
-      return { session_id: "s1", match: INFO }
+      return { session_id: "s1", match: o.info ?? INFO }
     },
     watch: (_id, segment, onTick, onEnd) => {
       watched++
@@ -99,6 +99,10 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
       calls.push(`whatIf ${eventId}`)
       if (!o.whatIf) throw new Error("no what-if")
       return o.whatIf()
+    },
+    decisions: async (sessionId) => {
+      calls.push(`decisions ${sessionId}`)
+      return o.decisions ?? []
     },
     recap: async (sessionId, kind) => {
       calls.push(`recap ${sessionId} ${kind}`)

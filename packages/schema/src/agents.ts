@@ -4,6 +4,7 @@
  * are generated, and every A2A message and artifact is validated against them on both sides.
  */
 import { Schema } from "effect"
+import { ManageRequest, ManagerReply } from "./manager.js"
 import { MetricId, Signal, SignalType } from "./stats.js"
 
 const NonNegInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
@@ -189,11 +190,13 @@ export const RecapRequest = Schema.Struct({
 }).annotate({ identifier: "RecapRequest" })
 
 /** The data part of every A2A message the gateway sends. */
-export const AgentRequest = Schema.Union([SignalsRequest, RecapRequest]).annotate({ identifier: "AgentRequest" })
+export const AgentRequest = Schema.Union([SignalsRequest, RecapRequest, ManageRequest]).annotate({ identifier: "AgentRequest" })
 export type AgentRequest = typeof AgentRequest.Type
+/** The requests of a match's commentary timeline (the gateway's batches and recaps). */
+export type MatchRequest = typeof SignalsRequest.Type | typeof RecapRequest.Type
 
 /** A2A artifact names and the contract each one carries. */
-export const ARTIFACTS = { cue: Cue, trace: MomentTrace, recap: Recap } as const
+export const ARTIFACTS = { cue: Cue, trace: MomentTrace, recap: Recap, manager: ManagerReply } as const
 
 /** All contracts in one document (the JSON Schema export's root). */
 export const AgentContracts = Schema.Struct({
@@ -206,7 +209,8 @@ export const AgentContracts = Schema.Struct({
   cue: Cue,
   recap: Recap,
   trace: MomentTrace,
-  request: AgentRequest
+  request: AgentRequest,
+  manager_reply: ManagerReply
 }).annotate({ identifier: "AgentContracts" })
 
 export const decodeCue = Schema.decodeUnknownSync(Cue)

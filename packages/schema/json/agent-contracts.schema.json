@@ -33,6 +33,9 @@
     },
     "request": {
       "$ref": "#/$defs/AgentRequest"
+    },
+    "manager_reply": {
+      "$ref": "#/$defs/ManagerReply"
     }
   },
   "required": [
@@ -45,7 +48,8 @@
     "cue",
     "recap",
     "trace",
-    "request"
+    "request",
+    "manager_reply"
   ],
   "additionalProperties": true,
   "$defs": {
@@ -952,6 +956,613 @@
       ],
       "additionalProperties": true
     },
+    "StyleSetting": {
+      "type": "object",
+      "properties": {
+        "setting": {
+          "type": "string",
+          "enum": [
+            "pressIntensity",
+            "lineHeight",
+            "compactness",
+            "tempo",
+            "longBallBias",
+            "crossBias",
+            "riskTolerance"
+          ]
+        },
+        "value": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "meaning": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "setting",
+        "value",
+        "min",
+        "max",
+        "meaning"
+      ],
+      "additionalProperties": true
+    },
+    "TeamStats": {
+      "type": "object",
+      "properties": {
+        "xg": {
+          "type": "number"
+        },
+        "shots": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "possession_pct": {
+          "type": "number"
+        },
+        "pass_completion_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ppda": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "yellow_cards": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "red_cards": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "xg",
+        "shots",
+        "possession_pct",
+        "pass_completion_pct",
+        "ppda",
+        "yellow_cards",
+        "red_cards"
+      ],
+      "additionalProperties": true
+    },
+    "TeamView": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "archetype": {
+          "type": "string",
+          "enum": [
+            "high_press",
+            "possession",
+            "direct",
+            "low_block"
+          ]
+        },
+        "formation": {
+          "type": "string"
+        },
+        "style": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StyleSetting"
+          }
+        },
+        "stats": {
+          "$ref": "#/$defs/TeamStats"
+        }
+      },
+      "required": [
+        "name",
+        "archetype",
+        "formation",
+        "style",
+        "stats"
+      ],
+      "additionalProperties": true
+    },
+    "PlayerView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "GK",
+            "CB",
+            "FB",
+            "DM",
+            "CM",
+            "AM",
+            "W",
+            "ST"
+          ]
+        },
+        "energy_pct": {
+          "type": "number"
+        },
+        "minutes_played": {
+          "type": "number"
+        },
+        "yellow_card": {
+          "type": "boolean"
+        },
+        "shots": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "xg": {
+          "type": "number"
+        },
+        "passes_completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tackles_won": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "number",
+        "role",
+        "energy_pct",
+        "minutes_played",
+        "yellow_card",
+        "shots",
+        "xg",
+        "passes_completed",
+        "tackles_won"
+      ],
+      "additionalProperties": true
+    },
+    "BenchView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "GK",
+            "CB",
+            "FB",
+            "DM",
+            "CM",
+            "AM",
+            "W",
+            "ST"
+          ]
+        },
+        "available": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "number",
+        "role",
+        "available"
+      ],
+      "additionalProperties": true
+    },
+    "RecentView": {
+      "type": "object",
+      "properties": {
+        "xg": {
+          "type": "number"
+        },
+        "shots": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ball_regains": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "xg",
+        "shots",
+        "ball_regains"
+      ],
+      "additionalProperties": true
+    },
+    "Situation": {
+      "type": "object",
+      "properties": {
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "team_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "moment": {
+          "type": "object",
+          "properties": {
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "half_time",
+                  "after_goal",
+                  "minute_60",
+                  "minute_75"
+                ]
+              },
+              "minItems": 1
+            },
+            "minute": {
+              "type": "number"
+            },
+            "minutes_left": {
+              "type": "number"
+            },
+            "added_time_expected_min": {
+              "type": "number"
+            },
+            "score": {
+              "type": "object",
+              "properties": {
+                "for": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "against": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "for",
+                "against"
+              ],
+              "additionalProperties": true
+            },
+            "score_state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reasons",
+            "minute",
+            "minutes_left",
+            "added_time_expected_min",
+            "score",
+            "score_state"
+          ],
+          "additionalProperties": true
+        },
+        "team": {
+          "$ref": "#/$defs/TeamView"
+        },
+        "opponent": {
+          "$ref": "#/$defs/TeamView"
+        },
+        "players": {
+          "type": "object",
+          "properties": {
+            "on_pitch": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlayerView"
+              }
+            },
+            "bench": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/BenchView"
+              }
+            }
+          },
+          "required": [
+            "on_pitch",
+            "bench"
+          ],
+          "additionalProperties": true
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "subs_left": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "windows_left": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "half_time_break": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "subs_left",
+            "windows_left",
+            "half_time_break"
+          ],
+          "additionalProperties": true
+        },
+        "recent": {
+          "type": "object",
+          "properties": {
+            "window_min": {
+              "type": "number"
+            },
+            "team": {
+              "$ref": "#/$defs/RecentView"
+            },
+            "opponent": {
+              "$ref": "#/$defs/RecentView"
+            }
+          },
+          "required": [
+            "window_min",
+            "team",
+            "opponent"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "match_id",
+        "team_id",
+        "moment",
+        "team",
+        "opponent",
+        "players",
+        "limits",
+        "recent"
+      ],
+      "additionalProperties": true
+    },
+    "ManagerOrder": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "style"
+              ]
+            },
+            "setting": {
+              "type": "string",
+              "enum": [
+                "pressIntensity",
+                "lineHeight",
+                "compactness",
+                "tempo",
+                "longBallBias",
+                "crossBias",
+                "riskTolerance"
+              ]
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "setting",
+            "value"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "sub"
+              ]
+            },
+            "off": {
+              "type": "string",
+              "minLength": 1
+            },
+            "on": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "off",
+            "on"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Estimate": {
+      "type": "object",
+      "properties": {
+        "mean": {
+          "type": "number"
+        },
+        "se": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "mean",
+        "se"
+      ],
+      "additionalProperties": true
+    },
+    "OptionResult": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "label": {
+          "type": "string"
+        },
+        "orders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManagerOrder"
+          }
+        },
+        "xg_diff_vs_no_change": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Estimate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "goal_diff_vs_no_change": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Estimate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "untested": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "index",
+        "label",
+        "orders",
+        "xg_diff_vs_no_change",
+        "goal_diff_vs_no_change",
+        "untested"
+      ],
+      "additionalProperties": true
+    },
+    "WhatIfSummary": {
+      "type": "object",
+      "properties": {
+        "seeds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "horizon_min": {
+          "type": "number"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OptionResult"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "seeds",
+        "horizon_min",
+        "explanation",
+        "options"
+      ],
+      "additionalProperties": true
+    },
+    "ManageRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "manage"
+          ]
+        },
+        "task": {
+          "type": "string",
+          "enum": [
+            "propose",
+            "choose"
+          ]
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "situation": {
+          "$ref": "#/$defs/Situation"
+        },
+        "whatif": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WhatIfSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "task",
+        "match_id",
+        "situation",
+        "whatif"
+      ],
+      "additionalProperties": true
+    },
     "AgentRequest": {
       "anyOf": [
         {
@@ -959,8 +1570,146 @@
         },
         {
           "$ref": "#/$defs/RecapRequest"
+        },
+        {
+          "$ref": "#/$defs/ManageRequest"
         }
       ]
+    },
+    "ManagerOption": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "orders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManagerOrder"
+          },
+          "minItems": 1
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "orders",
+        "rationale"
+      ],
+      "additionalProperties": true
+    },
+    "Proposal": {
+      "type": "object",
+      "properties": {
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManagerOption"
+          },
+          "minItems": 1,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "options"
+      ],
+      "additionalProperties": true
+    },
+    "Choice": {
+      "type": "object",
+      "properties": {
+        "pick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pick",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "ManagerReply": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "string",
+          "enum": [
+            "propose",
+            "choose"
+          ]
+        },
+        "proposal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Proposal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "choice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Choice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallback": {
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ms": {
+          "type": "number"
+        },
+        "tokens_in": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost_usd": {
+          "type": "number"
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task",
+        "proposal",
+        "choice",
+        "fallback",
+        "reason",
+        "ms",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "model"
+      ],
+      "additionalProperties": true
     }
   }
 }

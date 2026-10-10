@@ -5,6 +5,7 @@
  */
 import { buildCandidates, nearestOpponent } from "./decide.js"
 import { attackX, clampToPitch, dist, type Side, type Vec2 } from "./geometry.js"
+import { applyOrders, OrderError, STYLE_RANGES, type ManagerOrder } from "./orders.js"
 import { substream } from "./rng.js"
 import { runScript } from "./runner.js"
 import { initMatch, isFinished, step } from "./step.js"
@@ -18,19 +19,11 @@ export type Intervention =
   | { readonly kind: "move_player"; readonly playerId: string; readonly to: Vec2 }
   /** The team plays with these style settings from now on. */
   | { readonly kind: "tactic"; readonly side: Side; readonly style: Partial<TeamStyle> }
+  /** A manager's orders for the team (style changes and substitutions; orders.ts). */
+  | { readonly kind: "orders"; readonly side: Side; readonly orders: ReadonlyArray<ManagerOrder> }
 
 /** An intervention that cannot be applied to the state (wrong player, unknown id, style out of range). */
 export class WhatIfError extends Error {}
-
-const STYLE_RANGES: Readonly<Record<keyof Omit<TeamStyle, "archetype">, readonly [number, number]>> = {
-  pressIntensity: [0, 1],
-  lineHeight: [-1, 1],
-  compactness: [0, 1],
-  tempo: [0, 1],
-  longBallBias: [-1, 1],
-  crossBias: [-1, 1],
-  riskTolerance: [0, 1]
-}
 
 /**
  * The k-th fork of a state: fresh random sub-streams for every concern, distinct from the match's and from scenario
@@ -93,6 +86,12 @@ export const applyIntervention = (s: MatchState, iv: Intervention): MatchState =
       const team = s.config[iv.side]
       return { ...s, config: { ...s.config, [iv.side]: { ...team, style: { ...team.style, ...iv.style } } } }
     }
+    case "orders":
+      try {
+        return applyOrders(s, iv.side, iv.orders)
+      } catch (e) {
+        throw e instanceof OrderError ? new WhatIfError(e.message) : e
+      }
   }
 }
 
@@ -234,8 +233,8 @@ export const whatIf = (s: MatchState, variant: Intervention, opts: WhatIfOptions
   return { side, at_tick: s.tick, horizon_s: horizonS, seeds, baseline: per(runs.baseline), variant: per(runs.variant), difference, forced_applied: forcedApplied }
 }
 
-/** The match states (after the step of each tick) at the given ticks, for a plain or scripted match. */
-export const statesAt = (cfg: MatchConfig, ticks: Iterable<number>): Map<number, MatchState> => {
+/** The match states (after the step of each tick) at the given ticks, for a plain, scripted or managed match (with its logged orders). */
+export const statesAt = (cfg: MatchConfig, ticks: Iterable<number>, logged: LoggedOrders = []): Map<number, MatchState> => {
   const want = new Set(ticks)
   if ((cfg.script?.entries.length ?? 0) > 0) return new Map(runScript(cfg, { statesAt: want }).states)
   const out = new Map<number, MatchState>()
@@ -243,8 +242,18 @@ export const statesAt = (cfg: MatchConfig, ticks: Iterable<number>): Map<number,
   let s = initMatch(cfg)
   if (want.has(s.tick)) out.set(s.tick, s)
   while (!isFinished(s) && s.tick < last) {
-    s = step(s).state
+    s = withLoggedOrders(step(s).state, logged)
     if (want.has(s.tick)) out.set(s.tick, s)
   }
+  return out
+}
+
+/** A managed match's orders as its decision log recorded them: applied after the step of `tick` (Plan 4b). */
+export type LoggedOrders = ReadonlyArray<{ readonly tick: number; readonly side: Side; readonly orders: ReadonlyArray<ManagerOrder> }>
+
+/** The state with the logged orders of its tick applied, as the managed match applied them. */
+export const withLoggedOrders = (s: MatchState, logged: LoggedOrders): MatchState => {
+  let out = s
+  for (const l of logged) if (l.tick === s.tick) out = applyOrders(out, l.side, l.orders)
   return out
 }

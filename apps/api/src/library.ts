@@ -7,8 +7,9 @@ import { join } from "node:path"
 import type { League } from "@touchline/league"
 import { readCueCache } from "@touchline/agent-gateway"
 import type { MatchInfo, MatchSummary, Player, TeamBrief, WhatIfClip } from "@touchline/rpc"
-import { segmentKey, type Cue } from "@touchline/schema"
+import { segmentKey, type Cue, type Decision } from "@touchline/schema"
 import { betterPassCues } from "./betterpass.js"
+import { decisionCues, readDecisionLog } from "./decisions.js"
 import { readWhatIfs } from "./whatif.js"
 
 export class LibraryError extends Error {}
@@ -20,6 +21,8 @@ export interface LibraryMatch {
   readonly cues: ReadonlyArray<Cue>
   /** The cached what-if clips by pass (`pnpm library`). */
   readonly clips: ReadonlyMap<string, WhatIfClip>
+  /** A managed match's decisions (`pnpm manage`), in order; empty for a match without managers. */
+  readonly decisions: ReadonlyArray<Decision>
 }
 
 interface Manifest {
@@ -30,6 +33,7 @@ interface Manifest {
   readonly scenario: string | null
   readonly fps: number
   readonly stats: { readonly frames: number; readonly score: string }
+  readonly managers?: { readonly home: string | null; readonly away: string | null }
 }
 
 const json = <A>(path: string): A => JSON.parse(readFileSync(path, "utf8")) as A
@@ -55,11 +59,13 @@ export const readMatch = (dir: string, league: League): LibraryMatch => {
   const model = existsSync(summaryPath) ? (json<{ models: string[] }>(summaryPath).models[0] ?? null) : null
   const summary: MatchSummary = {
     match_id: m.match_id, scenario: m.scenario, seed: m.seed, home: home.brief, away: away.brief, score: { home: h ?? 0, away: a ?? 0 },
-    fps: m.fps, frames: m.stats.frames, segments: [...new Set(cues.map((c) => segmentKey(c.segment)))].sort(), model
+    fps: m.fps, frames: m.stats.frames, segments: [...new Set(cues.map((c) => segmentKey(c.segment)))].sort(), model,
+    managers: m.managers ? { home: m.managers.home, away: m.managers.away } : null
   }
   const info = { ...summary, players: [...home.players, ...away.players] }
   const clips = readWhatIfs(dir)
-  return { dir, info, cues: [...cues, ...betterPassCues(info, clips.values())], clips }
+  const decisions = readDecisionLog(dir)
+  return { dir, info, cues: [...cues, ...betterPassCues(info, clips.values()), ...decisionCues(info, decisions)], clips, decisions }
 }
 
 /** Every run folder directly under `root`, by match id (folders that are not runs are skipped). */

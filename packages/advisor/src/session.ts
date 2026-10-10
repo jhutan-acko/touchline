@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { decodeDomainEvent, type DomainEvent } from "@touchline/schema"
+import { decodeDecision, decodeDomainEvent, type DomainEvent } from "@touchline/schema"
 import { SCENARIOS } from "@touchline/sim"
-import { initMatch, isFinished, statesAt, step, type MatchConfig, type MatchState, type Params, type TeamSetup } from "@touchline/sim-core"
+import { initMatch, isFinished, statesAt, step, withLoggedOrders, type LoggedOrders, type MatchConfig, type MatchState, type Params, type Side, type TeamSetup } from "@touchline/sim-core"
 
 /** A run folder the advisor cannot re-simulate (missing files, unknown clubs, parameters it does not have). */
 export class AdvisorError extends Error {}
@@ -15,7 +15,7 @@ export const SESSION_CACHE_STATES = 256
 /**
  * A match that can be re-simulated: its config, rebuilt from a run folder, and the match state at any tick
  * (computed on demand, kept for reuse). Scripted matches are replayed through the scenario runner, so their
- * states are those of the accepted match.
+ * states are those of the accepted match; managed matches apply their logged orders at their ticks (Plan 4b).
  */
 export class Session {
   private readonly cache = new Map<number, MatchState>()
@@ -26,7 +26,9 @@ export class Session {
   constructor(
     readonly cfg: MatchConfig,
     /** The run's domain events, when the session was built from a run folder. */
-    readonly events: ReadonlyArray<DomainEvent> = []
+    readonly events: ReadonlyArray<DomainEvent> = [],
+    /** A managed match's orders, from its decision log. */
+    readonly logged: LoggedOrders = []
   ) {}
 
   /** The state after the step of `tick` (tick -1: before kick-off). */
@@ -45,7 +47,7 @@ export class Session {
       s = from >= 0 ? (this.cache.get(from) ?? this.checkpoints.get(from))! : initMatch(this.cfg)
       while (s.tick < tick) {
         if (isFinished(s)) throw new AdvisorError(`the match is over before tick ${tick}`)
-        s = step(s).state
+        s = withLoggedOrders(step(s).state, this.logged)
         if (s.tick % CHECKPOINT_TICKS === 0) this.checkpoints.set(s.tick, s)
       }
     }
@@ -60,7 +62,7 @@ export class Session {
    */
   prefetch(ticks: Iterable<number>): void {
     const want = [...new Set(ticks)].filter((t) => !this.pinned.has(t))
-    if (want.length) for (const [t, s] of statesAt(this.cfg, want)) this.pinned.set(t, s)
+    if (want.length) for (const [t, s] of statesAt(this.cfg, want, this.logged)) this.pinned.set(t, s)
   }
 
   /** States kept for reuse (asked for and checkpoints). */
@@ -76,8 +78,8 @@ export class Session {
 
   /**
    * Rebuild a run folder's match: clubs from the league, the scenario's script, the kick-off from meta.json and
-   * the parameters whose version the manifest names (one of `params`). The rebuilt match is checked against the
-   * run's own events before it is used.
+   * the parameters whose version the manifest names (one of `params`), and for a managed match its managed teams and
+   * decision log. The rebuilt match is checked against the run's own events before it is used.
    */
   static fromRun(dir: string, league: { readonly clubs: ReadonlyArray<TeamSetup> }, params: ReadonlyArray<Params>): Session {
     const read = (f: string) => {
@@ -85,7 +87,10 @@ export class Session {
       if (!existsSync(p)) throw new AdvisorError(`missing ${p}`)
       return readFileSync(p, "utf8")
     }
-    const manifest = JSON.parse(read("manifest.json")) as { match_id: string; seed: number; home: string; away: string; scenario: string | null; fps: number; params_version: string }
+    const manifest = JSON.parse(read("manifest.json")) as {
+      match_id: string; seed: number; home: string; away: string; scenario: string | null; fps: number; params_version: string
+      managers?: { home: string | null; away: string | null }
+    }
     const meta = JSON.parse(read("meta.json")) as { match: { kickoff_time: string } }
     const club = (id: string) => {
       const c = league.clubs.find((x) => x.id === id)
@@ -104,13 +109,17 @@ export class Session {
       away: club(manifest.away),
       params: p,
       dt: 1 / manifest.fps,
-      ...(scenario ? { script: scenario.script } : {})
+      ...(scenario ? { script: scenario.script } : {}),
+      ...(manifest.managers ? { managed: (["home", "away"] as const).filter((s) => manifest.managers![s] !== null) } : {})
     }
+    const logged: LoggedOrders = manifest.managers
+      ? read("decisions.jsonl").split("\n").filter((l) => l.trim() !== "").map((l) => decodeDecision(JSON.parse(l))).map((d) => ({ tick: d.tick, side: d.side as Side, orders: d.orders_applied }))
+      : []
     const events = read("domain.jsonl")
       .split("\n")
       .filter((l) => l.trim() !== "")
       .map((l) => decodeDomainEvent(JSON.parse(l)))
-    const session = new Session(cfg, events)
+    const session = new Session(cfg, events, logged)
     // The rebuilt match must emit the run's events: compare the event count after the first minute, at half the
     // match and just before the end (a script that starts late, or a wrong scenario, shows up in the later probes).
     const emitted = (e: DomainEvent) => Math.max(e.frame_id, e.frame_id_end ?? e.frame_id)

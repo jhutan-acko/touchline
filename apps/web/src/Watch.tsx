@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import type { MatchInfo, Playback } from "@touchline/rpc"
-import type { Cue } from "@touchline/schema"
+import { decisionKey, type MatchInfo, type Playback } from "@touchline/rpc"
+import type { Cue, Decision } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
 import { t, type Lang } from "./i18n.js"
 import { Live3D } from "./Live3D.js"
@@ -14,9 +14,13 @@ import { segmentOf, type Profile } from "./profile.js"
 import { TopBar } from "./TopBar.js"
 import { routeHash } from "./route.js"
 import { usePane } from "./usePane.js"
+import { DecisionCard, DecisionStrip } from "./Decisions.js"
 import { hasWebGL } from "./view3d/webgl.js"
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32]
+
+/** How long a decision card stays open on its own when its cue arrives. */
+export const DECISION_CARD_MS = 12_000
 
 /** The viewer's 2D or 3D choice, remembered in this browser (spec Plan 7: per viewer). */
 export const VIEW_KEY = "touchline.view"
@@ -36,7 +40,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -47,6 +51,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   view?: "2d" | "3d"
   /** Called with the pass when a better-pass cue arrives (the demo's auto-show). */
   onBetterPass?: (eventId: string) => void
+  /** Called with the decision's key when a manager's decision cue arrives. */
+  onDecision?: (key: string) => void
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile))
@@ -54,6 +60,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   const newest = pane.feed[0]
   useEffect(() => {
     if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])
+    if (newest?.display.template === "manager_decision" && newest.evidence[0]) onDecision?.(newest.evidence[0])
   }, [newest?.cue_id])
   return (
     <section className="flex flex-col gap-2" aria-label={label}>
@@ -110,6 +117,26 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
     setView(v)
     saveView(v)
   }
+  // Manager decisions (Plan 4b): the strip of decisions reached so far, and the cards of one moment open (on a cue, or
+  // from the strip): both teams' when both decided then.
+  const [decisions, setDecisions] = useState<ReadonlyArray<Decision>>([])
+  const [decision, setDecision] = useState<{ tick: number; auto: boolean } | null>(null)
+  const showDecision = (key: string, auto: boolean) =>
+    client.decisions(sessionId).then((ds) => {
+      setDecisions(ds)
+      const d = ds.find((x) => decisionKey(x) === key)
+      if (d) setDecision({ tick: d.tick, auto })
+    }, () => {}) // a lost session shows on the pane
+  // A managed match watched from a later minute: the decisions already reached go on the strip at once.
+  useEffect(() => {
+    if (match.managers) client.decisions(sessionId).then(setDecisions, () => {})
+  }, [sessionId])
+  useEffect(() => {
+    if (!decision?.auto) return
+    const timer = setTimeout(() => setDecision(null), DECISION_CARD_MS)
+    return () => clearTimeout(timer)
+  }, [decision])
+  const onWhyCue = (c: Cue) => (c.display.template === "manager_decision" && c.evidence[0] ? void showDecision(c.evidence[0], false) : setWhy(c))
   const [playback, setPlayback] = useState<Pick<Playback, "state" | "speed">>({ state: "playing", speed: 4 })
   const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback, () => {}) // a lost session shows on the pane
   return (
@@ -137,10 +164,16 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
           </select>
         </label>
       </div>
+      {(match.managers || decisions.length > 0) && <DecisionStrip match={match} decisions={decisions} open={decision?.tick ?? null} onOpen={(tick) => setDecision({ tick, auto: false })} lang={lang} />}
+      {decision && (
+        <div className="grid gap-2 lg:grid-cols-2">
+          {decisions.filter((d) => d.tick === decision.tick).map((d) => <DecisionCard key={decisionKey(d)} match={match} decision={d} all={decisions} onClose={() => setDecision(null)} lang={lang} />)}
+        </div>
+      )}
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
       <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={setWhy} label={second ? "A" : undefined} view={view} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} />
-        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={setWhy} label="B" view={view} />}
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} onShowMe={(id) => (setWhy(null), setWhatIf(id))} />}
