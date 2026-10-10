@@ -169,7 +169,50 @@ def physics_section(tracks: dict, halves: dict, physics: dict) -> list[str]:
     return lines
 
 
-def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict | None = None, roles: dict[str, str] | None = None) -> str:
+def simulated_carrier_halves(run: Path, roles: dict[str, str]) -> list[dict]:
+    """A run folder's tracking (10 Hz CDF) as carriers.still_carriers reads it, one dict per half; keepers by role."""
+    import numpy as np
+
+    halves: list[dict] = []
+    rows: list[list[dict]] = []
+    period = None
+    with (run / "tracking.jsonl").open() as fh:
+        for line in fh:
+            f = json.loads(line)
+            if f["period"] != period:
+                rows.append([])
+                period = f["period"]
+            rows[-1].append(f)
+    for frames in rows:
+        ids = sorted({p["id"] for f in frames for side in ("home", "away") for p in f["teams"][side]["players"]})
+        players = {pid: np.full((len(frames), 2), np.nan) for pid in ids}
+        for i, f in enumerate(frames):
+            for side in ("home", "away"):
+                for p in f["teams"][side]["players"]:
+                    players[p["id"]][i] = (p["x"], p["y"])
+        halves.append({"ball": np.array([[f["ball"]["x"], f["ball"]["y"]] for f in frames], float), "live": np.array([bool(f["ball"].get("status")) for f in frames]),
+                       "players": players, "keepers": {pid for pid in ids if roles.get(pid) == "GK"}})
+    return halves
+
+
+def carriers_section(per_match: list[dict], real: dict) -> list[str]:
+    """Frozen ball carriers per simulated match against the real matches (data/params/still-carriers.json)."""
+    lines = ["## Frozen ball carriers", "",
+             "Stretches of 1.5 s or more with the ball in play where the ball and the player nearest it both stand still "
+             "(touchline_analytics.carriers; real values from the seven IDSSE matches).", "",
+             "| Players | Simulated per match | Most in a simulated match | Real per match | Simulated seconds per match | Real seconds per match |",
+             "|---|---|---|---|---|---|"]
+    n = max(1, len(per_match))
+    for kind, label in (("outfield", "Outfielders"), ("GK", "Keepers")):
+        counts = [m[kind]["count"] for m in per_match]
+        secs = sum(m[kind]["seconds"] for m in per_match) / n
+        r = real["real"][kind]
+        lines.append(f"| {label} | {sum(counts) / n:.1f} | {max(counts, default=0)} | {r['count']['min']}–{r['count']['max']} (mean {r['count']['mean']:.1f}) | "
+                     f"{secs:.1f} | {r['seconds']['min']:.1f}–{r['seconds']['max']:.1f} |")
+    return lines + [""]
+
+
+def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict | None = None, roles: dict[str, str] | None = None, carriers: dict | None = None) -> str:
     runs = [touchline_metrics(d) for d in run_dirs]
     n = len(runs)
     mean = lambda k: sum(r[k] for r in runs) / n  # noqa: E731
@@ -198,6 +241,10 @@ def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict |
     lines += ["", "Lower is closer. W1 is in the distribution's own unit; JS divergence is 0 for identical and 1 for disjoint distributions.", ""]
     if physics and roles:
         lines += physics_section(*simulated_tracks(run_dirs, roles), physics)
+    if carriers and roles:
+        from .carriers import still_carriers
+
+        lines += carriers_section([still_carriers(simulated_carrier_halves(d, roles)) for d in run_dirs], carriers)
     return "\n".join(lines)
 
 
@@ -211,10 +258,12 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="docs/realism/realism-report.md")
     ap.add_argument("--physics", default="", help="data/params/physics.json: adds player movement against real tracking")
     ap.add_argument("--league", default="data/league/league.json", help="player roles, for the physics section")
+    ap.add_argument("--carriers", default="", help="data/params/still-carriers.json: adds frozen ball carriers against real matches")
     a = ap.parse_args()
     physics = json.loads(Path(a.physics).read_text()) if a.physics else None
-    roles = {p["id"]: p["role"] for c in json.loads(Path(a.league).read_text())["clubs"] for p in c["squad"]} if physics else None
-    md = build([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note, physics, roles)
+    carriers = json.loads(Path(a.carriers).read_text()) if a.carriers else None
+    roles = {p["id"]: p["role"] for c in json.loads(Path(a.league).read_text())["clubs"] for p in c["squad"]} if physics or carriers else None
+    md = build([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note, physics, roles, carriers)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(md + "\n")
     print(md)

@@ -85,3 +85,12 @@ Outfielders on the pitch for the whole match, metres per minute.
 
 Last 15 minutes of a half over its first 15 (late-to-early ratio): distance 1.02 simulated (real 0.84–0.99, mean 0.91); above 20 km/h 1.00 simulated (real 0.69–1.22, mean 0.95).
 
+## Frozen ball carriers
+
+Stretches of 1.5 s or more with the ball in play where the ball and the player nearest it both stand still (touchline_analytics.carriers; real values from the seven IDSSE matches).
+
+| Players | Simulated per match | Most in a simulated match | Real per match | Simulated seconds per match | Real seconds per match |
+|---|---|---|---|---|---|
+| Outfielders | 0.3 | 2 | 0–1 (mean 0.1) | 0.7 | 0.0–2.5 |
+| Keepers | 0.9 | 2 | 0–5 (mean 2.7) | 2.3 | 0.0–15.8 |
+
