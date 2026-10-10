@@ -193,6 +193,25 @@ importers:
         specifier: workspace:*
         version: link:../sim-core
 
+  packages/manager:
+    dependencies:
+      '@touchline/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@touchline/sim-core':
+        specifier: workspace:*
+        version: link:../sim-core
+      '@touchline/stats':
+        specifier: workspace:*
+        version: link:../stats
+      effect:
+        specifier: 4.0.1
+        version: 4.0.1
+    devDependencies:
+      '@touchline/league':
+        specifier: workspace:*
+        version: link:../league
+
   packages/mcp-stats:
     dependencies:
       '@modelcontextprotocol/sdk':

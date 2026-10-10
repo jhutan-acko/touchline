@@ -1,0 +1,377 @@
+{
+ "match_id": "m-11",
+ "team_id": "ironmoor",
+ "moment": {
+  "reasons": [
+   "minute_60"
+  ],
+  "minute": 60,
+  "minutes_left": 33,
+  "added_time_expected_min": 3,
+  "score": {
+   "for": 3,
+   "against": 0
+  },
+  "score_state": "winning by 3"
+ },
+ "team": {
+  "name": "Ironmoor Athletic",
+  "archetype": "high_press",
+  "formation": "4-3-3",
+  "style": [
+   {
+    "setting": "pressIntensity",
+    "value": 0.9,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 never press .. 1 press the ball carrier at every chance"
+   },
+   {
+    "setting": "lineHeight",
+    "value": 0.8,
+    "min": -1,
+    "max": 1,
+    "meaning": "-1 deep defensive line .. 1 high line"
+   },
+   {
+    "setting": "compactness",
+    "value": 0.6,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 spread wide .. 1 narrow, compact block"
+   },
+   {
+    "setting": "tempo",
+    "value": 0.8,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 patient build-up .. 1 quick, forward passing"
+   },
+   {
+    "setting": "longBallBias",
+    "value": -0.2,
+    "min": -1,
+    "max": 1,
+    "meaning": "-1 short passes only .. 1 long balls often"
+   },
+   {
+    "setting": "crossBias",
+    "value": 0,
+    "min": -1,
+    "max": 1,
+    "meaning": "-1 avoid crosses .. 1 cross often"
+   },
+   {
+    "setting": "riskTolerance",
+    "value": 0.6,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 safe passes and few shots .. 1 risky passes and shots"
+   }
+  ],
+  "stats": {
+   "xg": 2.44,
+   "shots": 10,
+   "possession_pct": 50.2,
+   "pass_completion_pct": 66.4,
+   "ppda": 2.3,
+   "yellow_cards": 2,
+   "red_cards": 0
+  }
+ },
+ "opponent": {
+  "name": "Kestrel Bay FC",
+  "archetype": "possession",
+  "formation": "4-3-3",
+  "style": [
+   {
+    "setting": "pressIntensity",
+    "value": 0.6,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 never press .. 1 press the ball carrier at every chance"
+   },
+   {
+    "setting": "lineHeight",
+    "value": 0.5,
+    "min": -1,
+    "max": 1,
+    "meaning": "-1 deep defensive line .. 1 high line"
+   },
+   {
+    "setting": "compactness",
+    "value": 0.5,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 spread wide .. 1 narrow, compact block"
+   },
+   {
+    "setting": "tempo",
+    "value": 0.4,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 patient build-up .. 1 quick, forward passing"
+   },
+   {
+    "setting": "longBallBias",
+    "value": -0.6,
+    "min": -1,
+    "max": 1,
+    "meaning": "-1 short passes only .. 1 long balls often"
+   },
+   {
+    "setting": "crossBias",
+    "value": -0.3,
+    "min": -1,
+    "max": 1,
+    "meaning": "-1 avoid crosses .. 1 cross often"
+   },
+   {
+    "setting": "riskTolerance",
+    "value": 0.4,
+    "min": 0,
+    "max": 1,
+    "meaning": "0 safe passes and few shots .. 1 risky passes and shots"
+   }
+  ],
+  "stats": {
+   "xg": 0.21,
+   "shots": 3,
+   "possession_pct": 49.8,
+   "pass_completion_pct": 63.4,
+   "ppda": 3.3,
+   "yellow_cards": 2,
+   "red_cards": 0
+  }
+ },
+ "players": {
+  "on_pitch": [
+   {
+    "id": "p-iro-01",
+    "name": "Menel Ashisse",
+    "number": 1,
+    "role": "GK",
+    "energy_pct": 93,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 5,
+    "tackles_won": 0
+   },
+   {
+    "id": "p-iro-02",
+    "name": "Meric Okarisse",
+    "number": 2,
+    "role": "FB",
+    "energy_pct": 69,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 19,
+    "tackles_won": 1
+   },
+   {
+    "id": "p-iro-03",
+    "name": "Rinel Tavoway",
+    "number": 3,
+    "role": "CB",
+    "energy_pct": 55,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 18,
+    "tackles_won": 2
+   },
+   {
+    "id": "p-iro-04",
+    "name": "Danel Fenisse",
+    "number": 4,
+    "role": "CB",
+    "energy_pct": 58,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 19,
+    "tackles_won": 3
+   },
+   {
+    "id": "p-iro-05",
+    "name": "Riris Brekström",
+    "number": 5,
+    "role": "FB",
+    "energy_pct": 67,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 24,
+    "tackles_won": 3
+   },
+   {
+    "id": "p-iro-06",
+    "name": "Juris Brekström",
+    "number": 6,
+    "role": "CM",
+    "energy_pct": 69,
+    "minutes_played": 60,
+    "yellow_card": true,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 17,
+    "tackles_won": 3
+   },
+   {
+    "id": "p-iro-07",
+    "name": "Riric Haleda",
+    "number": 7,
+    "role": "DM",
+    "energy_pct": 62,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 2,
+    "xg": 0.15,
+    "passes_completed": 27,
+    "tackles_won": 6
+   },
+   {
+    "id": "p-iro-08",
+    "name": "Fedan Lumberg",
+    "number": 8,
+    "role": "CM",
+    "energy_pct": 65,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 22,
+    "tackles_won": 5
+   },
+   {
+    "id": "p-iro-09",
+    "name": "Lotan Ostoway",
+    "number": 9,
+    "role": "W",
+    "energy_pct": 61,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 1,
+    "xg": 0.08,
+    "passes_completed": 10,
+    "tackles_won": 0
+   },
+   {
+    "id": "p-iro-10",
+    "name": "Tamir Ashardt",
+    "number": 10,
+    "role": "ST",
+    "energy_pct": 61,
+    "minutes_played": 60,
+    "yellow_card": false,
+    "shots": 6,
+    "xg": 2.18,
+    "passes_completed": 9,
+    "tackles_won": 4
+   },
+   {
+    "id": "p-iro-11",
+    "name": "Menel Drenström",
+    "number": 11,
+    "role": "W",
+    "energy_pct": 66,
+    "minutes_played": 60,
+    "yellow_card": true,
+    "shots": 1,
+    "xg": 0.02,
+    "passes_completed": 12,
+    "tackles_won": 2
+   }
+  ],
+  "bench": [
+   {
+    "id": "p-iro-12",
+    "name": "Judan Quinisse",
+    "number": 12,
+    "role": "GK",
+    "available": true
+   },
+   {
+    "id": "p-iro-13",
+    "name": "Neric Carrford",
+    "number": 13,
+    "role": "CB",
+    "available": true
+   },
+   {
+    "id": "p-iro-14",
+    "name": "Fedan Carrford",
+    "number": 14,
+    "role": "FB",
+    "available": true
+   },
+   {
+    "id": "p-iro-15",
+    "name": "Ilolem Fenisse",
+    "number": 15,
+    "role": "DM",
+    "available": true
+   },
+   {
+    "id": "p-iro-16",
+    "name": "Karen Brekisse",
+    "number": 16,
+    "role": "CM",
+    "available": true
+   },
+   {
+    "id": "p-iro-17",
+    "name": "Jumir Quinisse",
+    "number": 17,
+    "role": "AM",
+    "available": true
+   },
+   {
+    "id": "p-iro-18",
+    "name": "Mevo Lumane",
+    "number": 18,
+    "role": "W",
+    "available": true
+   },
+   {
+    "id": "p-iro-19",
+    "name": "Kamir Vorardt",
+    "number": 19,
+    "role": "ST",
+    "available": true
+   },
+   {
+    "id": "p-iro-20",
+    "name": "Edoren Halford",
+    "number": 20,
+    "role": "CM",
+    "available": true
+   }
+  ]
+ },
+ "limits": {
+  "subs_left": 5,
+  "windows_left": 3,
+  "half_time_break": false
+ },
+ "recent": {
+  "window_min": 10,
+  "team": {
+   "xg": 0.02,
+   "shots": 1,
+   "ball_regains": 24
+  },
+  "opponent": {
+   "xg": 0,
+   "shots": 0,
+   "ball_regains": 20
+  }
+ }
+}
