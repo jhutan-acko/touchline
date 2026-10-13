@@ -60,7 +60,7 @@ describe("the situation sent to the manager agent", () => {
   it("describes the team's own side: eleven players, the bench, five substitutions left, the score from its side", () => {
     expect(sit.team.name).toBe(cfg.home.name)
     expect(sit.opponent.name).toBe(cfg.away.name)
-    expect(sit.players.on_pitch).toHaveLength(11)
+    expect(sit.players.on_pitch).toHaveLength(11 - at60.state.players.filter((p) => p.side === "home" && p.sentOff).length)
     expect(sit.players.bench.map((b) => b.id)).toEqual(cfg.home.bench!.map((b) => b.id))
     expect(sit.players.on_pitch.every((p) => p.name !== p.id && p.energy_pct > 0 && p.energy_pct < 100)).toBe(true)
     expect(sit.limits).toEqual({ subs_left: 5, windows_left: 3, half_time_break: false })

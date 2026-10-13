@@ -83,8 +83,9 @@ export const scanChunk = (dir: string, eventIds: ReadonlyArray<string>): { reado
   const events = eventIds.map((id) => session.event(id))
   session.prefetch(events.map((e) => e.frame_id - 1))
   const attacking = events.filter((e) => {
-    const p = session.stateAt(e.frame_id - 1).players.find((q) => q.id === e.player_id)
-    return p !== undefined && attackX(p.side, p.pos.x) > SCAN_MIN_X
+    const st = session.stateAt(e.frame_id - 1)
+    const p = st.players.find((q) => q.id === e.player_id)
+    return p !== undefined && attackX(p.side, p.pos.x, st.period) > SCAN_MIN_X
   })
   const clips: WhatIfClip[] = []
   for (const e of attacking) {

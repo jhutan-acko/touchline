@@ -1,3 +1,4 @@
+import { dirOf } from "@touchline/sim-core"
 import type { DomainEvent } from "@touchline/schema"
 import type { TrackFrame } from "./input.js"
 import { passFeatures, predict, shotFeatures, type StatsModels } from "./models.js"
@@ -18,7 +19,7 @@ export const passValues = (e: DomainEvent, f: TrackFrame | undefined, side: "hom
   const end = { x: e.x_end, y: e.y_end }
   return {
     "pass.dist": Math.hypot(end.x - start.x, end.y - start.y),
-    "pass.xp": f ? predict(models.xpass, passFeatures(start, end, side === "home" ? 1 : -1, opponents(f, side))) : null
+    "pass.xp": f ? predict(models.xpass, passFeatures(start, end, dirOf(side, e.period), opponents(f, side))) : null
   }
 }
 
@@ -26,5 +27,5 @@ export const passValues = (e: DomainEvent, f: TrackFrame | undefined, side: "hom
 export const shotXg = (e: DomainEvent, f: TrackFrame | undefined, side: "home" | "away", models: StatsModels): number | null => {
   if (e.attrs.technique === "penalty") return models.xg.penalty
   if (e.x === null || e.y === null) return null
-  return predict(models.xg, shotFeatures({ x: e.x, y: e.y }, side === "home" ? 1 : -1, e.attrs.body_part === "head", opponents(f, side)))
+  return predict(models.xg, shotFeatures({ x: e.x, y: e.y }, dirOf(side, e.period), e.attrs.body_part === "head", opponents(f, side)))
 }

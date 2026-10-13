@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 import type { League } from "@touchline/league"
 import { writeMatch } from "@touchline/sim"
-import { DEFAULT_PARAMS, initMatch, isFinished, step, type DomainEvent, type Frame } from "@touchline/sim-core"
+import { DEFAULT_PARAMS, dirOf, initMatch, isFinished, step, type DomainEvent, type Frame } from "@touchline/sim-core"
 import { coneDefenders, goalAngle, laneDefenders, modelsFromJson, ModelsError, passFeatures, predict, pressureAt, shotFeatures } from "../src/models.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -92,8 +92,8 @@ describe("stats models", () => {
       const opp = home ? f.away : f.home
       const ts =
         e.type === "pass"
-          ? passFeatures({ x: e.x!, y: e.y! }, { x: e.x_end!, y: e.y_end! }, home ? 1 : -1, opp)
-          : shotFeatures({ x: e.x!, y: e.y! }, home ? 1 : -1, e.attrs.body_part === "head", opp)
+          ? passFeatures({ x: e.x!, y: e.y! }, { x: e.x_end!, y: e.y_end! }, dirOf(home ? "home" : "away", e.period), opp)
+          : shotFeatures({ x: e.x!, y: e.y! }, dirOf(home ? "home" : "away", e.period), e.attrs.body_part === "head", opp)
       ts.forEach((v, i) => expect(v, `${row.id}[${i}]`).toBeCloseTo(row.features[i]!, 9))
     }
   })

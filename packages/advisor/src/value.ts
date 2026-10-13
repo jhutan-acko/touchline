@@ -1,8 +1,7 @@
-import { pitchControlAt, type EndValue, type MatchState, type PcPlayer, type PlayerState, type Side, type Vec2 } from "@touchline/sim-core"
+import { dirOf, other, pitchControlAt, type EndValue, type MatchState, type PcPlayer, type PlayerState, type Side, type Vec2 } from "@touchline/sim-core"
 import { xtAt, type XtGrid } from "@touchline/stats"
 
 export const toPc = (p: PlayerState): PcPlayer => ({ x: p.pos.x, y: p.pos.y, vx: p.vel.x, vy: p.vel.y, gk: p.role === "GK" })
-const attackOf = (side: Side): 1 | -1 => (side === "home" ? 1 : -1)
 
 /**
  * The value of playing the ball from `from` to `target` for `side`: the chance of keeping it there (pitch control)
@@ -14,7 +13,7 @@ export const passValue = (s: MatchState, side: Side, passerId: string | null, fr
   const att = active.filter((p) => p.side === side && p.id !== passerId).map(toPc)
   const def = active.filter((p) => p.side !== side).map(toPc)
   const pc = pitchControlAt(target, att, def, from).att
-  const value = pc * xtAt(xt, target.x, target.y, attackOf(side)) - (1 - pc) * xtAt(xt, target.x, target.y, attackOf(side === "home" ? "away" : "home"))
+  const value = pc * xtAt(xt, target.x, target.y, dirOf(side, s.period)) - (1 - pc) * xtAt(xt, target.x, target.y, dirOf(other(side), s.period))
   return { pc, value }
 }
 
@@ -27,6 +26,6 @@ export const xtEndValue =
   (s, side) => {
     if (s.possession.kind !== "owned") return 0
     const owner = s.players.find((p) => p.id === (s.possession as { playerId: string }).playerId)!
-    const v = xtAt(xt, s.ball.pos.x, s.ball.pos.y, attackOf(owner.side))
+    const v = xtAt(xt, s.ball.pos.x, s.ball.pos.y, dirOf(owner.side, s.period))
     return owner.side === side ? v : -v
   }

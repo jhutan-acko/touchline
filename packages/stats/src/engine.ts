@@ -1,5 +1,5 @@
 import type { DomainEvent, MetricId, Signal, SignalType } from "@touchline/schema"
-import { attackX, matchClock, PITCH, pitchControlGrid, type PcPlayer } from "@touchline/sim-core"
+import { attackX, dirOf, matchClock, PITCH, pitchControlGrid, type PcPlayer, type Period } from "@touchline/sim-core"
 
 const PITCH_HALF_L = PITCH.halfL
 import { metricDef, type SubjectKind } from "./catalog.js"
@@ -251,7 +251,7 @@ export class StatsEngine {
         break
       case "carry":
         if (team && e.x !== null && e.y !== null && e.x_end !== null && e.y_end !== null) {
-          this.addThreat(team, tick, e.x, e.y, e.x_end, e.y_end)
+          this.addThreat(team, tick, e.period, e.x, e.y, e.x_end, e.y_end)
           this.addXt(e, tick, team)
         }
         break
@@ -322,11 +322,11 @@ export class StatsEngine {
       })
     }
     if (ok && e.player_id) this.tally(e, "passes_completed")
-    const ax = attackX(team.side, e.x!)
+    const ax = attackX(team.side, e.x!, e.period)
     if (ax < PPDA_LINE_X) this.counters.add("ppda_passes", this.opponentOf(team).id, tick, 1)
     if (ax > FINAL_THIRD_X) this.counters.add("final_third", team.id, tick, 1)
     if (ok) {
-      this.addThreat(team, tick, e.x!, e.y!, e.x_end!, e.y_end!)
+      this.addThreat(team, tick, e.period, e.x!, e.y!, e.x_end!, e.y_end!)
       this.addXt(e, tick, team)
     }
   }
@@ -334,7 +334,7 @@ export class StatsEngine {
   /** Expected threat added by a completed pass or a carry: xT at its end minus xT at its start. */
   private addXt(e: DomainEvent, tick: number, team: TeamInfo): void {
     if (!this.xt || e.x === null || e.y === null || e.x_end === null || e.y_end === null) return
-    const attack = team.side === "home" ? 1 : -1
+    const attack = dirOf(team.side, e.period)
     const gain = xtAt(this.xt, e.x_end, e.y_end, attack) - xtAt(this.xt, e.x, e.y, attack)
     this.derived.set(e.id, { ...(this.derived.get(e.id) ?? {}), "act.xt": gain })
     for (const subject of [e.player_id, team.id]) if (subject !== null) this.counters.add("xt", subject, tick, gain)
@@ -342,11 +342,11 @@ export class StatsEngine {
 
   /** A tackle, interception or foul in the opponent's own 60 % of the pitch counts for PPDA. */
   private defensiveAction(e: DomainEvent, tick: number, team: TeamInfo): void {
-    if (e.x !== null && attackX(team.side, e.x) > -PPDA_LINE_X) this.counters.add("ppda_actions", team.id, tick, 1)
+    if (e.x !== null && attackX(team.side, e.x, e.period) > -PPDA_LINE_X) this.counters.add("ppda_actions", team.id, tick, 1)
   }
 
-  private addThreat(team: TeamInfo, tick: number, x: number, y: number, xEnd: number, yEnd: number): void {
-    const attack = team.side === "home" ? 1 : -1
+  private addThreat(team: TeamInfo, tick: number, period: Period, x: number, y: number, xEnd: number, yEnd: number): void {
+    const attack = dirOf(team.side, period)
     this.momentum.add(team.id, tick, threatAt(xEnd, yEnd, attack) - threatAt(x, y, attack))
   }
 

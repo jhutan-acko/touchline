@@ -196,7 +196,7 @@ Design references:
 #### 5.1.2 Coordinates and time
 
 - **Pitch:** 105 × 68 m, metres, origin at the centre spot.
-- **Direction:** CDF orientation is used internally too — **the home team attacks +x for the whole match**. The front end may mirror the second half for display.
+- **Direction:** CDF orientation is used internally too — **the home team attacks +x in the first half and -x in the second (teams switch ends)**. The front end may mirror the second half for display.
 - **Frames:** a fixed tick, by default **0.1 s**, so one tick is one tracking frame (`fps = 10`). `frame_id` restarts at 0 each period, as CDF requires.
 - **Render runs:** `--fps 25` runs the same engine at 0.04 s for video rendering (§5.8). Because probabilities are per action or per second, the football is statistically the same at any tick. Determinism holds per `(seed, …, fps)`.
 - **Ball sub-steps:** the ball takes 2–5 sub-steps per tick.

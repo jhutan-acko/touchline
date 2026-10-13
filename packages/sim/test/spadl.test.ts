@@ -26,6 +26,10 @@ describe("SPADL view", () => {
     const away = one(ev("pass", A, { kind: "short" }, { outcome: "successful" }))
     expect([away.start_x, away.start_y, away.end_x, away.end_y]).toEqual([52.5, 34, 62.5, 39])
   })
+  it("rotates second-half events back into the stored frame (home still left to right)", () => {
+    const home = one({ ...ev("pass", H, { kind: "short" }, { outcome: "successful" }), period: "second_half", x: 0, y: 0, x_end: 10, y_end: 5 })
+    expect([home.start_x, home.start_y, home.end_x, home.end_y]).toEqual([52.5, 34, 42.5, 29])
+  })
   it("maps passes by kind and restart, and their results", () => {
     const t = (attrs: Record<string, unknown>, outcome = "successful") => one(ev("pass", H, attrs, { outcome }))
     expect(t({ kind: "cross" }).type_name).toBe("cross")

@@ -23,6 +23,11 @@ describe("CDF export", () => {
     expect(m.meta.cdf.version).toBe("0.3.2")
     expect(m.match.periods.map((p) => p.frame_id_start)).toEqual([0, 0])
   })
+  it("meta swaps the sides in the second period (teams switch ends)", () => {
+    const [first, second] = cdfMeta(cfg, periodsFromFrames(frames)).match.periods
+    expect(first).toMatchObject({ period: "first_half", play_direction: "left_right", left_team_id: cfg.home.id, right_team_id: cfg.away.id })
+    expect(second).toMatchObject({ period: "second_half", play_direction: "right_left", left_team_id: cfg.away.id, right_team_id: cfg.home.id })
+  })
   it("tracking lines carry only schema keys", () => {
     const line = JSON.parse(cdfTrackingLine(cfg.matchId, cfg, frames[100]!))
     expect(Object.keys(line).sort()).toEqual(["ball", "frame_id", "match", "period", "teams", "timestamp"])

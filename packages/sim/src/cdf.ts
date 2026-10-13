@@ -39,16 +39,19 @@ export const cdfMeta = (cfg: MatchConfig, periods: ReadonlyArray<PeriodInfo>, ex
   match: {
     id: cfg.matchId,
     kickoff_time: cfg.kickoffTime,
-    periods: periods.map((p) => ({
-      period: p.period,
-      play_direction: "left_right",
-      start_time: iso(p.startMs),
-      end_time: iso(p.endMs),
-      frame_id_start: 0,
-      frame_id_end: p.frameIdEnd,
-      left_team_id: cfg.home.id,
-      right_team_id: cfg.away.id
-    })),
+    periods: periods.map((p) => {
+      const second = p.period === "second_half"
+      return {
+        period: p.period,
+        play_direction: second ? "right_left" : "left_right",
+        start_time: iso(p.startMs),
+        end_time: iso(p.endMs),
+        frame_id_start: 0,
+        frame_id_end: p.frameIdEnd,
+        left_team_id: second ? cfg.away.id : cfg.home.id,
+        right_team_id: second ? cfg.home.id : cfg.away.id
+      }
+    }),
     whistles: periods.flatMap((p) => [
       { type: p.period, sub_type: "start", time: iso(p.startMs) },
       { type: p.period, sub_type: "end", time: iso(p.endMs) }

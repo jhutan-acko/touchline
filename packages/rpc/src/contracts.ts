@@ -52,7 +52,7 @@ export type MatchInfo = typeof MatchInfo.Type
 
 export const Spot = Schema.Struct({ id: Id, x: Schema.Finite, y: Schema.Finite })
 
-/** Positions at one frame, in metres from the centre spot (x towards the away goal for the home side). */
+/** Positions at one frame, in metres from the centre spot (x towards the away goal for the home side in the first half; reversed in the second). */
 export const PitchFrame = Schema.Struct({
   frame: Count,
   period: Schema.Literals(["first_half", "second_half"]),

@@ -1,7 +1,8 @@
 /**
  * SPADL view of a match (spec §5.1.9, §5.1.10): one action per on-ball event, in SPADL's coordinates
- * (0..105 x 0..68, origin at a corner) and socceraction's stored frame: the home team attacks left to right, the
- * away team right to left (socceraction's play_left_to_right() turns this into every team attacking left to right).
+ * (0..105 x 0..68, origin at a corner) and socceraction's stored frame: the home team attacks left to right in both
+ * halves (second-half events are rotated back, since the teams switch ends), the away team right to left (socceraction's
+ * play_left_to_right() turns this into every team attacking left to right).
  * The type, result and body-part lists (and their ids, which are list positions) follow SPADL as defined by
  * socceraction (MIT, ML-KULeuven), so the output loads into its tools unchanged.
  */
@@ -104,9 +105,10 @@ export const spadlActions = (events: ReadonlyArray<DomainEvent>, cfg: MatchConfi
   for (const e of ordered) {
     const tr = typeAndResult(e, cardOf)
     if (!tr || e.team_id === null || e.player_id === null || e.x === null || e.y === null) continue
-    // Home attacks +x for the whole match, which is socceraction's stored frame: shift the origin to the corner.
-    const sx = (x: number) => clamp(x + 52.5, 105)
-    const sy = (y: number) => clamp(y + 34, 68)
+    // socceraction's stored frame has home attacking left to right all match; second-half events are rotated back.
+    const m = e.period === "second_half" ? -1 : 1
+    const sx = (x: number) => clamp(m * x + 52.5, 105)
+    const sy = (y: number) => clamp(m * y + 34, 68)
     const bp = bodypart(e)
     out.push({
       game_id: e.match_id,
