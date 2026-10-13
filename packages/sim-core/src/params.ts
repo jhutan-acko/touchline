@@ -155,6 +155,12 @@ export interface Params {
     readonly foulPerTackle: number
     readonly yellowPerFoul: number
     readonly redPerFoul: number
+    /** Cautions for conduct (dissent, time-wasting) per 90 minutes, at random times (0 = none). */
+    readonly cautionPerMatch: number
+    /** Foul chance of an already booked defender, as a multiple of the normal one. */
+    readonly bookedFoulFactor: number
+    /** Booking chance for a foul by an already booked player, as a multiple of yellowPerFoul. */
+    readonly bookedYellowFactor: number
     /** Share of won tackles / ground interceptions that knock the ball loose instead of winning it cleanly. */
     readonly tackleLooseShare: number
     readonly interceptLooseShare: number
@@ -355,6 +361,9 @@ export const DEFAULT_PARAMS: Params = {
     foulPerTackle: 0.18,
     yellowPerFoul: 0.15,
     redPerFoul: 0.004,
+    cautionPerMatch: 0,
+    bookedFoulFactor: 1,
+    bookedYellowFactor: 1,
     tackleLooseShare: 0.4,
     interceptLooseShare: 0.3,
     boxIntensity: 0,

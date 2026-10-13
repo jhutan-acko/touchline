@@ -465,17 +465,21 @@ const changePossession = (w: Work, to: PlayerState, reasonEvent: PendingEvent | 
   w.setPlayer({ ...w.player(to.id), intent: { kind: "hold" }, intentUntil: w.tick + w.decisionDelayTicks() })
 }
 
+/** Book a player (yellow, or second yellow and off) and emit the card. */
+const book = (w: Work, pl: PlayerState, card: "yellow" | "second_yellow" | "red", attrs: Record<string, AttrValue>): void => {
+  w.emit(w.pending("card", pl, pl.pos, { colour: card, ...attrs }))
+  const cur = w.player(pl.id)
+  w.setPlayer({ ...cur, yellow: cur.yellow + 1, sentOff: card !== "yellow" })
+}
+
 const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState): void => {
   w.emit(w.pending("foul", offender, offender.pos, { kind: "tackle", victim_id: victim.id }))
   const ref = w.rng.referee
   let card: "yellow" | "second_yellow" | "red" | null = null
   const forcedRed = w.takeForced(offender.side, "red_card")
   if (forcedRed || ref.chance(Math.min(1, w.p.defending.redPerFoul * w.mods(offender.side).red))) card = "red"
-  else if (ref.chance(w.p.defending.yellowPerFoul)) card = offender.yellow >= 1 ? "second_yellow" : "yellow"
-  if (card) {
-    w.emit(w.pending("card", offender, offender.pos, forcedRed ? { colour: card, scripted: true } : { colour: card }))
-    w.setPlayer({ ...w.player(offender.id), yellow: offender.yellow + 1, sentOff: card !== "yellow" })
-  }
+  else if (ref.chance(w.p.defending.yellowPerFoul * (offender.yellow >= 1 ? w.p.defending.bookedYellowFactor : 1))) card = offender.yellow >= 1 ? "second_yellow" : "yellow"
+  if (card) book(w, offender, card, forcedRed ? { scripted: true } : {})
   const inBox = attackX(victim.side, victim.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(victim.pos.y) < PITCH.boxHalfWidth
   startRestart(
     w,
@@ -483,6 +487,16 @@ const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState): void
       ? { restart: "penalty", side: victim.side, at: { x: dirOf(victim.side, w.period) * PITCH.penaltySpot, y: 0 } }
       : { restart: "free_kick", side: victim.side, at: clampToPitch(victim.pos, 1) }
   )
+}
+
+/** Cautions for conduct: a Poisson stream over the match, falling on a random player on the pitch. */
+const cautions = (w: Work): void => {
+  const rate = w.p.defending.cautionPerMatch / 5400
+  if (rate <= 0 || !w.rng.caution.chance(hazard(rate, w.dt))) return
+  const pool = [...w.active("home"), ...w.active("away")]
+  if (pool.length === 0) return
+  const pl = pool[Math.min(pool.length - 1, Math.floor(w.rng.caution.uniform() * pool.length))]!
+  book(w, pl, pl.yellow >= 1 ? "second_yellow" : "yellow", { reason: "conduct" })
 }
 
 /** The ball squirts away from a contact point; last touch belongs to `toucher`. */
@@ -521,7 +535,8 @@ const duels = (w: Work, owner: PlayerState): boolean => {
     return true
   }
   const victimInBox = attackX(owner.side, owner.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
-  if (w.rng.referee.chance(Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul)) || w.hasForced(def.side, "red_card")) {
+  const booked = def.yellow >= 1 ? w.p.defending.bookedFoulFactor : 1
+  if (w.rng.referee.chance(Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul * booked)) || w.hasForced(def.side, "red_card")) {
     finishCarry(w, owner)
     w.emit(w.pending("tackle", def, def.pos, { outcome: "foul", opponent_id: owner.id }))
     foulAndCards(w, def, owner)
@@ -1264,6 +1279,7 @@ export const step = (s: MatchState): StepResult => {
     handleRestart(w)
   }
   if (w.phase.kind === "open_play") ownedTick(w)
+  cautions(w)
   moveAll(w)
   ballTick(w)
   return { state: w.toState(), frame: frameOf(w), events: w.events }
