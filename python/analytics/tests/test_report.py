@@ -76,3 +76,35 @@ def test_carriers_section_compares_frozen_carriers_per_match_with_real_matches(t
     assert "## Frozen ball carriers" in text
     assert "| Outfielders | 1.0 | 2 | 0–1 (mean 0.1) | 2.0 | 0.0–2.5 |" in text
     assert "| Keepers | 0.5 | 1 | 0–5 (mean 2.7) | 1.5 | 0.0–15.8 |" in text
+
+
+def _run_dir(tmp_path, name, home_shots, away_shots, cards=(), pens=0):
+    import json
+
+    d = tmp_path / name
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"teams": {"home": {"id": "H"}, "away": {"id": "A"}}}))
+    rows = [{"type": "shot", "team_id": "H", "attrs": {"technique": "penalty" if i < pens else "normal"}} for i in range(home_shots)]
+    rows += [{"type": "shot", "team_id": "A", "attrs": {}} for _ in range(away_shots)]
+    rows += [{"type": "card", "team_id": "H", "attrs": {"colour": c}} for c in cards]
+    (d / "domain.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    return d
+
+
+def test_balance_reads_shot_share_sendings_off_and_penalties(tmp_path):
+    from touchline_analytics.report import balance
+
+    b = balance(_run_dir(tmp_path, "m", 12, 4, cards=("yellow", "second_yellow", "red"), pens=1))
+    assert b == {"home_shot_share": 0.75, "sent_off": 2, "penalties": 1}
+    assert balance(_run_dir(tmp_path, "z", 0, 0))["home_shot_share"] == 0.5
+
+
+def test_balance_section_judges_c3_on_the_shot_share_spread():
+    from touchline_analytics.report import balance_section
+
+    rows = [{"home_shot_share": s, "sent_off": 0, "penalties": 0} for s in [0.4, 0.5, 0.6] * 22]
+    text = "\n".join(balance_section(rows))
+    assert "| Team shot share, SD over matches (C3) | 0.090 | 0.082 | ≤ 0.18 | MET |" in text
+    assert "66 matches" in text
+    few = "\n".join(balance_section(rows[:10]))
+    assert "fewer than 64 matches" in few

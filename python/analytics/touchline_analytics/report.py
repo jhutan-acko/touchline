@@ -212,6 +212,48 @@ def carriers_section(per_match: list[dict], real: dict) -> list[str]:
     return lines + [""]
 
 
+# Real references (IDSSE, 7 matches; aggregates from the 2026-10-13 realism analysis): the SD over matches of the
+# home team's share of the match's shots, players sent off and penalties per match.
+REAL_BALANCE = {"shot_share_sd": 0.090, "sent_off": 0.29, "penalties": 0.43}
+C3_MAX_SHOT_SHARE_SD = 0.18
+DEEP_MATCHES = 64
+
+
+def balance(run_dir: Path) -> dict:
+    """Home share of the match's shots (0.5 with no shots), players sent off, and penalties, from domain.jsonl."""
+    home = json.loads((run_dir / "meta.json").read_text())["teams"]["home"]["id"]
+    shots = {"home": 0, "away": 0}
+    sent_off = penalties = 0
+    with (run_dir / "domain.jsonl").open() as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            e = json.loads(line)
+            if e["type"] == "shot":
+                shots["home" if e["team_id"] == home else "away"] += 1
+                penalties += e["attrs"].get("technique") == "penalty"
+            elif e["type"] == "card" and e["attrs"].get("colour") in ("second_yellow", "red"):
+                sent_off += 1
+    total = shots["home"] + shots["away"]
+    return {"home_shot_share": shots["home"] / total if total else 0.5, "sent_off": sent_off, "penalties": penalties}
+
+
+def balance_section(rows: list[dict]) -> list[str]:
+    """C3 (shot-share spread) and discipline, judged on at least DEEP_MATCHES matches."""
+    n = len(rows)
+    share = [r["home_shot_share"] for r in rows]
+    m = sum(share) / n
+    sd = math.sqrt(sum((s - m) ** 2 for s in share) / (n - 1)) if n > 1 else 0.0
+    per = lambda k: sum(r[k] for r in rows) / n  # noqa: E731
+    lines = ["## Match balance and discipline", "",
+             f"From {n} matches." + ("" if n >= DEEP_MATCHES else f" These are rare or noisy measures: judge them on {DEEP_MATCHES} or more (`pnpm realism:deep`); this report has fewer than 64 matches."),
+             "", "| Measure | Real | Simulated | Target | Status |", "|---|---|---|---|---|",
+             f"| Team shot share, SD over matches (C3) | {REAL_BALANCE['shot_share_sd']:.3f} | {sd:.3f} | ≤ {C3_MAX_SHOT_SHARE_SD:.2f} | {'MET' if sd <= C3_MAX_SHOT_SHARE_SD else 'NOT MET'} |",
+             f"| Players sent off per match | {REAL_BALANCE['sent_off']:.2f} | {per('sent_off'):.2f} | about 0.2–0.3 | — |",
+             f"| Penalties per match | {REAL_BALANCE['penalties']:.2f} | {per('penalties'):.2f} | — | — |", ""]
+    return lines
+
+
 def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict | None = None, roles: dict[str, str] | None = None, carriers: dict | None = None) -> str:
     runs = [touchline_metrics(d) for d in run_dirs]
     n = len(runs)
@@ -245,6 +287,7 @@ def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict |
         from .carriers import still_carriers
 
         lines += carriers_section([still_carriers(simulated_carrier_halves(d, roles)) for d in run_dirs], carriers)
+    lines += balance_section([balance(d) for d in run_dirs])
     return "\n".join(lines)
 
 

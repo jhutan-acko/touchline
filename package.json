@@ -14,6 +14,7 @@
     "league": "pnpm --filter @touchline/league run generate",
     "calibrate": "pnpm --filter @touchline/calibrate run calibrate",
     "realism": "pnpm --filter @touchline/calibrate run realism",
+    "realism:deep": "pnpm --filter @touchline/calibrate run realism --matches 64 --out out/realism-deep.md",
     "physics:fit": "uv run --locked --project python/analytics python -m touchline_analytics.physics fit",
     "stats": "pnpm --filter @touchline/stats run stats",
     "mcp-stats": "pnpm --filter @touchline/mcp-stats run serve",
