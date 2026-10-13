@@ -117,7 +117,7 @@ Execution and decision flaws compound it:
   - `lineHeight` shifts the shape only out of possession, by ±3 m; in possession it has no effect. This removes the dominance mechanism: block offset ±6.4 m × slide 0.5.
   - `compactness` scales the out-of-possession `w0`.
   - Orders and agents keep setting `lineHeight` and `compactness`.
-- **Retired settings.** `shape.defLineM` and `shape.fwdDropM` are removed (params, `knobs.ts`, `shape.test.ts`). `shape.width` and `shape.depth` remain as tunable multipliers.
+- **Retired settings.** `shape.defLineM` and `shape.fwdDropM` are removed (params, `knobs.ts`, `shape.test.ts`), in the same step that switches the rule table on; until then the old template is the switch-off path. `shape.width` and `shape.depth` remain as tunable multipliers.
 - **Target.** The in-possession centroid sits about 4 m ahead of the ball (sim now 7 m behind).
 
 **G4: build-up shape.** A third phase row, `gk`, applies while our keeper has the ball and blends out on release at the A2 rate.
