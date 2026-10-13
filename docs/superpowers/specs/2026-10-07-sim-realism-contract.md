@@ -24,7 +24,7 @@ Both: the numeric realism gate **and** how matches look in the replay.
 |---|---|---|
 | C1 | All 19 existing statistics stay within 2 SD of the real figures, and at least 16 within 1 SD | Derived from the 2026-10-06 baseline |
 | C2 | Free kicks, fouls, goals and shots on target within 1 SD | Proposed, CONFIRMED by the user |
-| C3 | Shots-per-match SD of 5 or less across the realism matches | Proposed, CONFIRMED by the user |
+| C3 | Team shot-share spread (SD over matches of home shots / all shots) of 0.18 or less on at least 64 held-out matches. Restated 2026-10-13: the former shots-per-match SD ≤ 5 sat at the chance floor (a realistic sim lands near 4.9) | Restated by the user, 2026-10-13 (see `2026-10-13-sim-realism-v2-design.md`) |
 | C4 | Seven spatial metrics measured on all seven IDSSE tracking matches are in the realism report and gate, each with \|z\| < 3 using the existing scale rule (real between-match SD, floored at 5 % of the mean) | All seven matches: CONFIRMED by the user. The z < 3 band is the gate's existing rule (derived) |
 | C5 | A replay viewer sees supporters offering angles, defenders goal-side of their opponents, and carriers shielding under pressure | Judged in the replay (CONFIRMED judge) |
 
@@ -34,7 +34,7 @@ Both: the numeric realism gate **and** how matches look in the replay.
 - Only aggregate real-data statistics are committed (IDSSE licence; existing convention).
 - The engine stays deterministic for a seed.
 - Each new behaviour ships switched off by default, so the realism baseline stays unchanged until a single calibration step switches them on.
-- Non-goal: changing the decision model (`decide.ts`) or the shot model.
+- Non-goal: changing the decision model (`decide.ts`) or the shot model. Lifted for realism v2 (user, 2026-10-13): see `2026-10-13-sim-realism-v2-design.md`.
 
 ## Unresolved items
 
