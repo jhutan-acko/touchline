@@ -149,7 +149,7 @@ export type FlightOutcome =
   | "wide"
 
 export type Possession =
-  | { readonly kind: "owned"; readonly playerId: string; readonly since: number; readonly restart: RestartKind | null }
+  | { readonly kind: "owned"; readonly playerId: string; readonly since: number; readonly restart: RestartKind | null; readonly inHands?: boolean; readonly holdTicks?: number }
   | { readonly kind: "in_flight"; readonly flight: Flight }
   /** A loose ball; after a bad first touch the toucher cannot play it again until `noTouchUntil` (global tick). */
   | { readonly kind: "loose"; readonly noTouchId?: string; readonly noTouchUntil?: number }
@@ -280,7 +280,7 @@ export interface Frame {
   readonly possession_side: Side | null
 }
 
-export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench"] as const
+export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution"] as const
 export type Concern = (typeof CONCERNS)[number]
 
 /** One team's substitutions: planned windows (match minutes) still to come, changes made, windows used, bench players used. */

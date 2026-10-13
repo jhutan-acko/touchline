@@ -188,6 +188,12 @@ export interface Params {
     readonly catchBase: number
     readonly catchHandling: number
     readonly fumbleShare: number
+    /** 1: a keeper has the ball in his hands (held saves, claims, balls an opponent touched last, in his own box) or at his feet (back passes, his side's loose balls); 0: the old rule (every keeper possession is held for timing.keeperHoldS, and he cannot be tackled in his box). */
+    readonly handsRule: number
+    /** How long a keeper holds the ball in his hands, drawn uniformly (s). */
+    readonly handsHoldS: readonly [number, number]
+    /** Multiplier on the press rate against a keeper with the ball at his feet. */
+    readonly feetPressFactor: number
   }
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
   /**
@@ -362,7 +368,7 @@ export const DEFAULT_PARAMS: Params = {
     clearToTouch: 0.2,
     clearSliceBehind: 0.2
   },
-  keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06 },
+  keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06, handsRule: 0, handsHoldS: [5, 12], feetPressFactor: 1 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
