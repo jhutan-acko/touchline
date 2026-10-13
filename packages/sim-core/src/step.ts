@@ -448,9 +448,9 @@ const handleRestart = (w: Work): void => {
 // ---------------------------------------------------------------- on-ball
 
 /** Possession for a player who has just won the ball; a keeper with it in his hands also gets his hold time. */
-const ownedBy = (w: Work, pl: PlayerState, lastTouchSide: Side | null): Possession => {
+const ownedBy = (w: Work, pl: PlayerState, lastTouch: { readonly side: Side; readonly playerId: string } | null): Possession => {
   const base = { kind: "owned" as const, playerId: pl.id, since: w.tick, restart: null }
-  if (!keeperInHands(w.p.keeper.handsRule, pl, w.period, lastTouchSide)) return base
+  if (!keeperInHands(w.p.keeper.handsRule, pl, w.period, lastTouch)) return base
   const [lo, hi] = w.p.keeper.handsHoldS
   return { ...base, inHands: true, holdTicks: Math.round(w.rng.keeper.range(lo, hi) / w.dt) }
 }
@@ -459,7 +459,7 @@ const changePossession = (w: Work, to: PlayerState, reasonEvent: PendingEvent | 
   const prevSide = w.lastTouch?.side ?? null
   if (reasonEvent) w.emit(reasonEvent)
   if (prevSide !== null && prevSide !== to.side) w.emit(w.pending("possession_change", to, to.pos, { reason: reasonEvent?.type ?? "recovery" }))
-  w.possession = ownedBy(w, to, prevSide)
+  w.possession = ownedBy(w, to, w.lastTouch)
   w.lastTouch = { playerId: to.id, side: to.side }
   w.pressedBy = []
   w.setPlayer({ ...w.player(to.id), intent: { kind: "hold" }, intentUntil: w.tick + w.decisionDelayTicks() })
@@ -823,7 +823,8 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     const holdTicks = rule ? (poss.inHands ? (poss.holdTicks ?? 0) : 0) : Math.round(w.p.timing.keeperHoldS / w.dt)
     if (w.tick - poss.since < holdTicks) return
   }
-  w.possession = { ...poss, restart: null }
+  // Under the new rule a keeper's hold is over once he decides: from here he plays it from his feet.
+  w.possession = w.p.keeper.handsRule > 0 ? { ...poss, restart: null, inHands: false } : { ...poss, restart: null }
   finishCarry(w, owner)
   const side = owner.side
   const team = teamOf(w.cfg, side)
@@ -890,7 +891,7 @@ const ownedTick = (w: Work): void => {
   }
   // A keeper with the ball in their own box has it in their hands: they can be pressed, not challenged.
   // In his hands he can be pressed, not challenged. Under the old rule that is any keeper possession in his own box.
-  const inHands = w.p.keeper.handsRule > 0 ? w.possession.inHands === true : owner.role === "GK" && inOwnBox(owner.side, w.period, owner.pos)
+  const inHands = w.p.keeper.handsRule > 0 ? w.possession.inHands === true && inOwnBox(owner.side, w.period, owner.pos) : owner.role === "GK" && inOwnBox(owner.side, w.period, owner.pos)
   if (w.possession.restart === null && !inHands && duels(w, owner)) return
   if (w.tick >= owner.intentUntil) ownerDecision(w, w.player(owner.id))
 }
@@ -955,7 +956,7 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
   }
   if (f.winnerId) {
     const winner = w.player(f.winnerId)
-    w.possession = ownedBy(w, winner, f.side)
+    w.possession = ownedBy(w, winner, { side: f.side, playerId: f.fromId })
     if (w.lastTouch?.side !== winner.side) w.emit(w.pending("possession_change", winner, winner.pos, { reason: f.outcome }))
     w.lastTouch = { playerId: winner.id, side: winner.side }
     w.pressedBy = []
@@ -1094,17 +1095,16 @@ const moveTarget = (
   }
   if (pos.kind === "owned" && possSide !== pl.side) {
     const owner = w.player(pos.playerId)
-    // Nobody presses a keeper with the ball in his hands; at his feet he is pressed less (feetPressFactor).
-    const keeperHolding = w.p.keeper.handsRule > 0 && owner.role === "GK" && pos.inHands === true
-    if (keeperHolding) return shape()
+    // Nobody presses a keeper with the ball in his hands (marking carries on); at his feet he is pressed less (feetPressFactor).
+    const keeperHolding = w.p.keeper.handsRule > 0 && owner.role === "GK" && pos.inHands === true && inOwnBox(owner.side, w.period, owner.pos)
     const keeperFactor = w.p.keeper.handsRule > 0 && owner.role === "GK" ? w.p.keeper.feetPressFactor : 1
-    if (pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
+    if (!keeperHolding && pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
       return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
     const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
     // The nearest defender presses; in a scripted press surge the two nearest do, from further away.
     const surge = w.mods(pl.side).surge
     const presser = surge ? defenders.slice(0, 2).some((x) => x.id === pl.id) : defenders[0]?.id === pl.id
-    if (presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
+    if (!keeperHolding && presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
       const style = team.style
       const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, w.period, owner.pos)
       if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press * keeperFactor, w.dt))) {

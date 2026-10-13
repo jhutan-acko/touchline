@@ -15,13 +15,14 @@ const on: Params = { ...P, keeper: { ...P.keeper, handsRule: 1 } }
 describe("keeper in hands or at feet", () => {
   it("has it in his hands in his own box unless his own side touched it last (the back-pass law)", () => {
     const inBox = keeperAt(-48, 0)
-    expect(keeperInHands(1, inBox, "first_half", "away")).toBe(true)
+    expect(keeperInHands(1, inBox, "first_half", { side: "away", playerId: "x" })).toBe(true)
     expect(keeperInHands(1, inBox, "first_half", null)).toBe(true)
-    expect(keeperInHands(1, inBox, "first_half", "home")).toBe(false)
-    expect(keeperInHands(1, keeperAt(-30, 0), "first_half", "away")).toBe(false)
+    expect(keeperInHands(1, inBox, "first_half", { side: "home", playerId: "mate" })).toBe(false)
+    expect(keeperInHands(1, keeperAt(-30, 0), "first_half", { side: "away", playerId: "x" })).toBe(false)
     // Second half: home defends the +x end.
-    expect(keeperInHands(1, keeperAt(48, 0), "second_half", "away")).toBe(true)
-    expect(keeperInHands(0, inBox, "first_half", "away")).toBe(false)
+    expect(keeperInHands(1, keeperAt(48, 0), "second_half", { side: "away", playerId: "x" })).toBe(true)
+    expect(keeperInHands(1, inBox, "first_half", { side: "home", playerId: inBox.id })).toBe(true)
+    expect(keeperInHands(0, inBox, "first_half", { side: "away", playerId: "x" })).toBe(false)
   })
 
   it("with the rule on: nobody presses a keeper holding the ball, he holds it at least 5 s, and plays it quickly from his feet", () => {

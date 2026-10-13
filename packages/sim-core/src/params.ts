@@ -188,7 +188,7 @@ export interface Params {
     readonly catchBase: number
     readonly catchHandling: number
     readonly fumbleShare: number
-    /** 1: a keeper has the ball in his hands (held saves, claims, balls an opponent touched last, in his own box) or at his feet (back passes, his side's loose balls); 0: the old rule (every keeper possession is held for timing.keeperHoldS, and he cannot be tackled in his box). */
+    /** 1: a keeper has the ball in his hands (held saves, claims, balls an opponent or he himself touched last, in his own box) or at his feet (back passes and balls a teammate touched last); 0: the old rule (every keeper possession is held for timing.keeperHoldS, and he cannot be tackled in his box). */
     readonly handsRule: number
     /** How long a keeper holds the ball in his hands, drawn uniformly (s). */
     readonly handsHoldS: readonly [number, number]
