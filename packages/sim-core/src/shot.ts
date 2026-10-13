@@ -1,4 +1,4 @@
-import { dist, dirOf, goalOf, PITCH, type Side, type Vec2, type Vec3 } from "./geometry.js"
+import { dist, dirOf, goalOf, PITCH, type Period, type Side, type Vec2, type Vec3 } from "./geometry.js"
 import type { Params } from "./params.js"
 import type { Rng } from "./rng.js"
 import type { BallState, PlayerState } from "./types.js"
@@ -57,8 +57,8 @@ export const normalBetween = (lo: number, hi: number, mean: number, sd: number):
  * Ball after a keeper parry. A safe parry is pushed wide of the post (it can only go out for a corner
  * or stay in play), never between the posts; a dangerous parry or fumble drops back into the box.
  */
-export const parryBall = (side: Side, saveAt: Vec3, handling: Handling, rng: Rng): BallState => {
-  const d = dirOf(side)
+export const parryBall = (side: Side, period: Period, saveAt: Vec3, handling: Handling, rng: Rng): BallState => {
+  const d = dirOf(side, period)
   const sy = saveAt.y === 0 ? (rng.chance(0.5) ? 1 : -1) : Math.sign(saveAt.y)
   if (handling === "parried_safe")
     return {
@@ -94,6 +94,7 @@ export const saveChance = (s: ShotOnTarget, keeper: PlayerState, p: Params, logi
 export const planShot = (
   shooter: PlayerState,
   side: Side,
+  period: Period,
   opponents: ReadonlyArray<PlayerState>,
   xg: number,
   pressure: number,
@@ -106,7 +107,7 @@ export const planShot = (
   mods: ShotMods = {}
 ): ShotPlan => {
   const scoring = mods.scoring ?? 1
-  const goal = goalOf(side)
+  const goal = goalOf(side, period)
   const from: Vec3 = { x: shooter.pos.x, y: shooter.pos.y, z: 0.2 }
   const d = dist(shooter.pos, goal)
   const skill = (1.35 - 0.7 * shooter.attrs.finishing) * (weakFoot ? p.execution.weakFootK : 1)
@@ -164,12 +165,12 @@ export const planShot = (
     const fy = Math.max(-(PITCH.goalHalfWidth - 0.4), Math.min(PITCH.goalHalfWidth - 0.4, y))
     const fz = Math.min(z, PITCH.goalHeight - 0.4)
     if (mods.force === "save")
-      return { outcome: "saved", ticks: travel(d), from, to: { x: goal.x - dirOf(side) * 0.8, y: fy, z: fz }, execution, onTarget: true, blockerId: null, keeperId: keeper.id, handling: "clean", forced: true }
+      return { outcome: "saved", ticks: travel(d), from, to: { x: goal.x - dirOf(side, period) * 0.8, y: fy, z: fz }, execution, onTarget: true, blockerId: null, keeperId: keeper.id, handling: "clean", forced: true }
     return { outcome: "goal", ticks: travel(d), from, to: { x: goal.x, y: fy, z: fz }, execution, onTarget: true, blockerId: null, keeperId: null, handling: null, forced: true }
   }
   const onTarget = Math.abs(y) < PITCH.goalHalfWidth && z < PITCH.goalHeight
   if (!onTarget) return { outcome: "wide", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }
-  const saveAt: Vec3 = { x: goal.x - dirOf(side) * 0.8, y: Math.max(-3.5, Math.min(3.5, y)), z }
+  const saveAt: Vec3 = { x: goal.x - dirOf(side, period) * 0.8, y: Math.max(-3.5, Math.min(3.5, y)), z }
   // Penalties keep their fixed conversion (scaled by how likely this aim was to be on target); every other
   // shot on target beats the keeper unless saved, by placement, distance and the keeper's reflexes (see saveChance).
   // Heights below 0 are clamped to the ground, so the vertical window is (-inf, crossbar).

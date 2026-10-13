@@ -1,4 +1,4 @@
-import type { Side } from "./geometry.js"
+import { attackX, type Side } from "./geometry.js"
 import { substream } from "./rng.js"
 import type { ScriptEntry } from "./script.js"
 import { initMatch, isFinished, step } from "./step.js"
@@ -85,9 +85,8 @@ export const entryAchieved = (entry: ScriptEntry, events: ReadonlyArray<DomainEv
       )
     case "defensive_error": {
       const roles = rolesOf(cfg)
-      const attack = entry.team === "home" ? 1 : -1
       // A defender's mis-hit kick in their own half: a pass, or a clearance that was meant to get the ball away.
-      return n((e) => (e.type === "pass" || e.type === "clearance") && e.team_id === team && e.attrs.execution === "mishit" && ["CB", "FB", "DM"].includes(roles.get(e.player_id ?? "") ?? "") && (e.x ?? 0) * attack < 0) >= 1
+      return n((e) => (e.type === "pass" || e.type === "clearance") && e.team_id === team && e.attrs.execution === "mishit" && ["CB", "FB", "DM"].includes(roles.get(e.player_id ?? "") ?? "") && attackX(entry.team, e.x ?? 0, e.period) < 0) >= 1
     }
   }
 }

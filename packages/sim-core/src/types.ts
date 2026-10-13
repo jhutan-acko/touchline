@@ -1,11 +1,11 @@
-import type { Side, Vec2, Vec3 } from "./geometry.js"
+import type { Period, Side, Vec2, Vec3 } from "./geometry.js"
 import type { Params } from "./params.js"
 import type { RngState } from "./rng.js"
 import type { Script, ScriptEntry } from "./script.js"
 
 export type Role = "GK" | "CB" | "FB" | "DM" | "CM" | "AM" | "W" | "ST"
 export type FormationName = "4-3-3" | "4-4-2" | "4-2-3-1" | "3-5-2"
-export type Period = "first_half" | "second_half"
+export type { Period } from "./geometry.js"
 
 /** All attributes are 0..1. */
 export interface PlayerAttrs {

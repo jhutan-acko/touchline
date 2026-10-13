@@ -1,4 +1,4 @@
-import { clamp, dirOf, PITCH, type Side, type Vec2 } from "./geometry.js"
+import { clamp, dirOf, PITCH, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { FormationName, Role, TeamStyle } from "./types.js"
 
 export interface Slot {
@@ -71,13 +71,14 @@ export const anchorFor = (
   formation: FormationName,
   slot: number,
   side: Side,
+  period: Period,
   ball: Vec2,
   style: TeamStyle,
   inPossession: boolean,
   spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number; readonly fwdDropM?: number } = { width: 1, depth: 1 }
 ): Vec2 => {
   const s = FORMATIONS[formation][slot]!
-  const d = dirOf(side)
+  const d = dirOf(side, period)
   const bx = ball.x * d
   const by = ball.y * d
   if (s.role === "GK") {
@@ -100,9 +101,9 @@ export const anchorFor = (
 }
 
 /** Kickoff anchors: like shape anchors but clamped to the team's own half. */
-export const kickoffAnchor = (formation: FormationName, slot: number, side: Side, style: TeamStyle): Vec2 => {
-  const a = anchorFor(formation, slot, side, { x: 0, y: 0 }, style, false)
-  const d = dirOf(side)
+export const kickoffAnchor = (formation: FormationName, slot: number, side: Side, period: Period, style: TeamStyle): Vec2 => {
+  const a = anchorFor(formation, slot, side, period, { x: 0, y: 0 }, style, false)
+  const d = dirOf(side, period)
   const ax = Math.min(a.x * d, -1.5)
   return { x: ax * d, y: a.y }
 }

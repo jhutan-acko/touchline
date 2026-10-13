@@ -22,18 +22,18 @@ describe("keeper lets the ball run out", () => {
   })
   it("lets it go for a goal kick when it would cross their own goal line", () => {
     const p = { ...P, keeper: { ...P.keeper, letRunShare: 1 } }
-    const r = keeperLetsRun(ball, passer.id, null, players, res, p, 0.1, new Rng(seedRng(2)))
+    const r = keeperLetsRun(ball, passer.id, null, players, res, "first_half", p, 0.1, new Rng(seedRng(2)))
     expect(r.result).toBe("out")
     expect(r.ball.pos.x).toBeGreaterThan(52.5)
   })
   it("collects it when letRunShare is 0, and never lets a ball go that would stay in play", () => {
     const keep = { ...P, keeper: { ...P.keeper, letRunShare: 0 } }
-    expect(keeperLetsRun(ball, passer.id, null, players, res, keep, 0.1, new Rng(seedRng(2)))).toBe(res)
+    expect(keeperLetsRun(ball, passer.id, null, players, res, "first_half", keep, 0.1, new Rng(seedRng(2)))).toBe(res)
     const short = { pos: { x: 30, y: 6, z: 0 }, vel: launchVelocity(passer.pos, { x: 44, y: 6 }, "ground", { ...P, pass: { ...P.pass, arriveSpeed: 1 } }) }
     const near = at(keeper, 44, 6)
     const r0 = resolveFlight(short, passer.id, null, [passer, near], P, 0.1, new Rng(seedRng(1)))
     const always = { ...P, keeper: { ...P.keeper, letRunShare: 1 } }
-    expect(keeperLetsRun(short, passer.id, null, [passer, near], r0, always, 0.1, new Rng(seedRng(2)))).toBe(r0)
+    expect(keeperLetsRun(short, passer.id, null, [passer, near], r0, "first_half", always, 0.1, new Rng(seedRng(2)))).toBe(r0)
   })
   it("only the defending keeper does it: a team's own keeper still collects its own back pass", () => {
     const ownKeeper = at(base.find((p) => p.side === "home" && p.role === "GK")!, -49, 5)
@@ -41,6 +41,6 @@ describe("keeper lets the ball run out", () => {
     const from = at(base[2]!, -30, 6)
     const r0 = resolveFlight(back, from.id, null, [from, ownKeeper], P, 0.1, new Rng(seedRng(1)))
     const always = { ...P, keeper: { ...P.keeper, letRunShare: 1 } }
-    expect(keeperLetsRun(back, from.id, null, [from, ownKeeper], r0, always, 0.1, new Rng(seedRng(2)))).toBe(r0)
+    expect(keeperLetsRun(back, from.id, null, [from, ownKeeper], r0, "first_half", always, 0.1, new Rng(seedRng(2)))).toBe(r0)
   })
 })

@@ -5,7 +5,7 @@ import { DEFAULT_PARAMS } from "../src/params.js"
 
 const T = DEFAULT_PARAMS.classifier
 const C = (from: [number, number], to: [number, number], height: "ground" | "high" = "ground", lastDef = 30, side: "home" | "away" = "home") =>
-  classifyPass({ side, from: { x: from[0], y: from[1] }, to: { x: to[0], y: to[1] }, height, lastDefenderAttackX: lastDef }, T)
+  classifyPass({ side, period: "first_half", from: { x: from[0], y: from[1] }, to: { x: to[0], y: to[1] }, height, lastDefenderAttackX: lastDef }, T)
 
 describe("geometry", () => {
   it("indexes the 16x12 grid from the bottom-left corner", () => {
@@ -13,12 +13,12 @@ describe("geometry", () => {
     expect(zoneIndex({ x: 52.5, y: 34 })).toBe(16 * 12 - 1)
   })
   it("mirrors attack direction for the away side", () => {
-    expect(attackX("home", 30)).toBe(30)
-    expect(attackX("away", 30)).toBe(-30)
-    expect(actionZone("away", { x: -45, y: 0 })).toBe("box")
+    expect(attackX("home", 30, "first_half")).toBe(30)
+    expect(attackX("away", 30, "first_half")).toBe(-30)
+    expect(actionZone("away", "first_half", { x: -45, y: 0 })).toBe("box")
   })
   it("goal angle shrinks with distance", () => {
-    expect(goalAngle("home", { x: 41.5, y: 0 })).toBeGreaterThan(goalAngle("home", { x: 22.5, y: 0 }))
+    expect(goalAngle("home", "first_half", { x: 41.5, y: 0 })).toBeGreaterThan(goalAngle("home", "first_half", { x: 22.5, y: 0 }))
   })
 })
 

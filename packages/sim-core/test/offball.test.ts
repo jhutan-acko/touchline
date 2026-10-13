@@ -15,19 +15,19 @@ const behavioursOff = (p: Params): Params => ({ ...p, support: { ...p.support, c
 
 describe("support play", () => {
   it("offers the open side, away from a cluster of opponents", () => {
-    const s = supportSpot({ x: 0, y: 0 }, { x: 0, y: 0 }, "home", [opp(8, 8), opp(9, 6), opp(6, 9)], 12)
+    const s = supportSpot({ x: 0, y: 0 }, { x: 0, y: 0 }, "home", "first_half", [opp(8, 8), opp(9, 6), opp(6, 9)], 12)
     expect(s.y).toBeLessThan(0)
     expect(dist(s, { x: 0, y: 0 })).toBeGreaterThan(3)
     expect(dist(s, { x: 0, y: 0 })).toBeLessThanOrEqual(12.0001)
   })
   it("moves smoothly when the carrier moves a little", () => {
     const opps = [opp(8, 8), opp(9, 6), opp(-6, -9)]
-    const a = supportSpot({ x: 0, y: 0 }, { x: -5, y: 0 }, "home", opps, 12)
-    const b = supportSpot({ x: 0.1, y: 0 }, { x: -5, y: 0 }, "home", opps, 12)
+    const a = supportSpot({ x: 0, y: 0 }, { x: -5, y: 0 }, "home", "first_half", opps, 12)
+    const b = supportSpot({ x: 0.1, y: 0 }, { x: -5, y: 0 }, "home", "first_half", opps, 12)
     expect(dist(a, b)).toBeLessThan(1)
   })
   it("stays on the pitch near a corner flag", () => {
-    const s = supportSpot({ x: PITCH.halfL - 1, y: PITCH.halfW - 1 }, { x: 40, y: 25 }, "home", [], 12)
+    const s = supportSpot({ x: PITCH.halfL - 1, y: PITCH.halfW - 1 }, { x: 40, y: 25 }, "home", "first_half", [], 12)
     expect(Math.abs(s.x)).toBeLessThanOrEqual(PITCH.halfL - 1)
     expect(Math.abs(s.y)).toBeLessThanOrEqual(PITCH.halfW - 1)
   })
@@ -60,16 +60,16 @@ describe("marking", () => {
   })
   it("stands goal-side of the attacker, blended from the shape anchor by weight", () => {
     const anchor = { x: -20, y: 0 }
-    expect(markTarget(anchor, { x: -10, y: 0 }, "home", 1.5, 1)).toEqual({ x: -11.5, y: 0 })
-    expect(markTarget(anchor, { x: -10, y: 0 }, "home", 1.5, 0.5)).toEqual({ x: -15.75, y: 0 })
-    expect(markTarget(anchor, { x: -10, y: 0 }, "home", 1.5, 0)).toEqual(anchor)
+    expect(markTarget(anchor, { x: -10, y: 0 }, "home", "first_half", 1.5, 1)).toEqual({ x: -11.5, y: 0 })
+    expect(markTarget(anchor, { x: -10, y: 0 }, "home", "first_half", 1.5, 0.5)).toEqual({ x: -15.75, y: 0 })
+    expect(markTarget(anchor, { x: -10, y: 0 }, "home", "first_half", 1.5, 0)).toEqual(anchor)
   })
   it("does not follow a wide attacker more than widthSlackM outside the marker's anchor", () => {
-    const t = markTarget({ x: -20, y: 10 }, { x: -10, y: 30 }, "home", 1.5, 1, 4)
+    const t = markTarget({ x: -20, y: 10 }, { x: -10, y: 30 }, "home", "first_half", 1.5, 1, 4)
     expect(t.y).toBeCloseTo(14, 9)
-    expect(markTarget({ x: -20, y: -10 }, { x: -10, y: -30 }, "home", 1.5, 1, 4).y).toBeCloseTo(-14, 9)
+    expect(markTarget({ x: -20, y: -10 }, { x: -10, y: -30 }, "home", "first_half", 1.5, 1, 4).y).toBeCloseTo(-14, 9)
     // Inside the limit nothing changes.
-    expect(markTarget({ x: -20, y: 10 }, { x: -10, y: 12 }, "home", 1.5, 1, 4)).toEqual(markTarget({ x: -20, y: 10 }, { x: -10, y: 12 }, "home", 1.5, 1))
+    expect(markTarget({ x: -20, y: 10 }, { x: -10, y: 12 }, "home", "first_half", 1.5, 1, 4)).toEqual(markTarget({ x: -20, y: 10 }, { x: -10, y: 12 }, "home", "first_half", 1.5, 1))
   })
   it("leaves attackers less free space when switched on", () => {
     const freeSpace = (frames: Frame[]) => {

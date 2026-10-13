@@ -61,7 +61,7 @@ describe("blocked crosses and deflections", () => {
     const r = new Rng(seedRng(9))
     for (let x = 36; x <= 52; x += 1) {
       for (let y = -20; y <= 20; y += 1) {
-        const to = behindPoint("away", { x, y }, r)
+        const to = behindPoint("away", "first_half", { x, y }, r)
         const f = (PITCH.halfL - x) / (to.x - x)
         const yAtLine = y + f * (to.y - y)
         expect(Math.abs(yAtLine), `from (${x}, ${y})`).toBeGreaterThan(PITCH.goalHalfWidth + 1)

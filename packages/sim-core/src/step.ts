@@ -14,8 +14,10 @@ import {
   len,
   norm,
   other,
+  type Period,
   PITCH,
   scale,
+  sideAttacking,
   sub,
   type Side,
   type Vec2,
@@ -80,7 +82,7 @@ const kickoffPlayers = (cfg: MatchConfig): PlayerState[] => {
         jersey: pl.jersey,
         attrs: pl.attrs,
         foot: pl.preferredFoot ?? "right",
-        pos: kickoffAnchor(team.formation, slot, side, team.style),
+        pos: kickoffAnchor(team.formation, slot, side, "first_half", team.style),
         vel: { x: 0, y: 0 },
         intent: { kind: "shape" },
         intentUntil: 0,
@@ -314,13 +316,14 @@ class Work {
 
 // ---------------------------------------------------------------- restarts
 
-const restartFromOut = (lastSide: Side | null, at: Vec3): { restart: RestartKind; side: Side; at: Vec2 } => {
+const restartFromOut = (lastSide: Side | null, at: Vec3, period: Period): { restart: RestartKind; side: Side; at: Vec2 } => {
   const last = lastSide ?? "home"
   if (Math.abs(at.y) > PITCH.halfW && Math.abs(at.x) <= PITCH.halfL) {
     return { restart: "throw_in", side: other(last), at: { x: Math.max(-PITCH.halfL + 1, Math.min(PITCH.halfL - 1, at.x)), y: Math.sign(at.y) * PITCH.halfW } }
   }
   const end = Math.sign(at.x) || 1
-  const defending: Side = end > 0 ? "away" : "home"
+  // The side defending the end the ball went out at: the one not attacking it this period.
+  const defending: Side = other(sideAttacking(end, period))
   if (last === defending) return { restart: "corner", side: other(defending), at: { x: end * PITCH.halfL, y: (Math.sign(at.y) || 1) * PITCH.halfW } }
   return { restart: "goal_kick", side: defending, at: { x: end * (PITCH.halfL - PITCH.sixDepth), y: 0 } }
 }
@@ -464,11 +467,11 @@ const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState): void
     w.emit(w.pending("card", offender, offender.pos, forcedRed ? { colour: card, scripted: true } : { colour: card }))
     w.setPlayer({ ...w.player(offender.id), yellow: offender.yellow + 1, sentOff: card !== "yellow" })
   }
-  const inBox = attackX(victim.side, victim.pos.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(victim.pos.y) < PITCH.boxHalfWidth
+  const inBox = attackX(victim.side, victim.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(victim.pos.y) < PITCH.boxHalfWidth
   startRestart(
     w,
     inBox
-      ? { restart: "penalty", side: victim.side, at: { x: dirOf(victim.side) * PITCH.penaltySpot, y: 0 } }
+      ? { restart: "penalty", side: victim.side, at: { x: dirOf(victim.side, w.period) * PITCH.penaltySpot, y: 0 } }
       : { restart: "free_kick", side: victim.side, at: clampToPitch(victim.pos, 1) }
   )
 }
@@ -484,7 +487,7 @@ const knockLoose = (w: Work, toucher: PlayerState, at: Vec2): void => {
 }
 
 /** How urgently `defSide` must defend a ball at `at`: 1 on its goal line, 0 beyond 30 m from its goal. */
-const danger = (defSide: Side, at: Vec2): number => Math.max(0, 1 - dist(at, { x: -dirOf(defSide) * PITCH.halfL, y: 0 }) / 30)
+const danger = (defSide: Side, period: Period, at: Vec2): number => Math.max(0, 1 - dist(at, { x: -dirOf(defSide, period) * PITCH.halfL, y: 0 }) / 30)
 
 const duels = (w: Work, owner: PlayerState): boolean => {
   const opps = w.active(other(owner.side))
@@ -497,7 +500,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
   const def = nearestOpponent(owner.pos, opps)
   if (!def || dist(def.pos, owner.pos) > w.p.defending.tackleRadiusM) return false
   const style = teamOf(w.cfg, def.side).style
-  const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, owner.pos)) * w.mods(def.side).tackle
+  const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, w.period, owner.pos)) * w.mods(def.side).tackle
   if (!w.rng.duel.chance(hazard(rate, w.dt))) return false
   const pWin = 1 / (1 + Math.exp(-(w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling))))
   if (w.rng.duel.chance(pWin)) {
@@ -508,7 +511,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
     } else changePossession(w, def, w.pending("tackle", def, def.pos, { outcome: "won", opponent_id: owner.id, ball: "won" }))
     return true
   }
-  const victimInBox = attackX(owner.side, owner.pos.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
+  const victimInBox = attackX(owner.side, owner.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
   if (w.rng.referee.chance(Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul)) || w.hasForced(def.side, "red_card")) {
     finishCarry(w, owner)
     w.emit(w.pending("tackle", def, def.pos, { outcome: "foul", opponent_id: owner.id }))
@@ -526,7 +529,7 @@ const finishCarry = (w: Work, owner: PlayerState): void => {
   if (!start || start.playerId !== owner.id) return
   const d = dist(start.at, owner.pos)
   if (d < w.p.classifier.carryMinM) return
-  const progressive = attackX(owner.side, owner.pos.x) - attackX(owner.side, start.at.x) >= 10
+  const progressive = attackX(owner.side, owner.pos.x, w.period) - attackX(owner.side, start.at.x, w.period) >= 10
   w.emit({ ...w.pending("carry", owner, start.at, { ...start.decision, distance_m: round2(d), progressive }, owner.pos), frame_id: start.tick }, { frame_id_end: w.tick })
 }
 
@@ -554,19 +557,19 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const opps = w.active(other(side))
   const isClear = d.action === "clear"
   // A clearance from inside the box is sometimes sliced behind; from a wide position it is often kicked into touch on purpose.
-  const sliced = isClear && inOwnBox(side, owner.pos) && w.rng.execution.chance(p.defending.clearSliceBehind)
+  const sliced = isClear && inOwnBox(side, w.period, owner.pos) && w.rng.execution.chance(p.defending.clearSliceBehind)
   const toTouch = !sliced && isClear && Math.abs(owner.pos.y) > 8 && w.rng.decision.chance(p.defending.clearToTouch)
   const target: Vec2 = sliced
-    ? (({ x, y }) => ({ x, y }))(behindPoint(side, owner.pos, w.rng.execution))
+    ? (({ x, y }) => ({ x, y }))(behindPoint(side, w.period, owner.pos, w.rng.execution))
     : toTouch
-    ? { x: owner.pos.x + dirOf(side) * w.rng.decision.range(10, 35), y: Math.sign(owner.pos.y) * (PITCH.halfW + w.rng.decision.range(2, 8)) }
+    ? { x: owner.pos.x + dirOf(side, w.period) * w.rng.decision.range(10, 35), y: Math.sign(owner.pos.y) * (PITCH.halfW + w.rng.decision.range(2, 8)) }
     : isClear
-      ? { x: owner.pos.x + dirOf(side) * w.rng.decision.range(30, 60), y: owner.pos.y + w.rng.decision.range(-35, 35) }
+      ? { x: owner.pos.x + dirOf(side, w.period) * w.rng.decision.range(30, 60), y: owner.pos.y + w.rng.decision.range(-35, 35) }
       : d.candidate!.target
   const height = isClear ? "high" : d.candidate!.height
   const weakFoot = w.rng.execution.chance(0.2)
   // Scenario scripts: a defensive error raises (or forces) mis-hits by the team's defenders in their own half.
-  const errorProne = (owner.role === "CB" || owner.role === "FB" || owner.role === "DM") && attackX(side, owner.pos.x) < 0
+  const errorProne = (owner.role === "CB" || owner.role === "FB" || owner.role === "DM") && attackX(side, owner.pos.x, w.period) < 0
   const forceMishit = errorProne && !restart && w.takeForced(side, "defensive_error")
   const exe = executeKick(
     {
@@ -579,15 +582,15 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const start: BallState = { pos: { x: owner.pos.x, y: owner.pos.y, z: 0 }, vel: exe.vel }
   const intended = d.candidate?.receiverId ?? null
   // A keeper lets a ball that is running out over their own goal line go for a goal kick (see keeperLetsRun).
-  const res = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel), p, w.dt, w.rng.duel)
-  const lastDef = lastDefenderAttackX(side, opps)
+  const res = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel), w.period, p, w.dt, w.rng.duel)
+  const lastDef = lastDefenderAttackX(side, w.period, opps)
   const winner = res.winnerId ? w.player(res.winnerId) : null
   const offside =
     !restart || restart === "free_kick"
       ? winner !== null &&
         winner.side === side &&
         winner.id !== owner.id &&
-        attackX(side, winner.pos.x) > Math.max(lastDef, attackX(side, owner.pos.x), 0) + 0.5
+        attackX(side, winner.pos.x, w.period) > Math.max(lastDef, attackX(side, owner.pos.x, w.period), 0) + 0.5
       : false
   // What the defending side does about it: block the cross at the source, the keeper comes for a high ball,
   // or a defender heads it away. Each is drawn only when it is possible.
@@ -598,10 +601,10 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const contact = res.ball.pos
   const keeperComes =
     !blocked && height !== "ground" && keeper !== null && (res.result === "reached" || res.result === "stopped") && winner?.id !== keeper.id &&
-    keeperCanCome(keeper, contact, res.ticks * w.dt, p) && w.rng.duel.chance(p.keeper.comeShare)
+    keeperCanCome(keeper, w.period, contact, res.ticks * w.dt, p) && w.rng.duel.chance(p.keeper.comeShare)
   const headsAway =
     !blocked && !keeperComes && res.result === "reached" && winner !== null && winner.side === defSide && winner.role !== "GK" &&
-    contact.z > p.kinematics.controlHeightM && attackX(defSide, contact.x) < -17.5 && w.rng.duel.chance(p.defending.headClearShare)
+    contact.z > p.kinematics.controlHeightM && attackX(defSide, contact.x, w.period) < -17.5 && w.rng.duel.chance(p.defending.headClearShare)
   const kind = restart && restart !== "kickoff" ? "set_piece" : isClear ? null : d.candidate!.kind
   const attrs: Record<string, AttrValue> = {
     kind,
@@ -635,8 +638,8 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   if (blocked) {
     outcome = "blocked"
     extra.push(at(w.pending("block", blocker, blocker!.pos, { blocked: "cross" })))
-    if (w.rng.duel.chance(p.defending.crossBlockBehind)) deflectTo = behindPoint(defSide, blocker!.pos, w.rng.duel)
-    else looseAfter = deflectLoose(defSide, blocker!.pos, w.rng.duel, [3, 8], [0.5, 3])
+    if (w.rng.duel.chance(p.defending.crossBlockBehind)) deflectTo = behindPoint(defSide, w.period, blocker!.pos, w.rng.duel)
+    else looseAfter = deflectLoose(defSide, w.period, blocker!.pos, w.rng.duel, [3, 8], [0.5, 3])
   } else if (keeperComes) {
     outcome = "intercepted"
     const act = keeperAction(keeper!, p, w.rng.duel)
@@ -644,7 +647,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     const point = { x: contact.x, y: contact.y }
     if (act === "punch") {
       extra.push(at(w.pending("keeper_punch", keeper, point, { from })))
-      looseAfter = clearAway(defSide, contact, w.rng.duel, 0.8)
+      looseAfter = clearAway(defSide, w.period, contact, w.rng.duel, 0.8)
     } else {
       extra.push(at(w.pending("keeper_claim", keeper, point, { from, handling: act === "claim" ? "clean" : "fumble" })))
       if (act === "fumble") looseAfter = { pos: contact, vel: { x: w.rng.duel.range(-3, 3), y: w.rng.duel.range(-3, 3), z: 0.3 } }
@@ -654,19 +657,19 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     outcome = "intercepted"
     if (res.aerial) extra.push(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
     extra.push(at(w.pending("clearance", winner, endAt, { technique: "head", body_part: "head" })))
-    const nearOwnLine = attackX(defSide, contact.x) < -(PITCH.halfL - 20)
-    if (nearOwnLine && w.rng.duel.chance(p.defending.headBehind)) deflectTo = behindPoint(defSide, contact, w.rng.duel)
-    else looseAfter = clearAway(defSide, contact, w.rng.duel)
+    const nearOwnLine = attackX(defSide, contact.x, w.period) < -(PITCH.halfL - 20)
+    if (nearOwnLine && w.rng.duel.chance(p.defending.headBehind)) deflectTo = behindPoint(defSide, w.period, contact, w.rng.duel)
+    else looseAfter = clearAway(defSide, w.period, contact, w.rng.duel)
   } else if (res.result === "goal") {
     // Into the net from a pass or clearance: a goal for whoever attacks that end (an own goal if it is not the passer's side).
-    const scoringSide: Side = res.ball.pos.x > 0 ? "home" : "away"
+    const scoringSide: Side = sideAttacking(res.ball.pos.x, w.period)
     outcome = "goal"
     extra.push(at({ ...w.pending("goal", owner, endAt, { scorer_id: owner.id, own_goal: scoringSide !== side, from: "pass" }), team_id: w.teamId(scoringSide) }))
     restartAfter = { restart: "kickoff", side: other(scoringSide), at: { x: 0, y: 0 } }
   } else if (res.result === "out") {
     outcome = "out_of_play"
     extra.push(at(w.pending("ball_out", null, endAt, { side: Math.abs(res.ball.pos.y) > PITCH.halfW ? "touchline" : "byline", last_touch_team: w.teamId(side) })))
-    restartAfter = restartFromOut(side, res.ball.pos)
+    restartAfter = restartFromOut(side, res.ball.pos, w.period)
   } else if (!winner) outcome = "loose"
   else if (offside) {
     outcome = "offside"
@@ -679,7 +682,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     outcome = "intercepted"
     const deflect = !res.aerial && w.rng.duel.chance(w.p.defending.interceptLooseShare)
     extra.push(at(w.pending(res.aerial ? "aerial_duel" : "interception", winner, endAt, res.aerial ? { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId } : { ball: deflect ? "deflected" : "won" })))
-    if (deflect) looseAfter = deflectLoose(winner.side, endAt, w.rng.duel)
+    if (deflect) looseAfter = deflectLoose(winner.side, w.period, endAt, w.rng.duel)
   }
   const finalMain: PendingEvent = { ...main, attrs: { ...main.attrs, receiver_id: outcome === "successful" && winner ? winner.id : null } }
   if (res.aerial && outcome === "successful") extra.unshift(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
@@ -726,7 +729,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
         ? "keeper_error"
         : undefined
   const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, aim: isPenalty ? 1 : own.aim, ...(force ? { force } : {}) }
-  const plan = planShot(owner, side, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
+  const plan = planShot(owner, side, w.period, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
   // A forced save or keeper error is used up by the next shot that is not blocked.
   if (plan.forced && force === "save") w.takeForced(other(side), "keeper_heroics")
   if (plan.forced && force === "keeper_error") w.takeForced(other(side), "keeper_howler")
@@ -754,18 +757,18 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   } else if (plan.outcome === "wide") {
     extra.push(at(w.pending("ball_out", null, end, { side: "byline", last_touch_team: w.teamId(side) })))
     const defending = other(side)
-    restartAfter = { restart: "goal_kick", side: defending, at: { x: dirOf(side) * (PITCH.halfL - PITCH.sixDepth), y: 0 } }
+    restartAfter = { restart: "goal_kick", side: defending, at: { x: dirOf(side, w.period) * (PITCH.halfL - PITCH.sixDepth), y: 0 } }
   } else if (plan.outcome === "blocked") {
     const blocker = w.player(plan.blockerId!)
     extra.push(at(w.pending("block", blocker, blocker.pos, { blocked: "shot" })))
-    if (w.rng.duel.chance(w.p.shot.blockBehind)) deflectTo = behindPoint(other(side), { x: plan.to.x, y: plan.to.y }, w.rng.duel)
-    else looseBall = { pos: plan.to, vel: { x: -dirOf(side) * w.rng.duel.range(2, 8), y: w.rng.duel.range(-6, 6), z: w.rng.duel.range(0, 3) } }
+    if (w.rng.duel.chance(w.p.shot.blockBehind)) deflectTo = behindPoint(other(side), w.period, { x: plan.to.x, y: plan.to.y }, w.rng.duel)
+    else looseBall = { pos: plan.to, vel: { x: -dirOf(side, w.period) * w.rng.duel.range(2, 8), y: w.rng.duel.range(-6, 6), z: w.rng.duel.range(0, 3) } }
   } else {
     const keeper = w.player(plan.keeperId!)
     extra.push(at(w.pending("keeper_save", keeper, end, { technique: plan.handling === "clean" ? "catch" : "parry", handling: plan.handling })))
     if (plan.handling === "clean") winnerId = keeper.id
     else {
-      looseBall = parryBall(side, plan.to, plan.handling!, w.rng.duel)
+      looseBall = parryBall(side, w.period, plan.to, plan.handling!, w.rng.duel)
     }
   }
   w.ball = { pos: plan.from, vel: { x: 0, y: 0, z: 0 } }
@@ -812,6 +815,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
   const side = owner.side
   const team = teamOf(w.cfg, side)
   const input = {
+    period: w.period,
     owner,
     teammates: w.active(side),
     opponents: w.active(other(side)),
@@ -833,7 +837,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
       w.setPlayer({ ...owner, intent: { kind: "hold" }, intentUntil: until(w.rng.decision.range(0.6, 1.4)) })
       return
     case "carry": {
-      const goalDir = norm(sub({ x: dirOf(side) * PITCH.halfL, y: 0 }, owner.pos))
+      const goalDir = norm(sub({ x: dirOf(side, w.period) * PITCH.halfL, y: 0 }, owner.pos))
       const dir = norm(add(goalDir, { x: 0, y: w.rng.decision.range(-0.6, 0.6) }))
       w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick, decision: decisionAttrs(decision) }
       w.setPlayer({ ...owner, intent: { kind: "carry", dir, speed: w.p.carry.speed }, intentUntil: until(w.rng.decision.range(...w.p.carry.durationS)) })
@@ -845,7 +849,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
       const won = w.rng.duel.chance(pWin)
       w.emit(w.pending("take_on", owner, owner.pos, { ...decisionAttrs(decision), outcome: won ? "won" : "lost", defender_id: def.id }))
       if (won) {
-        const dir = norm(sub({ x: dirOf(side) * PITCH.halfL, y: 0 }, owner.pos))
+        const dir = norm(sub({ x: dirOf(side, w.period) * PITCH.halfL, y: 0 }, owner.pos))
         // The carry that follows a won take-on carries the take-on's decision record.
         w.carry = { playerId: owner.id, at: owner.pos, tick: w.tick, decision: decisionAttrs(decision) }
         w.setPlayer({ ...owner, intent: { kind: "carry", dir, speed: w.p.carry.speed * 1.2 }, intentUntil: until(1.2) })
@@ -872,7 +876,7 @@ const ownedTick = (w: Work): void => {
     return
   }
   // A keeper with the ball in their own box has it in their hands: they can be pressed, not challenged.
-  const inHands = owner.role === "GK" && inOwnBox(owner.side, owner.pos)
+  const inHands = owner.role === "GK" && inOwnBox(owner.side, w.period, owner.pos)
   if (w.possession.restart === null && !inHands && duels(w, owner)) return
   if (w.tick >= owner.intentUntil) ownerDecision(w, w.player(owner.id))
 }
@@ -914,7 +918,7 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
       flight: {
         kind: "deflection", fromId: toucher.id, side: toucher.side, releaseTick: w.tick, resolveTick: w.tick + ticks, winnerId: null, outcome: "out_of_play",
         pending: { ...w.pending("ball_out", null, out, { side: "byline", last_touch_team: w.teamId(toucher.side) }), frame_id: w.tick + ticks },
-        extra: [], path: { from, to: f.deflectTo }, restartAfter: restartFromOut(toucher.side, f.deflectTo), looseBall: null, deflectTo: null
+        extra: [], path: { from, to: f.deflectTo }, restartAfter: restartFromOut(toucher.side, f.deflectTo, w.period), looseBall: null, deflectTo: null
       }
     }
     return
@@ -951,7 +955,7 @@ const ballTick = (w: Work): void => {
   const pos = w.possession
   if (pos.kind === "owned") {
     const owner = w.player(pos.playerId)
-    const facing = len(owner.vel) > 0.2 ? norm(owner.vel) : { x: dirOf(owner.side), y: 0 }
+    const facing = len(owner.vel) > 0.2 ? norm(owner.vel) : { x: dirOf(owner.side, w.period), y: 0 }
     const at = add(owner.pos, scale(facing, 0.35))
     w.ball = { pos: { x: at.x, y: at.y, z: 0 }, vel: { x: owner.vel.x, y: owner.vel.y, z: 0 } }
     return
@@ -978,7 +982,7 @@ const ballTick = (w: Work): void => {
   if (cross?.inGoal) {
     // A loose ball over the line between the posts (judged where it crossed) is a goal for the side
     // attacking that end; an own goal if the defending side touched it last.
-    const scoringSide: Side = cross.x > 0 ? "home" : "away"
+    const scoringSide: Side = sideAttacking(cross.x, w.period)
     const toucher = w.lastTouch ? w.player(w.lastTouch.playerId) : null
     const own = toucher !== null && toucher.side !== scoringSide
     const at = { x: cross.x, y: cross.y }
@@ -989,7 +993,7 @@ const ballTick = (w: Work): void => {
   }
   if (!inPitch(flat)) {
     w.emit(w.pending("ball_out", null, flat, { side: Math.abs(flat.y) > PITCH.halfW ? "touchline" : "byline", last_touch_team: w.lastTouch ? w.teamId(w.lastTouch.side) : null }))
-    startRestart(w, restartFromOut(w.lastTouch?.side ?? null, w.ball.pos))
+    startRestart(w, restartFromOut(w.lastTouch?.side ?? null, w.ball.pos, w.period))
     return
   }
   if (w.ball.pos.z > w.p.kinematics.controlHeightM) return
@@ -1026,12 +1030,12 @@ const moveTarget = (
 ): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl, pl.energy, w.p)
-  const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, ballFlat, team.style, possSide === pl.side, w.p.shape), speedCap: vmax * w.p.movement.shapeSpeedShare })
+  const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, w.period, ballFlat, team.style, possSide === pl.side, w.p.shape), speedCap: vmax * w.p.movement.shapeSpeedShare })
   const ph = w.phase
   if (ph.kind === "restart") {
     if (takerFor(w, ph).id === pl.id) return { target: ph.at, speedCap: vmax * 0.8 }
-    const a = anchorFor(team.formation, pl.slot, pl.side, ph.at, team.style, ph.side === pl.side, w.p.shape)
-    if (ph.restart === "kickoff") return { target: kickoffAnchor(team.formation, pl.slot, pl.side, team.style), speedCap: vmax * 0.6 }
+    const a = anchorFor(team.formation, pl.slot, pl.side, w.period, ph.at, team.style, ph.side === pl.side, w.p.shape)
+    if (ph.restart === "kickoff") return { target: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), speedCap: vmax * 0.6 }
     if (pl.side !== ph.side && dist(a, ph.at) < 9.15 && pl.role !== "GK") {
       const away = add(ph.at, scale(norm(sub(a, ph.at)), 9.5))
       return { target: clampToPitch(away), speedCap: vmax * 0.6 }
@@ -1051,11 +1055,11 @@ const moveTarget = (
       return shield ? { target: shield, speedCap: w.p.carry.shieldSpeed } : { target: pl.pos, speedCap: 1 }
     }
     // A keeper with the ball walks to the edge of the box before letting it go.
-    if (pl.role === "GK") return { target: { x: -dirOf(pl.side) * (PITCH.halfL - KEEPER_RELEASE_M), y: pl.pos.y * 0.5 }, speedCap: w.p.carry.holdSpeed }
+    if (pl.role === "GK") return { target: { x: -dirOf(pl.side, w.period) * (PITCH.halfL - KEEPER_RELEASE_M), y: pl.pos.y * 0.5 }, speedCap: w.p.carry.holdSpeed }
     const shield = shieldTarget(pl.pos, opps, w.p.carry.shieldM)
     if (shield) return { target: shield, speedCap: w.p.carry.shieldSpeed }
     // Nobody close: walk the ball forwards into space (players do not stand on the ball).
-    const dir = steerCarry({ x: dirOf(pl.side), y: 0 }, pl.pos, opps, w.p.carry.avoidM)
+    const dir = steerCarry({ x: dirOf(pl.side, w.period), y: 0 }, pl.pos, opps, w.p.carry.avoidM)
     return { target: clampToPitch(add(pl.pos, scale(dir, 3)), 1), speedCap: w.p.carry.holdSpeed }
   }
   if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id && pl.intent.kind === "chase")
@@ -1069,7 +1073,7 @@ const moveTarget = (
     // Close down a ball carrier who gets near goal: stand between them and the goal centre, 2.5 m off the ball.
     if (pos.kind === "owned" && possSide !== pl.side) {
       const owner = w.player(pos.playerId)
-      const goal = { x: -dirOf(pl.side) * PITCH.halfL, y: 0 }
+      const goal = { x: -dirOf(pl.side, w.period) * PITCH.halfL, y: 0 }
       if (dist(owner.pos, goal) < w.p.defending.keeperRushM) return { target: add(owner.pos, scale(norm(sub(goal, owner.pos)), 2.5)), speedCap: vmax }
     }
     return shape()
@@ -1084,7 +1088,7 @@ const moveTarget = (
     const presser = surge ? defenders.slice(0, 2).some((x) => x.id === pl.id) : defenders[0]?.id === pl.id
     if (presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
       const style = team.style
-      const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, owner.pos)
+      const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, w.period, owner.pos)
       if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press, w.dt))) {
         w.setPlayer({ ...pl, intent: { kind: "press", targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) })
         return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
@@ -1096,9 +1100,9 @@ const moveTarget = (
   if (pos.kind === "owned" && possSide === pl.side && (pl.role === "ST" || pl.role === "W" || pl.role === "AM")) {
     if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
     const owner = w.player(pos.playerId)
-    if (attackX(pl.side, owner.pos.x) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS, w.dt))) {
-      const lastDef = lastDefenderAttackX(pl.side, w.active(other(pl.side)))
-      const target = clampToPitch({ x: dirOf(pl.side) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
+    if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS, w.dt))) {
+      const lastDef = lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
+      const target = clampToPitch({ x: dirOf(pl.side, w.period) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
       w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
       w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
       return { target, speedCap: vmax }
@@ -1112,7 +1116,7 @@ const moveTarget = (
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
       .slice(0, w.p.support.count)
     if (supporters.some((x) => x.id === pl.id))
-      return { target: supportSpot(owner.pos, shape().target, pl.side, w.active(other(pl.side)), w.p.support.distM), speedCap: vmax * w.p.support.speedShare }
+      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), w.p.support.distM), speedCap: vmax * w.p.support.speedShare }
   }
   return shape()
 }
@@ -1124,12 +1128,12 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   const defenders = w
     .active(defSide)
     .filter((x) => x.role !== "GK" && !(x.intent.kind === "press" && w.tick < x.intentUntil))
-    .map((x) => ({ id: x.id, anchor: anchorFor(team.formation, x.slot, defSide, ballFlat, team.style, false, w.p.shape) }))
+    .map((x) => ({ id: x.id, anchor: anchorFor(team.formation, x.slot, defSide, w.period, ballFlat, team.style, false, w.p.shape) }))
   const anchors = new Map(defenders.map((d) => [d.id, d.anchor]))
   const attackers = w.active(other(defSide)).filter((x) => x.role !== "GK" && x.id !== ownerId)
   const out = new Map<string, Vec2>()
   for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
-    out.set(id, markTarget(anchors.get(id)!, a.pos, defSide, w.p.marking.goalSideM, w.p.marking.weight, w.p.marking.widthSlackM))
+    out.set(id, markTarget(anchors.get(id)!, a.pos, defSide, w.period, w.p.marking.goalSideM, w.p.marking.weight, w.p.marking.widthSlackM))
   return out
 }
 
@@ -1209,7 +1213,7 @@ const endPeriod = (w: Work): StepResult => {
   // Same players (substitutes included) back in kickoff shape, a little recovered.
   w.players = w.players.map((pl) => {
     const team = teamOf(w.cfg, pl.side)
-    return { ...pl, pos: kickoffAnchor(team.formation, pl.slot, pl.side, team.style), vel: { x: 0, y: 0 }, intent: { kind: "shape" }, intentUntil: 0, energy: Math.min(1, pl.energy + w.p.fatigue.halfTimeRecovery) }
+    return { ...pl, pos: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), vel: { x: 0, y: 0 }, intent: { kind: "shape" }, intentUntil: 0, energy: Math.min(1, pl.energy + w.p.fatigue.halfTimeRecovery) }
   })
   w.phase = { kind: "restart", restart: "kickoff", side: "away", at: { x: 0, y: 0 }, resumeTick: w.tick }
   w.possession = { kind: "dead" }

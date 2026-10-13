@@ -1,5 +1,5 @@
 import { defendersInLane } from "./decide.js"
-import { add, clampToPitch, dirOf, dist, len, norm, PITCH, scale, sub, type Side, type Vec2 } from "./geometry.js"
+import { add, clampToPitch, dirOf, dist, len, norm, PITCH, scale, sub, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { PlayerState } from "./types.js"
 
 /** Directions a supporter can offer around the carrier: every 45 degrees. */
@@ -15,8 +15,8 @@ const SOFTMAX_T = 0.5
  * by space from opponents, an open passing lane, closeness to the player's shape anchor and forward gain. The
  * average (rather than the best spot) moves smoothly as players move, so supporters do not flicker between angles.
  */
-export const supportSpot = (carrier: Vec2, anchor: Vec2, side: Side, opponents: ReadonlyArray<PlayerState>, distM: number): Vec2 => {
-  const d = dirOf(side)
+export const supportSpot = (carrier: Vec2, anchor: Vec2, side: Side, period: Period, opponents: ReadonlyArray<PlayerState>, distM: number): Vec2 => {
+  const d = dirOf(side, period)
   const spots = ANGLES.map((a) => clampToPitch({ x: carrier.x + Math.cos(a) * distM, y: carrier.y + Math.sin(a) * distM }, 1))
   const scores = spots.map((s) => {
     let space = SPACE_CAP_M
@@ -54,8 +54,8 @@ export const assignMarks = (
 }
 
 /** Where a marker stands: `weight` of the way from the shape anchor to a spot goalSideM goal-side of the attacker. */
-export const markTarget = (anchor: Vec2, attacker: Vec2, defSide: Side, goalSideM: number, weight: number, widthSlackM?: number): Vec2 => {
-  const ownGoal = { x: -dirOf(defSide) * PITCH.halfL, y: 0 }
+export const markTarget = (anchor: Vec2, attacker: Vec2, defSide: Side, period: Period, goalSideM: number, weight: number, widthSlackM?: number): Vec2 => {
+  const ownGoal = { x: -dirOf(defSide, period) * PITCH.halfL, y: 0 }
   const spot = add(attacker, scale(norm(sub(ownGoal, attacker)), goalSideM))
   const t = add(anchor, scale(sub(spot, anchor), weight))
   if (widthSlackM === undefined) return t

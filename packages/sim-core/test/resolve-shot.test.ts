@@ -55,11 +55,11 @@ describe("planShot", () => {
   it("keepers save roughly two in three shots on target from the edge of the box", () => {
     const shooter = at(base[9]!, 36, 4)
     const keeper = at(base.find((p) => p.side === "away" && p.role === "GK")!, 51, 0)
-    const xg = xgOf(P, "home", shooter.pos, false, 0)
+    const xg = xgOf(P, "home", "first_half", shooter.pos, false, 0)
     const r = new Rng(seedRng(3))
     let on = 0, goals = 0
     for (let i = 0; i < 6000; i++) {
-      const s = planShot(shooter, "home", [keeper], xg, 0, false, P, 0.1, r)
+      const s = planShot(shooter, "home", "first_half", [keeper], xg, 0, false, P, 0.1, r)
       if (s.onTarget) on++
       if (s.outcome === "goal") goals++
     }
@@ -71,7 +71,7 @@ describe("planShot", () => {
     const keeper = at(base.find((p) => p.side === "away" && p.role === "GK")!, 52, 0)
     const r = new Rng(seedRng(4))
     let goals = 0
-    for (let i = 0; i < 4000; i++) if (planShot(shooter, "home", [keeper], 0.76, 0, true, P, 0.1, r).outcome === "goal") goals++
+    for (let i = 0; i < 4000; i++) if (planShot(shooter, "home", "first_half", [keeper], 0.76, 0, true, P, 0.1, r).outcome === "goal") goals++
     expect(goals / 4000).toBeGreaterThan(0.65)
     expect(goals / 4000).toBeLessThan(0.85)
   })
@@ -129,7 +129,7 @@ describe("goal line and parries — review fixes", () => {
     const r = new Rng(seedRng(9))
     for (let i = 0; i < 2000; i++) {
       const saveAt = { x: 51.7, y: r.range(-3.5, 3.5), z: r.range(0, 2.4) }
-      let b = parryBall("home", saveAt, "parried_safe", r)
+      let b = parryBall("home", "first_half", saveAt, "parried_safe", r)
       for (let k = 0; k < 60; k++) {
         const prev = b
         b = stepBall(b, 0.1, P)

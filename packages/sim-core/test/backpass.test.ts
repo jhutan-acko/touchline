@@ -14,7 +14,7 @@ const scene = (ownerX: number) => {
   const keeper = at(home.find((p) => p.role === "GK")!, -48, 0)
   const owner = at(home[6]!, ownerX, 0)
   const teammates = home.map((p) => (p.id === keeper.id ? keeper : p.id === owner.id ? owner : at(p, -10 + p.slot * 3, -25)))
-  const toKeeper = buildCandidates({ owner, teammates, opponents, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, DEFAULT_PARAMS, 0).filter((c) => c.receiverId === keeper.id)
+  const toKeeper = buildCandidates({ period: "first_half", owner, teammates, opponents, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, DEFAULT_PARAMS, 0).filter((c) => c.receiverId === keeper.id)
   return toKeeper
 }
 

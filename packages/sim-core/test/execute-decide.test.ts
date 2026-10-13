@@ -35,7 +35,7 @@ describe("decide", () => {
     const r = new Rng(seedRng(8))
     let k = 0
     for (let i = 0; i < n; i++) {
-      const d = decide({ owner: o, teammates: home, opponents: away, style: STYLES[styleKey], scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, P, r)
+      const d = decide({ period: "first_half", owner: o, teammates: home, opponents: away, style: STYLES[styleKey], scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, P, r)
       if (d.action === action) k++
     }
     return k / n
@@ -49,13 +49,13 @@ describe("decide", () => {
   })
   it("a penalty restart always shoots", () => {
     const r = new Rng(seedRng(1))
-    const d = decide({ owner: owner({ x: 41.5, y: 0 }), teammates: home, opponents: away, style: STYLES.direct, scoreDiff: 0, minute: 10, restart: "penalty", scriptBias: {} }, P, r)
+    const d = decide({ period: "first_half", owner: owner({ x: 41.5, y: 0 }), teammates: home, opponents: away, style: STYLES.direct, scoreDiff: 0, minute: 10, restart: "penalty", scriptBias: {} }, P, r)
     expect(d.action).toBe("shot")
   })
   it("records the action probabilities and the best options, highest value first", () => {
     const r = new Rng(seedRng(3))
     for (let i = 0; i < 50; i++) {
-      const d = decide({ owner: owner({ x: 0, y: 0 }), teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 10, restart: null, scriptBias: {} }, P, r)
+      const d = decide({ period: "first_half", owner: owner({ x: 0, y: 0 }), teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 10, restart: null, scriptBias: {} }, P, r)
       const total = Object.values(d.actionProbs).reduce((a, b) => a + b, 0)
       expect(total).toBeGreaterThan(0.99)
       expect(total).toBeLessThan(1.01)
@@ -69,7 +69,7 @@ describe("decide", () => {
   it("reports decision quality between 0 and 1 for passes", () => {
     const r = new Rng(seedRng(2))
     for (let i = 0; i < 50; i++) {
-      const d = decide({ owner: owner({ x: 0, y: 0 }), teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 10, restart: null, scriptBias: {} }, P, r)
+      const d = decide({ period: "first_half", owner: owner({ x: 0, y: 0 }), teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 10, restart: null, scriptBias: {} }, P, r)
       if (d.candidate) { expect(d.decisionQuality).toBeGreaterThanOrEqual(0); expect(d.decisionQuality).toBeLessThanOrEqual(1) }
     }
   })

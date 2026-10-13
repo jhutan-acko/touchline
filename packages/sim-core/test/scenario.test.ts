@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { initMatch, isFinished, modsFor, NO_MODS, paramsFromJson, step, type DomainEvent, type MatchConfig, type MatchState, type Script, type ScenarioEffect } from "../src/index.js"
+import { attackX, initMatch, isFinished, modsFor, NO_MODS, paramsFromJson, step, type DomainEvent, type MatchConfig, type MatchState, type Script, type ScenarioEffect } from "../src/index.js"
 import { makeConfig } from "../src/testing.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -97,7 +97,7 @@ describe("nudges raise the scripted outcome's rate", () => {
   it("defensive error: the team's defenders mis-hit far more passes in their own half", () => {
     const cfg = cfgFor(1)
     const defenders = new Set([...cfg.home.starters, ...(cfg.home.bench ?? [])].filter((p) => ["CB", "FB", "DM"].includes(p.role)).map((p) => p.id))
-    const f = (e: DomainEvent) => e.type === "pass" && e.attrs.execution === "mishit" && defenders.has(e.player_id!) && e.x! < 0
+    const f = (e: DomainEvent) => e.type === "pass" && e.attrs.execution === "mishit" && defenders.has(e.player_id!) && attackX("home", e.x!, e.period) < 0
     expect(count(one("defensive_error"), f)).toBeGreaterThan(3 * Math.max(1, count(undefined, f)))
   })
 })
@@ -131,7 +131,7 @@ describe("forcing an outcome", () => {
     const pass = forcedFrom("defensive_error").find((e) => e.type === "pass" && e.attrs.scripted === true)!
     expect(pass.team_id).toBe(HOME)
     expect(pass.attrs.execution).toBe("mishit")
-    expect(pass.x!).toBeLessThan(0)
+    expect(attackX("home", pass.x!, pass.period)).toBeLessThan(0)
   })
   it("is used once: later shots are not scripted", () => {
     const ev = forcedFrom("goal")

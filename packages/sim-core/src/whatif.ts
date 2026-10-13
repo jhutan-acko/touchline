@@ -44,7 +44,7 @@ export const passOptions = (s: MatchState) => {
   const near = nearestOpponent(owner.pos, opponents)
   const pressure = near ? Math.max(0, Math.min(1, 1 - (dist(owner.pos, near.pos) - 1) / 4)) : 0
   return buildCandidates(
-    { owner, teammates: s.players.filter((p) => p.side === owner.side && !p.sentOff), opponents, style: team.style, scoreDiff: 0, minute: 0, restart: null, scriptBias: {} },
+    { period: s.period, owner, teammates: s.players.filter((p) => p.side === owner.side && !p.sentOff), opponents, style: team.style, scoreDiff: 0, minute: 0, restart: null, scriptBias: {} },
     s.config.params,
     pressure
   ).sort((a, b) => b.value - a.value)
@@ -160,7 +160,7 @@ export const outcomeOf = (events: ReadonlyArray<DomainEvent>, end: MatchState, s
     shots_for: own.length,
     shots_against: opp.length,
     possession_end: owner ? (owner.side === side ? 1 : 0) : 0.5,
-    ball_progress: attackX(side, end.ball.pos.x),
+    ball_progress: attackX(side, end.ball.pos.x, end.period),
     end_value: value,
     total: xgDiff + value
   }

@@ -1,4 +1,4 @@
-import { attackX, PITCH, type Side, type Vec2 } from "./geometry.js"
+import { attackX, PITCH, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { ClassifierThresholds } from "./params.js"
 
 export const PASS_KINDS = ["short", "long", "through", "lofted_through", "switch", "cross", "cutback", "back"] as const
@@ -7,6 +7,7 @@ export type PassHeight = "ground" | "low" | "high"
 
 export interface PassGeometry {
   readonly side: Side
+  readonly period: Period
   readonly from: Vec2
   readonly to: Vec2
   readonly height: PassHeight
@@ -19,8 +20,8 @@ export interface PassGeometry {
  * (python/analytics/touchline_analytics/classify.py) against fixtures/pass-kinds.json.
  */
 export const classifyPass = (g: PassGeometry, t: ClassifierThresholds): PassKind => {
-  const fx = attackX(g.side, g.from.x)
-  const tx = attackX(g.side, g.to.x)
+  const fx = attackX(g.side, g.from.x, g.period)
+  const tx = attackX(g.side, g.to.x, g.period)
   const dx = tx - fx
   const dy = g.to.y - g.from.y
   const length = Math.hypot(dx, dy)

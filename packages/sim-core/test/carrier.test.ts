@@ -12,7 +12,7 @@ describe("a player on the ball", () => {
   const away = players.filter((p) => p.side === "away")
   const owner = { ...home[6]!, pos: { x: 0, y: 0 } }
   const holdShare = (onBallS: number) =>
-    decide({ owner, teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {}, onBallS }, P, new Rng(seedRng(3))).actionProbs.hold ?? 0
+    decide({ period: "first_half", owner, teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {}, onBallS }, P, new Rng(seedRng(3))).actionProbs.hold ?? 0
 
   it("holds the ball less the longer they have had it, and hardly ever after a few seconds", () => {
     expect(holdShare(0)).toBeGreaterThan(holdShare(1))

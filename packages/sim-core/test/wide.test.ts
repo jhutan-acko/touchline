@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { attackX, initMatch, isFinished, paramsFromJson, PITCH, step, type DomainEvent, type MatchConfig } from "../src/index.js"
+import { attackX, initMatch, isFinished, paramsFromJson, PITCH, step, type DomainEvent, type MatchConfig, type Period } from "../src/index.js"
 import { makeConfig } from "../src/testing.js"
 
 // Wide play needs the calibrated style mix (the hand-set priors cross very little).
@@ -20,12 +20,13 @@ const runs = Array.from({ length: 16 }, (_, i) => i + 1).map(run)
 // Keepers claim far less often than before support, marking and shielding (46 claims and 23 punches over seeds 1-16 on the
 // pre-plan engine, 5 and 4 with the fitted physics): crosses are blocked more or land short of the box, a known
 // realism regression. To keep a real check on claims, these are the seeds of 1-40 on which a keeper claims (13 claims,
-// 7 punches over all 40 since carriers stopped standing on the ball, 2026-10-10; 14 and 3 before).
-const CLAIM_SEEDS = [2, 7, 9, 10, 12, 13, 17, 19, 35, 36]
+// 7 punches over all 40 since carriers stopped standing on the ball, 2026-10-10; 14 and 3 before). Re-picked when teams started
+// switching ends at half-time (16 claims, 4 punches over 1-40): the second halves are mirrored, not replayed.
+const CLAIM_SEEDS = [2, 9, 10, 12, 14, 20, 21, 22, 23, 24, 35, 40]
 const claimRuns = CLAIM_SEEDS.map((seed) => runs[seed - 1] ?? run(seed))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
-const inOwnBox = (side: "home" | "away", x: number, y: number, inset = 0) => attackX(side, x) < -(PITCH.halfL - PITCH.boxDepth) - inset && Math.abs(y) < PITCH.boxHalfWidth - inset
+const inOwnBox = (side: "home" | "away", x: number, y: number, period: Period, inset = 0) => attackX(side, x, period) < -(PITCH.halfL - PITCH.boxDepth) - inset && Math.abs(y) < PITCH.boxHalfWidth - inset
 
 describe("high balls into the box", () => {
   it("keepers claim or punch some of them, in their own box, from crosses and set pieces", () => {
@@ -34,7 +35,7 @@ describe("high balls into the box", () => {
       for (const e of r.events.filter((x) => x.type === "keeper_claim" || x.type === "keeper_punch")) {
         const gk = [r.cfg.home, r.cfg.away].flatMap((t) => [...t.starters, ...(t.bench ?? [])]).find((p) => p.id === e.player_id)!
         expect(gk.role).toBe("GK")
-        expect(inOwnBox(sideOf(r.cfg, e.team_id), e.x!, e.y!), e.id).toBe(true)
+        expect(inOwnBox(sideOf(r.cfg, e.team_id), e.x!, e.y!, e.period), e.id).toBe(true)
         expect(["cross", "corner", "free_kick"]).toContain(e.attrs.from)
         if (e.type === "keeper_claim") claims++
         else punches++
@@ -60,14 +61,14 @@ describe("high balls into the box", () => {
       for (const e of r.events.filter((x) => x.type === "tackle" && keepers.has(x.attrs.opponent_id as string))) {
         const keeperSide = sideOf(r.cfg, e.team_id) === "home" ? "away" : "home"
         // The event sits at the tackler, who can stand up to the tackle radius (1.6 m) from the keeper: a keeper just outside the line is not in their hands.
-        expect(inOwnBox(keeperSide, e.x!, e.y!, 1.6), `${e.id} tackles keeper ${e.attrs.opponent_id} in the box`).toBe(false)
+        expect(inOwnBox(keeperSide, e.x!, e.y!, e.period, 1.6), `${e.id} tackles keeper ${e.attrs.opponent_id} in the box`).toBe(false)
       }
     }
   })
   it("defenders head high balls away from their own third", () => {
     const heads = runs.flatMap((r) => r.events.filter((e) => e.type === "clearance" && e.attrs.technique === "head").map((e) => ({ r, e })))
     expect(heads.length).toBeGreaterThan(10)
-    for (const { r, e } of heads) expect(attackX(sideOf(r.cfg, e.team_id), e.x!), e.id).toBeLessThan(-17.5)
+    for (const { r, e } of heads) expect(attackX(sideOf(r.cfg, e.team_id), e.x!, e.period), e.id).toBeLessThan(-17.5)
   })
   it("some crosses are blocked", () => {
     const blocks = runs.flatMap((r) => r.events.filter((e) => e.type === "block" && e.attrs.blocked === "cross"))

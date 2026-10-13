@@ -1,5 +1,5 @@
 import { classifyPass, type PassHeight, type PassKind } from "./classify.js"
-import { actionZone, attackX, dirOf, dist, goalAngle, goalOf, PITCH, type Side, type Vec2 } from "./geometry.js"
+import { actionZone, attackX, dirOf, dist, goalAngle, goalOf, PITCH, type Period, type Side, type Vec2 } from "./geometry.js"
 import { ACTIONS, type Action, type Params } from "./params.js"
 import { pitchControlAt, type PcPlayer } from "./pitchcontrol.js"
 import type { Rng } from "./rng.js"
@@ -28,6 +28,7 @@ export interface Candidate {
 }
 
 export interface DecisionInput {
+  readonly period: Period
   readonly owner: PlayerState
   readonly teammates: ReadonlyArray<PlayerState>
   readonly opponents: ReadonlyArray<PlayerState>
@@ -80,11 +81,11 @@ export const toOption = (c: Candidate): OptionRecord => ({
 const sigmoid = (z: number): number => 1 / (1 + Math.exp(-z))
 
 /** Simple threat surface: 1 at the goal mouth, decaying with distance. Replaced by fitted xT in Plan 2. */
-export const threat = (side: Side, pos: Vec2): number => Math.exp(-dist(pos, goalOf(side)) / 20)
+export const threat = (side: Side, period: Period, pos: Vec2): number => Math.exp(-dist(pos, goalOf(side, period)) / 20)
 
-export const lastDefenderAttackX = (side: Side, opponents: ReadonlyArray<PlayerState>): number => {
+export const lastDefenderAttackX = (side: Side, period: Period, opponents: ReadonlyArray<PlayerState>): number => {
   let best = -PITCH.halfL
-  for (const o of opponents) if (o.role !== "GK" && !o.sentOff) best = Math.max(best, attackX(side, o.pos.x))
+  for (const o of opponents) if (o.role !== "GK" && !o.sentOff) best = Math.max(best, attackX(side, o.pos.x, period))
   return best
 }
 
@@ -111,10 +112,10 @@ export const xpassOf = (p: Params, distance: number, lane: number, pressure: num
   return sigmoid(c.b0 + c.bDist * distance + c.bLane * lane + c.bPressure * pressure + c.bHigh * (height === "ground" ? 0 : 1))
 }
 
-export const xgOf = (p: Params, side: Side, pos: Vec2, header: boolean, defendersInCone: number): number => {
+export const xgOf = (p: Params, side: Side, period: Period, pos: Vec2, header: boolean, defendersInCone: number): number => {
   const c = p.shot.xg
-  const d = dist(pos, goalOf(side))
-  return sigmoid(c.b0 + c.bDist * d + c.bAngle * goalAngle(side, pos) + (header ? c.bHeader : 0) + c.bDefenders * defendersInCone)
+  const d = dist(pos, goalOf(side, period))
+  return sigmoid(c.b0 + c.bDist * d + c.bAngle * goalAngle(side, period, pos) + (header ? c.bHeader : 0) + c.bDefenders * defendersInCone)
 }
 
 export const nearestOpponent = (pos: Vec2, opponents: ReadonlyArray<PlayerState>): PlayerState | null => {
@@ -134,22 +135,23 @@ export const nearestOpponent = (pos: Vec2, opponents: ReadonlyArray<PlayerState>
 export const buildCandidates = (input: DecisionInput, p: Params, pressure: number): Candidate[] => {
   const { owner, teammates, opponents } = input
   const side = owner.side
-  const d = dirOf(side)
-  const lastDef = lastDefenderAttackX(side, opponents)
+  const { period } = input
+  const d = dirOf(side, period)
+  const lastDef = lastDefenderAttackX(side, period, opponents)
   const out: Candidate[] = []
-  const ownerThreat = threat(side, owner.pos)
+  const ownerThreat = threat(side, period, owner.pos)
   // With a pitch-control weight, a passer blends the lane-based xPass with who would win a ball played there.
   const w = p.pass.pitchControlWeight
   const toPc = (pl: PlayerState): PcPlayer => ({ x: pl.pos.x, y: pl.pos.y, vx: pl.vel.x, vy: pl.vel.y, gk: pl.role === "GK" })
   const pc = w > 0 ? { att: teammates.filter((t) => t.id !== owner.id && !t.sentOff).map(toPc), def: opponents.filter((o) => !o.sentOff).map(toPc) } : null
   const push = (receiver: PlayerState, target: Vec2, height: PassHeight) => {
-    const kind = classifyPass({ side, from: owner.pos, to: target, height, lastDefenderAttackX: lastDef }, p.classifier)
+    const kind = classifyPass({ side, period, from: owner.pos, to: target, height, lastDefenderAttackX: lastDef }, p.classifier)
     if (kind === "set_piece") return
     const distance = dist(owner.pos, target)
     const lane = defendersInLane(owner.pos, target, opponents)
     const lanes = xpassOf(p, distance, lane, pressure, height)
     const xp = pc ? (1 - w) * lanes + w * pitchControlAt(target, pc.att, pc.def, owner.pos).att : lanes
-    const value = xp * (0.3 + threat(side, target)) - (1 - xp) * 0.3 * (1 - ownerThreat)
+    const value = xp * (0.3 + threat(side, period, target)) - (1 - xp) * 0.3 * (1 - ownerThreat)
     out.push({ action: KIND_TO_ACTION[kind], kind, receiverId: receiver.id, target, height, xpass: xp, value, lane })
   }
   for (const tm of teammates) {
@@ -157,14 +159,14 @@ export const buildCandidates = (input: DecisionInput, p: Params, pressure: numbe
     const lead = { x: tm.pos.x + tm.vel.x * 0.5, y: tm.pos.y + tm.vel.y * 0.5 }
     const distance = dist(owner.pos, lead)
     if (distance < 4 || distance > 65) continue
-    const inBox = attackX(side, lead.x) > PITCH.halfL - PITCH.boxDepth && Math.abs(lead.y) < PITCH.boxHalfWidth
+    const inBox = attackX(side, lead.x, period) > PITCH.halfL - PITCH.boxDepth && Math.abs(lead.y) < PITCH.boxHalfWidth
     const wideOwner = Math.abs(owner.pos.y) > PITCH.boxHalfWidth
     const height: PassHeight = wideOwner && inBox ? "high" : distance < 30 ? "ground" : "high"
     // Nobody lofts the ball back at their own keeper: a high ball dropping in front of the goal ends in the net
     // when it is overhit or the keeper miscontrols it. Back passes to the keeper go along the ground, from close.
     if (tm.role === "GK" && height === "high") continue
     push(tm, lead, height)
-    const ahead = attackX(side, tm.pos.x) > lastDef - 4 || tm.intent.kind === "run_in_behind"
+    const ahead = attackX(side, tm.pos.x, period) > lastDef - 4 || tm.intent.kind === "run_in_behind"
     if (ahead && tm.role !== "GK") {
       const target = { x: tm.pos.x + d * p.pass.throughLeadM, y: tm.pos.y }
       if (Math.abs(target.x) < PITCH.halfL - 2) push(tm, target, dist(owner.pos, target) < 30 ? "ground" : "high")
@@ -193,19 +195,20 @@ const RESTART_ACTIONS: Readonly<Record<RestartKind, ReadonlyArray<Action>>> = {
 export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const { owner, style } = input
   const side = owner.side
+  const { period } = input
   const opp = nearestOpponent(owner.pos, input.opponents)
   const oppDist = opp ? dist(owner.pos, opp.pos) : 50
   const pressure = Math.max(0, Math.min(1, 1 - (oppDist - 1) / 4))
-  const zone = actionZone(side, owner.pos)
+  const zone = actionZone(side, period, owner.pos)
   const candidates = buildCandidates(input, p, pressure)
-  const goalDist = dist(owner.pos, goalOf(side))
+  const goalDist = dist(owner.pos, goalOf(side, period))
   const cone = input.opponents.filter((o) => {
-    const g = goalOf(side)
+    const g = goalOf(side, period)
     const { d, t } = segmentDistance(owner.pos, g, o.pos)
     return d < 1.5 && t > 0 && t < 1 && o.role !== "GK"
   }).length
-  const xg = goalDist <= p.shot.maxDistanceM ? xgOf(p, side, owner.pos, false, cone) : 0
-  const ax = attackX(side, owner.pos.x)
+  const xg = goalDist <= p.shot.maxDistanceM ? xgOf(p, side, period, owner.pos, false, cone) : 0
+  const ax = attackX(side, owner.pos.x, period)
   const allowed = input.restart ? new Set(RESTART_ACTIONS[input.restart]) : null
 
   const available = (a: Action): boolean => {

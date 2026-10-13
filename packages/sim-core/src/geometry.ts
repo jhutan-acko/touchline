@@ -1,4 +1,4 @@
-/** Pitch geometry in CDF coordinates: metres, origin at the centre spot, home attacks +x. */
+/** Pitch geometry in CDF coordinates: metres, origin at the centre spot; home attacks +x in the first half, -x in the second. */
 export const PITCH = {
   length: 105,
   width: 68,
@@ -15,8 +15,12 @@ export const PITCH = {
 
 export type Side = "home" | "away"
 export const other = (side: Side): Side => (side === "home" ? "away" : "home")
-/** +1 if the side attacks +x (home), -1 otherwise. */
-export const dirOf = (side: Side): 1 | -1 => (side === "home" ? 1 : -1)
+/** First or second half. Teams switch ends at half-time. */
+export type Period = "first_half" | "second_half"
+/** +1 if the side attacks +x in this period: home in the first half, away in the second. */
+export const dirOf = (side: Side, period: Period): 1 | -1 => ((side === "home") === (period === "first_half") ? 1 : -1)
+/** The side attacking the end whose x has the sign of `x` (x > 0: the +x end). */
+export const sideAttacking = (x: number, period: Period): Side => (dirOf("home", period) === (x > 0 ? 1 : -1) ? "home" : "away")
 
 export interface Vec2 {
   readonly x: number
@@ -47,9 +51,9 @@ export const clampToPitch = (p: Vec2, margin = 0.5): Vec2 => ({
 export const inPitch = (p: Vec2): boolean => Math.abs(p.x) <= PITCH.halfL && Math.abs(p.y) <= PITCH.halfW
 
 /** x as seen by the attacking side: larger is closer to the goal it attacks. */
-export const attackX = (side: Side, x: number): number => x * dirOf(side)
+export const attackX = (side: Side, x: number, period: Period): number => x * dirOf(side, period)
 /** Centre of the goal `side` attacks. */
-export const goalOf = (side: Side): Vec2 => ({ x: PITCH.halfL * dirOf(side), y: 0 })
+export const goalOf = (side: Side, period: Period): Vec2 => ({ x: PITCH.halfL * dirOf(side, period), y: 0 })
 
 /** 16 x 12 grid index (row-major, row 0 at y = -34), used by fitted tables. */
 export const zoneIndex = (p: Vec2, cols = 16, rows = 12): number => {
@@ -62,8 +66,8 @@ export const ACTION_ZONES = ["def_wide", "def_central", "mid_wide", "mid_central
 export type ActionZone = (typeof ACTION_ZONES)[number]
 
 /** Coarse zone used for action logits, from the attacking side's point of view. */
-export const actionZone = (side: Side, p: Vec2): ActionZone => {
-  const ax = attackX(side, p.x)
+export const actionZone = (side: Side, period: Period, p: Vec2): ActionZone => {
+  const ax = attackX(side, p.x, period)
   const wide = Math.abs(p.y) > PITCH.boxHalfWidth
   if (ax > PITCH.halfL - PITCH.boxDepth && !wide) return "box"
   if (ax < -17.5) return wide ? "def_wide" : "def_central"
@@ -72,8 +76,8 @@ export const actionZone = (side: Side, p: Vec2): ActionZone => {
 }
 
 /** Angle (radians) subtended by the goal mouth from p, for the goal `side` attacks. */
-export const goalAngle = (side: Side, p: Vec2): number => {
-  const g = goalOf(side)
+export const goalAngle = (side: Side, period: Period, p: Vec2): number => {
+  const g = goalOf(side, period)
   const a1 = Math.atan2(PITCH.goalHalfWidth - p.y, g.x - p.x)
   const a2 = Math.atan2(-PITCH.goalHalfWidth - p.y, g.x - p.x)
   return Math.abs(a1 - a2) > Math.PI ? 2 * Math.PI - Math.abs(a1 - a2) : Math.abs(a1 - a2)

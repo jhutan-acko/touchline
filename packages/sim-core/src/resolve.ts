@@ -1,5 +1,5 @@
 import { stepBall } from "./ball.js"
-import { dirOf, inPitch, PITCH, type Side, type Vec2 } from "./geometry.js"
+import { dirOf, inPitch, PITCH, type Period, type Side, type Vec2 } from "./geometry.js"
 import { accelFor, reachIn, vmaxFor } from "./kinematics.js"
 import type { Params } from "./params.js"
 import { Rng } from "./rng.js"
@@ -123,6 +123,7 @@ export const keeperLetsRun = (
   intendedId: string | null,
   players: ReadonlyArray<PlayerState>,
   res: Resolution,
+  period: Period,
   p: Params,
   dt: number,
   rng: Rng
@@ -131,6 +132,6 @@ export const keeperLetsRun = (
   const passer = players.find((x) => x.id === fromId)
   if (!keeper || !passer || keeper.side === passer.side) return res
   const without = resolveFlight(start, fromId, intendedId, players.filter((x) => x.id !== keeper.id), p, dt, new Rng(rng.state))
-  const overOwnLine = without.result === "out" && Math.abs(without.ball.pos.y) <= PITCH.halfW && Math.sign(without.ball.pos.x) === -dirOf(keeper.side)
+  const overOwnLine = without.result === "out" && Math.abs(without.ball.pos.y) <= PITCH.halfW && Math.sign(without.ball.pos.x) === -dirOf(keeper.side, period)
   return overOwnLine && rng.chance(p.keeper.letRunShare) ? without : res
 }
