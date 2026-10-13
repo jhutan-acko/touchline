@@ -57,7 +57,7 @@ describe("the situation sent to the manager agent", () => {
   it("fits the token budget", () => {
     expect(payloadTokens(sit)).toBeLessThanOrEqual(MAX_SITUATION_TOKENS)
   })
-  it("describes the team's own side: eleven players, the bench, five substitutions left, the score from its side", () => {
+  it("describes the team's own side: eleven players less any sent off, the bench, five substitutions left, the score from its side", () => {
     expect(sit.team.name).toBe(cfg.home.name)
     expect(sit.opponent.name).toBe(cfg.away.name)
     expect(sit.players.on_pitch).toHaveLength(11 - at60.state.players.filter((p) => p.side === "home" && p.sentOff).length)

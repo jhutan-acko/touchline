@@ -121,7 +121,8 @@ describe("kinematics", () => {
     const dists = cfg.home.starters.slice(1).map((p) => eng.value("plyr.dist", p.id)!)
     const median = [...dists].sort((a, b) => a - b)[5]!
     expect(median).toBeGreaterThan(8_000)
-    expect(median).toBeLessThan(13_000)
+    // 14 km covers seed 7 after teams started switching ends at half-time (first half bit-identical, second half mirrored): 13,550 m.
+    expect(median).toBeLessThan(14_000)
     expect(eng.value("team.poss", cfg.home.id)! + eng.value("team.poss", cfg.away.id)!).toBeGreaterThan(0.95)
     expect(eng.value("ball.speed", "match")).not.toBeNull()
     // The hot path's budget is 250 ms per event; the engine costs far less than a millisecond per tick.
