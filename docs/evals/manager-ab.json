@@ -1,0 +1,6319 @@
+{
+ "meta": {
+  "generated": "2026-10-13",
+  "first_seed": 5000,
+  "seeds": 120,
+  "arms": [
+   "none",
+   "rules",
+   "agent"
+  ],
+  "model": "openai:gpt-6.1-sol",
+  "whatif": {
+   "seeds": 20,
+   "horizon_s": 600
+  }
+ },
+ "primary_metric": "xg_diff",
+ "arms": {
+  "none": {
+   "matches": 120,
+   "xg_diff": -0.08879999999999993,
+   "goal_diff": 0.025,
+   "points": 1.425,
+   "win_rate": {
+    "mean": 0.4166666666666667,
+    "lo": 0.3323820653533033,
+    "hi": 0.5061213131560184,
+    "n": 120
+   },
+   "draws": 21,
+   "losses": 49
+  },
+  "rules": {
+   "matches": 120,
+   "xg_diff": 0.15577499999999997,
+   "goal_diff": 0.18333333333333332,
+   "points": 1.425,
+   "win_rate": {
+    "mean": 0.38333333333333336,
+    "lo": 0.30124387764148153,
+    "hi": 0.47266085227156884,
+    "n": 120
+   },
+   "draws": 33,
+   "losses": 41,
+   "decisions": {
+    "decisions": 622,
+    "per_match": 5.183333333333334,
+    "no_change_rate": 0.32636655948553056,
+    "fallback_rate": {
+     "propose": 0,
+     "choose": 0,
+     "service": 0
+    },
+    "dropped_option_rate": null,
+    "untested_option_rate": 0,
+    "best_pick_rate": null,
+    "latency_ms": {
+     "propose": {
+      "p50": null,
+      "p95": null
+     },
+     "choose": {
+      "p50": null,
+      "p95": null
+     },
+     "decision": {
+      "p50": 0,
+      "p95": 0
+     }
+    },
+    "tokens_per_match": {
+     "in": 0,
+     "out": 0
+    },
+    "cost_usd_per_match": 0
+   }
+  },
+  "agent": {
+   "matches": 120,
+   "xg_diff": 0.32338333333333336,
+   "goal_diff": 0.31666666666666665,
+   "points": 1.4333333333333333,
+   "win_rate": {
+    "mean": 0.4,
+    "lo": 0.3167626523940113,
+    "hi": 0.4894414018171747,
+    "n": 120
+   },
+   "draws": 28,
+   "losses": 44,
+   "decisions": {
+    "decisions": 620,
+    "per_match": 5.166666666666667,
+    "no_change_rate": 0.5,
+    "fallback_rate": {
+     "propose": 0.004838709677419355,
+     "choose": 0,
+     "service": 0
+    },
+    "dropped_option_rate": 0,
+    "untested_option_rate": 0,
+    "best_pick_rate": 0.5838709677419355,
+    "latency_ms": {
+     "propose": {
+      "p50": 12314,
+      "p95": 16398.8
+     },
+     "choose": {
+      "p50": 5068.5,
+      "p95": 7746.799999999997
+     },
+     "decision": {
+      "p50": 49351,
+      "p95": 58772.45
+     }
+    },
+    "tokens_per_match": {
+     "in": 31472.058333333334,
+     "out": 1880.9833333333333
+    },
+    "cost_usd_per_match": 0
+   }
+  }
+ },
+ "comparisons": [
+  {
+   "a": "agent",
+   "b": "none",
+   "xg_diff": {
+    "mean": 0.41218333333333346,
+    "lo": 0.10139458333333343,
+    "hi": 0.7390777083333337,
+    "n": 120
+   },
+   "goal_diff": {
+    "mean": 0.2916666666666667,
+    "lo": 0.016666666666666666,
+    "hi": 0.5666666666666667,
+    "n": 120
+   },
+   "points": {
+    "mean": 0.008333333333333333,
+    "lo": -0.20833333333333334,
+    "hi": 0.225,
+    "n": 120
+   },
+   "verdict": "better"
+  },
+  {
+   "a": "agent",
+   "b": "rules",
+   "xg_diff": {
+    "mean": 0.16760833333333344,
+    "lo": -0.0915458333333333,
+    "hi": 0.43976708333333336,
+    "n": 120
+   },
+   "goal_diff": {
+    "mean": 0.13333333333333333,
+    "lo": -0.15833333333333333,
+    "hi": 0.425,
+    "n": 120
+   },
+   "points": {
+    "mean": 0.008333333333333333,
+    "lo": -0.23333333333333334,
+    "hi": 0.25,
+    "n": 120
+   },
+   "verdict": "no detectable difference"
+  },
+  {
+   "a": "rules",
+   "b": "none",
+   "xg_diff": {
+    "mean": 0.24457500000000004,
+    "lo": -0.025900208333333324,
+    "hi": 0.5148258333333331,
+    "n": 120
+   },
+   "goal_diff": {
+    "mean": 0.15833333333333333,
+    "lo": -0.08333333333333333,
+    "hi": 0.4,
+    "n": 120
+   },
+   "points": {
+    "mean": 0,
+    "lo": -0.19166666666666668,
+    "hi": 0.2,
+    "n": 120
+   },
+   "verdict": "no detectable difference"
+  }
+ ],
+ "results": [
+  {
+   "seed": 5000,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 1.9459999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5000,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": 2.473,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 3
+  },
+  {
+   "seed": 5000,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 2.4310000000000005,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5001,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 0.4019999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5001,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.16400000000000015,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5001,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -1.8860000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5002,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 5.534000000000001,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5002,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 5,
+    "against": 1
+   },
+   "xg_diff": 5.179999999999999,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 9
+  },
+  {
+   "seed": 5002,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 6.683000000000002,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5003,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -8.625,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5003,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 4
+   },
+   "xg_diff": -8.845999999999998,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5003,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -5.872,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5004,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.9259999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5004,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -2.5770000000000004,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5004,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": -0.6560000000000006,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 7
+  },
+  {
+   "seed": 5005,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 5.005000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5005,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 4.238,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5005,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 2.805,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5006,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.2600000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5006,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 2.5389999999999997,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5006,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 3.6810000000000005,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5007,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -7.840999999999999,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5007,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -6.267,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5007,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -6.382000000000001,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5008,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.349,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5008,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.4739999999999993,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5008,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 3.085,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5009,
+   "arm": "none",
+   "home": "saltmarsh",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 5,
+    "against": 0
+   },
+   "xg_diff": 3.3470000000000013,
+   "goal_diff": 5,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5009,
+   "arm": "rules",
+   "home": "saltmarsh",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 3.532000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5009,
+   "arm": "agent",
+   "home": "saltmarsh",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 3.705000000000001,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5010,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -3.267,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5010,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -3.324,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5010,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 3
+   },
+   "xg_diff": -4.8740000000000006,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 8
+  },
+  {
+   "seed": 5011,
+   "arm": "none",
+   "home": "corrin-forge",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -5.966000000000001,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5011,
+   "arm": "rules",
+   "home": "corrin-forge",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -4.265000000000001,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5011,
+   "arm": "agent",
+   "home": "corrin-forge",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -2.657,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5012,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.4760000000000004,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5012,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "larkspur",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 0.9600000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5012,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 2.095,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 4
+  },
+  {
+   "seed": 5013,
+   "arm": "none",
+   "home": "northwick",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 6.684,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5013,
+   "arm": "rules",
+   "home": "northwick",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 7.324000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5013,
+   "arm": "agent",
+   "home": "northwick",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 5.888000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5014,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -2.141,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5014,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -2.5520000000000005,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5014,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -2.0060000000000002,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5015,
+   "arm": "none",
+   "home": "kestrel-bay",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -4.420000000000001,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5015,
+   "arm": "rules",
+   "home": "kestrel-bay",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -3.1850000000000005,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5015,
+   "arm": "agent",
+   "home": "kestrel-bay",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.708,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5016,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 4.082,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5016,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 5.090000000000001,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5016,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 3.882999999999999,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5017,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "eastvale",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 0.9219999999999997,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5017,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.984,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5017,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "eastvale",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 0.09500000000000064,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5018,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -4.002999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5018,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -4.61,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 4
+  },
+  {
+   "seed": 5018,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": -1.4600000000000009,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5019,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.0940000000000003,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5019,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -4.627000000000001,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5019,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -1.7089999999999999,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5020,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 6.387000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5020,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "northwick",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 9.008,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5020,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "northwick",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 8.669999999999998,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5021,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 4.618,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5021,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 2.8670000000000004,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5021,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 3.0319999999999996,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5022,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 0.39400000000000013,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5022,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.03599999999999959,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5022,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -1.0110000000000003,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 4
+  },
+  {
+   "seed": 5023,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.314,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5023,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.1559999999999997,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5023,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -1.4100000000000001,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5024,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -0.679,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5024,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 1.942,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5024,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": 0.03000000000000025,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5025,
+   "arm": "none",
+   "home": "corrin-forge",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -1.9589999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5025,
+   "arm": "rules",
+   "home": "corrin-forge",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -2.2159999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5025,
+   "arm": "agent",
+   "home": "corrin-forge",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -0.08700000000000019,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5026,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 4
+   },
+   "xg_diff": -1.6389999999999998,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5026,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.12300000000000022,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5026,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.46599999999999997,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5027,
+   "arm": "none",
+   "home": "northwick",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -2.651,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5027,
+   "arm": "rules",
+   "home": "northwick",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 2
+   },
+   "xg_diff": -2.233,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5027,
+   "arm": "agent",
+   "home": "northwick",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.7750000000000001,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5028,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 1.0560000000000005,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5028,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 0.2330000000000001,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5028,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": -0.722,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 7
+  },
+  {
+   "seed": 5029,
+   "arm": "none",
+   "home": "kestrel-bay",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": 2.645,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5029,
+   "arm": "rules",
+   "home": "kestrel-bay",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 1.5359999999999996,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5029,
+   "arm": "agent",
+   "home": "kestrel-bay",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 2.425,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5030,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 1.9940000000000002,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5030,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 1.1520000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5030,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.083,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5031,
+   "arm": "none",
+   "home": "saltmarsh",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 1.4609999999999996,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5031,
+   "arm": "rules",
+   "home": "saltmarsh",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.1300000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5031,
+   "arm": "agent",
+   "home": "saltmarsh",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 1.9500000000000002,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5032,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 4
+   },
+   "xg_diff": -5.481,
+   "goal_diff": -4,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5032,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -4.27,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5032,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 4,
+    "against": 4
+   },
+   "xg_diff": -3.9860000000000007,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 10
+  },
+  {
+   "seed": 5033,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 1.3809999999999998,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5033,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": 1.0789999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5033,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 0.8200000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5034,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 3.8559999999999994,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5034,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "northwick",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 1.6829999999999994,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5034,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "northwick",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 4.093000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5035,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 4
+   },
+   "xg_diff": -5.455,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5035,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.7329999999999999,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5035,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.0279999999999998,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5036,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.3639999999999999,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5036,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": -0.9539999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 7
+  },
+  {
+   "seed": 5036,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -1.4220000000000002,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5037,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": -0.17799999999999994,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5037,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 0.28300000000000014,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5037,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": -0.46599999999999975,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5038,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 2.25,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5038,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 2.322,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5038,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 3.8060000000000005,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5039,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -2.5530000000000013,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5039,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -5.398,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5039,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": -2.196999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 7
+  },
+  {
+   "seed": 5040,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 2.0069999999999997,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5040,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 2.7520000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5040,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "larkspur",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 2.7279999999999998,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5041,
+   "arm": "none",
+   "home": "northwick",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.608,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5041,
+   "arm": "rules",
+   "home": "northwick",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 2.887,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5041,
+   "arm": "agent",
+   "home": "northwick",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "northwick",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 5.788000000000001,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5042,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -0.371,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5042,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 4
+   },
+   "xg_diff": -2.697,
+   "goal_diff": -4,
+   "points": 0,
+   "decisions": 7
+  },
+  {
+   "seed": 5042,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 4
+   },
+   "xg_diff": 1.3039999999999994,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 8
+  },
+  {
+   "seed": 5043,
+   "arm": "none",
+   "home": "kestrel-bay",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -6.54,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5043,
+   "arm": "rules",
+   "home": "kestrel-bay",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -4.0920000000000005,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5043,
+   "arm": "agent",
+   "home": "kestrel-bay",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -3.1060000000000008,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5044,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 2.4850000000000008,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5044,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": 1.2049999999999998,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5044,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 0.28800000000000026,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5045,
+   "arm": "none",
+   "home": "saltmarsh",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 1
+   },
+   "xg_diff": 5.657,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5045,
+   "arm": "rules",
+   "home": "saltmarsh",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 7.244999999999999,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5045,
+   "arm": "agent",
+   "home": "saltmarsh",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 7.3820000000000014,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5046,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 3
+   },
+   "xg_diff": 1.479,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5046,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.3070000000000004,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5046,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.7229999999999999,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5047,
+   "arm": "none",
+   "home": "corrin-forge",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -4.1129999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5047,
+   "arm": "rules",
+   "home": "corrin-forge",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -2.792,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5047,
+   "arm": "agent",
+   "home": "corrin-forge",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -3.3180000000000005,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5048,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "northwick",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 3.4300000000000006,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5048,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "northwick",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 3.4990000000000006,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5048,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 2.844999999999999,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5049,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.06699999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5049,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": 0.31899999999999995,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 7
+  },
+  {
+   "seed": 5049,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": 0.7800000000000002,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5050,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.31100000000000017,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5050,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.20199999999999974,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5050,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -1.5430000000000001,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 7
+  },
+  {
+   "seed": 5051,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -3.1670000000000007,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5051,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -4.000000000000002,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5051,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -5.2650000000000015,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5052,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 7.728999999999999,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5052,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 5,
+    "against": 1
+   },
+   "xg_diff": 7.981000000000001,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5052,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 6.550999999999998,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5053,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 0.07400000000000007,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5053,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "eastvale",
+   "score": {
+    "for": 3,
+    "against": 2
+   },
+   "xg_diff": 1.186,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 8
+  },
+  {
+   "seed": 5053,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "eastvale",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 0.9500000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5054,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.7649999999999997,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5054,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.9350000000000002,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5054,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -1.4890000000000003,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5055,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.506,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5055,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -2.3799999999999994,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5055,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -4.177000000000001,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 3
+  },
+  {
+   "seed": 5056,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -0.8449999999999999,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5056,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.7829999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5056,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.41999999999999993,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5057,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 1.335,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5057,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 1.749,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5057,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": 0.8459999999999999,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5058,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": 2.1979999999999995,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5058,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 3.247,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5058,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 1.4819999999999998,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5059,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -6.346,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5059,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -2.596,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 7
+  },
+  {
+   "seed": 5059,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -0.44399999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5060,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.239,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5060,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.9209999999999998,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 4
+  },
+  {
+   "seed": 5060,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.4019999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 4
+  },
+  {
+   "seed": 5061,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 1.454,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5061,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 2.412,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5061,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 1.211,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5062,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 3.791,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5062,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 4.193,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5062,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 4.332,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5063,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -3.241,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5063,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -4.754000000000001,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5063,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -4.460000000000001,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5064,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 0.3999999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5064,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 0.645,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5064,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": 0.4000000000000008,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 3
+  },
+  {
+   "seed": 5065,
+   "arm": "none",
+   "home": "saltmarsh",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 4.595000000000001,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5065,
+   "arm": "rules",
+   "home": "saltmarsh",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 6.1339999999999995,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5065,
+   "arm": "agent",
+   "home": "saltmarsh",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 3.2200000000000006,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5066,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -2.2689999999999997,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5066,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -3.9749999999999996,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5066,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 4
+   },
+   "xg_diff": -3.9769999999999994,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 7
+  },
+  {
+   "seed": 5067,
+   "arm": "none",
+   "home": "corrin-forge",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -8.573,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5067,
+   "arm": "rules",
+   "home": "corrin-forge",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -7.0180000000000025,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5067,
+   "arm": "agent",
+   "home": "corrin-forge",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -5.388000000000003,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5068,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 0.758,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5068,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 0.16199999999999992,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5068,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.17899999999999983,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5069,
+   "arm": "none",
+   "home": "northwick",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 4.143000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5069,
+   "arm": "rules",
+   "home": "northwick",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 3.262,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5069,
+   "arm": "agent",
+   "home": "northwick",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 5.924000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5070,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 6
+   },
+   "xg_diff": -4.964999999999999,
+   "goal_diff": -5,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5070,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 4
+   },
+   "xg_diff": -2.797,
+   "goal_diff": -4,
+   "points": 0,
+   "decisions": 7
+  },
+  {
+   "seed": 5070,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 4
+   },
+   "xg_diff": -3.482,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 8
+  },
+  {
+   "seed": 5071,
+   "arm": "none",
+   "home": "kestrel-bay",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -3.8820000000000006,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5071,
+   "arm": "rules",
+   "home": "kestrel-bay",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -5.611999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5071,
+   "arm": "agent",
+   "home": "kestrel-bay",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -4.334999999999999,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5072,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 4.929999999999999,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5072,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 4.93,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5072,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 5.352,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5073,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 1.3650000000000002,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5073,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "eastvale",
+   "score": {
+    "for": 4,
+    "against": 2
+   },
+   "xg_diff": 1.329,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 9
+  },
+  {
+   "seed": 5073,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": 1.015,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5074,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.887,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5074,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.8929999999999998,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5074,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 4
+   },
+   "xg_diff": -2.0470000000000006,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5075,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -4.1080000000000005,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5075,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -4.122,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5075,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -4.943,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5076,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "northwick",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 7.592,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5076,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "northwick",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 6.336,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5076,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "northwick",
+   "score": {
+    "for": 5,
+    "against": 0
+   },
+   "xg_diff": 5.753,
+   "goal_diff": 5,
+   "points": 3,
+   "decisions": 8
+  },
+  {
+   "seed": 5077,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 3.910000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5077,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 3.8290000000000006,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5077,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 5,
+    "against": 0
+   },
+   "xg_diff": 3.433,
+   "goal_diff": 5,
+   "points": 3,
+   "decisions": 8
+  },
+  {
+   "seed": 5078,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.404,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5078,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -0.8430000000000004,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5078,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -1.6269999999999998,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5079,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -4.896999999999999,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5079,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -4.729,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5079,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -1.150999999999999,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5080,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.0649999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5080,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 1.6010000000000002,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5080,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 2.0870000000000006,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 4
+  },
+  {
+   "seed": 5081,
+   "arm": "none",
+   "home": "corrin-forge",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -0.11800000000000033,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5081,
+   "arm": "rules",
+   "home": "corrin-forge",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -0.6020000000000005,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5081,
+   "arm": "agent",
+   "home": "corrin-forge",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -1.5350000000000004,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5082,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -1.774,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5082,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -0.5220000000000002,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5082,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -3.1350000000000007,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5083,
+   "arm": "none",
+   "home": "northwick",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.7970000000000002,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5083,
+   "arm": "rules",
+   "home": "northwick",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.43900000000000006,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5083,
+   "arm": "agent",
+   "home": "northwick",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.9600000000000002,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5084,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -2.106,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5084,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.1749999999999998,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5084,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.2979999999999998,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5085,
+   "arm": "none",
+   "home": "kestrel-bay",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": 1.4750000000000005,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5085,
+   "arm": "rules",
+   "home": "kestrel-bay",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 0.778,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5085,
+   "arm": "agent",
+   "home": "kestrel-bay",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 1,
+    "against": 3
+   },
+   "xg_diff": -1.0789999999999997,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5086,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 1.5629999999999993,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5086,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": 1.8359999999999992,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 6
+  },
+  {
+   "seed": 5086,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 1.5889999999999995,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5087,
+   "arm": "none",
+   "home": "saltmarsh",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 0.7999999999999998,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5087,
+   "arm": "rules",
+   "home": "saltmarsh",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.04899999999999993,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5087,
+   "arm": "agent",
+   "home": "saltmarsh",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 0.6779999999999997,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 3
+  },
+  {
+   "seed": 5088,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -2.3089999999999997,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5088,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -0.6979999999999995,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 3
+  },
+  {
+   "seed": 5088,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.5810000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5089,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.2830000000000004,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5089,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 2.2929999999999997,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5089,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.0470000000000006,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5090,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": 0.8,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5090,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 3.3679999999999994,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5090,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "northwick",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 3.7820000000000005,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5091,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -5.160000000000001,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5091,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -3.974000000000001,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5091,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -1.504,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5092,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -1.0569999999999995,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5092,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 2.1189999999999998,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5092,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 0.8029999999999999,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5093,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 2.0000000000000004,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5093,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 3.231,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5093,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 1.2230000000000003,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5094,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.754000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5094,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.167,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5094,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.7190000000000012,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5095,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -7.145999999999999,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5095,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -6.695999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5095,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -4.440999999999999,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 3
+  },
+  {
+   "seed": 5096,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.311000000000001,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5096,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": 1.8070000000000004,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 6
+  },
+  {
+   "seed": 5096,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "larkspur",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 0.41999999999999993,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 3
+  },
+  {
+   "seed": 5097,
+   "arm": "none",
+   "home": "northwick",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.14100000000000001,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5097,
+   "arm": "rules",
+   "home": "northwick",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "northwick",
+   "score": {
+    "for": 4,
+    "against": 1
+   },
+   "xg_diff": 3.2890000000000006,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 8
+  },
+  {
+   "seed": 5097,
+   "arm": "agent",
+   "home": "northwick",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 3
+   },
+   "xg_diff": 1.3900000000000001,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 8
+  },
+  {
+   "seed": 5098,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -1.5719999999999998,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5098,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -2.5069999999999997,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5098,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "ironmoor",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -2.532999999999999,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5099,
+   "arm": "none",
+   "home": "kestrel-bay",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -2.9070000000000005,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5099,
+   "arm": "rules",
+   "home": "kestrel-bay",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -3.254,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5099,
+   "arm": "agent",
+   "home": "kestrel-bay",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -5.616999999999999,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5100,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 3.826,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5100,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": 2.9000000000000004,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5100,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "harrowmere",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 2.5079999999999996,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5101,
+   "arm": "none",
+   "home": "saltmarsh",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 6,
+    "against": 0
+   },
+   "xg_diff": 7.034999999999998,
+   "goal_diff": 6,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5101,
+   "arm": "rules",
+   "home": "saltmarsh",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 8,
+    "against": 0
+   },
+   "xg_diff": 8.044,
+   "goal_diff": 8,
+   "points": 3,
+   "decisions": 11
+  },
+  {
+   "seed": 5101,
+   "arm": "agent",
+   "home": "saltmarsh",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 8.166,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5102,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -0.4310000000000005,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5102,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": -0.9770000000000008,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 6
+  },
+  {
+   "seed": 5102,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "eastvale",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": -1.7819999999999996,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5103,
+   "arm": "none",
+   "home": "corrin-forge",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -5.9510000000000005,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5103,
+   "arm": "rules",
+   "home": "corrin-forge",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -2.5009999999999994,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5103,
+   "arm": "agent",
+   "home": "corrin-forge",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -4.390000000000001,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 5
+  },
+  {
+   "seed": 5104,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 1
+   },
+   "xg_diff": 6.656000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5104,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 7.231000000000002,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5104,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "northwick",
+   "score": {
+    "for": 5,
+    "against": 0
+   },
+   "xg_diff": 5.275,
+   "goal_diff": 5,
+   "points": 3,
+   "decisions": 8
+  },
+  {
+   "seed": 5105,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -0.11799999999999988,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5105,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 3
+   },
+   "xg_diff": -0.3049999999999997,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 8
+  },
+  {
+   "seed": 5105,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -1.0179999999999998,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5106,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.4480000000000002,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5106,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.779,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5106,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -0.685,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5107,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": -2.4360000000000004,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5107,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -4.083000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5107,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 1,
+    "against": 1
+   },
+   "xg_diff": -2.2300000000000004,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 5
+  },
+  {
+   "seed": 5108,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 8.830000000000002,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5108,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 9.011,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5108,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 9.312000000000003,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5109,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "eastvale",
+   "score": {
+    "for": 1,
+    "against": 2
+   },
+   "xg_diff": 3.2379999999999995,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5109,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "eastvale",
+   "score": {
+    "for": 3,
+    "against": 3
+   },
+   "xg_diff": 0.2100000000000004,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 9
+  },
+  {
+   "seed": 5109,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": 0.7550000000000001,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5110,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -3.5540000000000003,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5110,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": -1.8840000000000003,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 4
+  },
+  {
+   "seed": 5110,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -5.470999999999998,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5111,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -3.1210000000000004,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5111,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "larkspur",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -5.082000000000001,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5111,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "larkspur",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": -3.232,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5112,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -1.185,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 0
+  },
+  {
+   "seed": 5112,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.46900000000000003,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5112,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "kestrel-bay",
+   "managed_side": "home",
+   "managed_team": "ironmoor",
+   "opponent": "kestrel-bay",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 0.09900000000000009,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5113,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 0.2959999999999996,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5113,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 1.2519999999999998,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5113,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "kestrel-bay",
+   "managed_side": "away",
+   "managed_team": "kestrel-bay",
+   "opponent": "harrowmere",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 1.828,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5114,
+   "arm": "none",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 1,
+    "against": 0
+   },
+   "xg_diff": 4.329000000000001,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5114,
+   "arm": "rules",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 3.41,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5114,
+   "arm": "agent",
+   "home": "harrowmere",
+   "away": "saltmarsh",
+   "managed_side": "home",
+   "managed_team": "harrowmere",
+   "opponent": "saltmarsh",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 5.602,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 6
+  },
+  {
+   "seed": 5115,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 4
+   },
+   "xg_diff": -7.431,
+   "goal_diff": -4,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5115,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 0,
+    "against": 3
+   },
+   "xg_diff": -3.8049999999999997,
+   "goal_diff": -3,
+   "points": 0,
+   "decisions": 6
+  },
+  {
+   "seed": 5115,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "saltmarsh",
+   "managed_side": "away",
+   "managed_team": "saltmarsh",
+   "opponent": "eastvale",
+   "score": {
+    "for": 2,
+    "against": 3
+   },
+   "xg_diff": -1.2380000000000007,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 8
+  },
+  {
+   "seed": 5116,
+   "arm": "none",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 1
+   },
+   "xg_diff": 0.8970000000000002,
+   "goal_diff": -1,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5116,
+   "arm": "rules",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": -0.8819999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5116,
+   "arm": "agent",
+   "home": "eastvale",
+   "away": "corrin-forge",
+   "managed_side": "home",
+   "managed_team": "eastvale",
+   "opponent": "corrin-forge",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 0.30799999999999983,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5117,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 5.617999999999999,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5117,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 2,
+    "against": 0
+   },
+   "xg_diff": 4.187000000000001,
+   "goal_diff": 2,
+   "points": 3,
+   "decisions": 5
+  },
+  {
+   "seed": 5117,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "corrin-forge",
+   "managed_side": "away",
+   "managed_team": "corrin-forge",
+   "opponent": "larkspur",
+   "score": {
+    "for": 4,
+    "against": 0
+   },
+   "xg_diff": 5.412000000000001,
+   "goal_diff": 4,
+   "points": 3,
+   "decisions": 7
+  },
+  {
+   "seed": 5118,
+   "arm": "none",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 2,
+    "against": 1
+   },
+   "xg_diff": 1.6199999999999994,
+   "goal_diff": 1,
+   "points": 3,
+   "decisions": 0
+  },
+  {
+   "seed": 5118,
+   "arm": "rules",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 0,
+    "against": 0
+   },
+   "xg_diff": 4.606999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 3
+  },
+  {
+   "seed": 5118,
+   "arm": "agent",
+   "home": "larkspur",
+   "away": "northwick",
+   "managed_side": "home",
+   "managed_team": "larkspur",
+   "opponent": "northwick",
+   "score": {
+    "for": 3,
+    "against": 0
+   },
+   "xg_diff": 4.311999999999999,
+   "goal_diff": 3,
+   "points": 3,
+   "decisions": 4
+  },
+  {
+   "seed": 5119,
+   "arm": "none",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 4
+   },
+   "xg_diff": -7.0969999999999995,
+   "goal_diff": -4,
+   "points": 0,
+   "decisions": 0
+  },
+  {
+   "seed": 5119,
+   "arm": "rules",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 2,
+    "against": 2
+   },
+   "xg_diff": -4.343999999999999,
+   "goal_diff": 0,
+   "points": 1,
+   "decisions": 7
+  },
+  {
+   "seed": 5119,
+   "arm": "agent",
+   "home": "ironmoor",
+   "away": "northwick",
+   "managed_side": "away",
+   "managed_team": "northwick",
+   "opponent": "ironmoor",
+   "score": {
+    "for": 0,
+    "against": 2
+   },
+   "xg_diff": -4.367999999999999,
+   "goal_diff": -2,
+   "points": 0,
+   "decisions": 5
+  }
+ ]
+}
