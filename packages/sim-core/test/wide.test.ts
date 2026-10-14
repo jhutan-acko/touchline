@@ -12,17 +12,26 @@ const params = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/to
 const play = (cfg: MatchConfig) => {
   let s = initMatch(cfg)
   const events: DomainEvent[] = []
-  while (!isFinished(s)) { const r = step(s); s = r.state; events.push(...r.events) }
-  return events
+  // Tackles on a player who had the ball in his hands the tick before (only a keeper can).
+  const handsTackles: DomainEvent[] = []
+  while (!isFinished(s)) {
+    const prev = s.possession
+    const r = step(s)
+    s = r.state
+    events.push(...r.events)
+    if (prev.kind === "owned" && prev.inHands) handsTackles.push(...r.events.filter((e) => e.type === "tackle" && e.attrs.opponent_id === prev.playerId))
+  }
+  return { events, handsTackles }
 }
-const run = (seed: number) => ({ cfg: makeConfig(seed, { params }), events: play(makeConfig(seed, { params })) })
+const run = (seed: number) => ({ cfg: makeConfig(seed, { params }), ...play(makeConfig(seed, { params })) })
 const runs = Array.from({ length: 16 }, (_, i) => i + 1).map(run)
 // Keepers claim far less often than before support, marking and shielding (46 claims and 23 punches over seeds 1-16 on the
 // pre-plan engine, 5 and 4 with the fitted physics): crosses are blocked more or land short of the box, a known
 // realism regression. To keep a real check on claims, these are the seeds of 1-40 on which a keeper claims (13 claims,
 // 7 punches over all 40 since carriers stopped standing on the ball, 2026-10-10; 14 and 3 before). Re-picked when teams started
-// switching ends at half-time (16 claims, 4 punches over 1-40): the second halves are mirrored, not replayed.
-const CLAIM_SEEDS = [2, 9, 10, 12, 14, 20, 21, 22, 23, 24, 35, 40]
+// switching ends at half-time (16 claims, 4 punches over 1-40): the second halves are mirrored, not replayed. Re-picked again
+// when the keeper-in-hands rule and conduct cautions were switched on and the engine recalibrated (23 claims, 10 punches over 1-40).
+const CLAIM_SEEDS = [1, 5, 6, 9, 11, 12, 17, 18, 19, 20, 26, 27, 29, 33, 34, 35, 38, 39]
 const claimRuns = CLAIM_SEEDS.map((seed) => runs[seed - 1] ?? run(seed))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
@@ -55,20 +64,17 @@ describe("high balls into the box", () => {
       })
     }
   })
-  it("nobody tackles a keeper holding the ball in their own box", () => {
-    for (const r of runs) {
-      const keepers = new Set([r.cfg.home.starters[0]!.id, r.cfg.away.starters[0]!.id, ...[r.cfg.home, r.cfg.away].flatMap((t) => (t.bench ?? []).filter((b) => b.role === "GK").map((b) => b.id))])
-      for (const e of r.events.filter((x) => x.type === "tackle" && keepers.has(x.attrs.opponent_id as string))) {
-        const keeperSide = sideOf(r.cfg, e.team_id) === "home" ? "away" : "home"
-        // The event sits at the tackler, who can stand up to the tackle radius (1.6 m) from the keeper: a keeper just outside the line is not in their hands.
-        expect(inOwnBox(keeperSide, e.x!, e.y!, e.period, 1.6), `${e.id} tackles keeper ${e.attrs.opponent_id} in the box`).toBe(false)
-      }
-    }
+  it("nobody tackles a keeper holding the ball in his hands", () => {
+    // With the hands rule on, a keeper in his own box with the ball at his feet (a team-mate played it to him) can be
+    // tackled; one holding it in his hands cannot.
+    for (const r of runs) for (const e of r.handsTackles) expect.fail(`${e.id} tackles keeper ${e.attrs.opponent_id} while he holds the ball in his hands`)
   })
   it("defenders head high balls away from their own third", () => {
     const heads = runs.flatMap((r) => r.events.filter((e) => e.type === "clearance" && e.attrs.technique === "head").map((e) => ({ r, e })))
     expect(heads.length).toBeGreaterThan(10)
-    for (const { r, e } of heads) expect(attackX(sideOf(r.cfg, e.team_id), e.x!, e.period), e.id).toBeLessThan(-17.5)
+    // The engine heads away only when the contact is strictly inside the third; event coordinates are rounded to the
+    // centimetre, so a contact a hair inside the line can read exactly -17.5.
+    for (const { r, e } of heads) expect(attackX(sideOf(r.cfg, e.team_id), e.x!, e.period), e.id).toBeLessThanOrEqual(-17.5)
   })
   it("some crosses are blocked", () => {
     const blocks = runs.flatMap((r) => r.events.filter((e) => e.type === "block" && e.attrs.blocked === "cross"))
