@@ -1,4 +1,5 @@
 import type { ActionZone } from "./geometry.js"
+import type { Role } from "./types.js"
 
 export const ACTIONS = [
   "short_pass",
@@ -39,6 +40,16 @@ export interface ClassifierThresholds {
   readonly cutbackTargetAttackXMax: number
   readonly cutbackTargetAbsY: number
 }
+
+/** A team's positioning row: with the ball, without it, or while its own keeper has the ball (build-up, G4). */
+export type ShapeRow = "in" | "out" | "gk"
+/** Positioning groups: roles with DM folded into CM; WB is a full-back in a back three (3-5-2). */
+export type PosGroup = "GK" | "CB" | "FB" | "WB" | "CM" | "AM" | "W" | "ST"
+/**
+ * One row of the rule table, team frame (metres; u along the attack, bu/by the ball's): depth u = a + b·bu; lateral for
+ * side slots s = w0 + w1·bu + w2·bs + w3·|by| (bs = by toward the player's side), for central slots y = e·by.
+ */
+export interface PosRow { readonly a: number; readonly b: number; readonly w0: number; readonly w1: number; readonly w2: number; readonly w3: number; readonly e: number }
 
 export interface Params {
   readonly provenance: Provenance
@@ -214,14 +225,68 @@ export interface Params {
   /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
   readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
-  readonly movement: { readonly shapeSpeedShare: number }
+  /**
+   * Movement into shape. shapeSpeedShare: share of top speed (the old rule, and marking). relaxed 1 (A0): shape movement
+   * heads for the spot at the speed that arrives in relaxArriveS, never above relaxCap of top speed, so a player near his
+   * spot walks; relaxMarks 1 does the same for marking.
+   */
+  readonly movement: { readonly shapeSpeedShare: number; readonly relaxed: number; readonly relaxCap: number; readonly relaxArriveS: number; readonly relaxMarks: number }
   /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball a line push upfield (m) and extra depth squeeze. */
   readonly shape: { readonly width: number; readonly depth: number; readonly defLineM: number; readonly defDepth: number; /** metres forwards (ST/W/AM) drop back without the ball */ readonly fwdDropM: number }
   /**
+   * Off-ball positioning (realism v2, P2). rule 0: the old template (shape.ts); 1: the per-role rule table fitted to real
+   * tracking, blended between rows after a change of possession, read against the ball ballLagS ago, plus team-common and
+   * per-player drift (drift RNG stream). Team frame: u along the attack (m), y toward the team's left when attacking.
+   */
+  readonly positioning: {
+    readonly rule: number
+    readonly roles: Readonly<Record<PosGroup, Readonly<Record<ShapeRow, PosRow>>>>
+    /** Lateral w0 for the 4-3-3's two side central midfielders (m); the real pivot row does not fit them. */
+    readonly eightW0: number
+    /** While the ball is within keeperNearM of his goal, the keeper stands keeperLineM off his line, on the goal-ball line (m). */
+    readonly keeperLineM: number
+    readonly keeperNearM: number
+    /** Out of possession only: metres the block moves per unit of lineHeight above the league mean (0.125). */
+    readonly styleLineM: number
+    /** Out of possession only: share w0 shrinks per unit of compactness above the league mean (0.625). */
+    readonly styleCompact: number
+    /** With the ball, forwards (ST, W, AM) keep this far below the opponents' last outfield defender (m). */
+    readonly lineCapM: number
+    /** While the other team's keeper has the ball, no out-of-possession anchor is further upfield than this u (m). */
+    readonly vsKeeperCapU: number
+    /** Phase-switch time constant by group (s): lambda = 1 - exp(-max(0, t + 0.5) / tau). */
+    readonly tauS: Readonly<Record<PosGroup, number>>
+    /** Lateral blend: narrowing after a loss (tau, s); spreading after a win (dead time, then tau, s). */
+    readonly narrowTauS: number
+    readonly spreadDeadS: number
+    readonly spreadTauS: number
+    /** Anchors read the ball this many seconds ago. */
+    readonly ballLagS: number
+    /** Drift (A3): stationary SDs (m) and time constants (s) of OU processes, and SDs of match offsets drawn once per player. */
+    readonly drift: {
+      readonly teamUSdM: number
+      readonly teamUTauS: number
+      readonly teamYSdM: number
+      readonly teamYTauS: number
+      readonly playerUSdM: number
+      readonly playerUTauS: number
+      readonly playerSSdM: Readonly<Record<PosGroup, number>>
+      readonly playerSTauS: Readonly<Record<PosGroup, number>>
+      readonly offsetUSdM: Readonly<Record<PosGroup, number>>
+      readonly offsetSSdM: Readonly<Record<PosGroup, number>>
+    }
+  }
+  /**
    * Energy (1 fresh .. 0 exhausted) drains per second by (drainBase + drainSpeed2 x speed^2) x (1 + staminaSlope x (0.5 - stamina));
    * players recover halfTimeRecovery at the break; tiredness widens execution error by up to executionK.
+   * tiring 1 (F1): new pressing and run triggers scale by (0.8 + 0.2 energy) and by a recent-load damping: high-intensity
+   * metres (at hiSpeedMs or faster) over an exponential window of loadWindowS; past loadFreeM the factor falls by loadDamp
+   * per loadFreeM, never below loadFloor.
    */
-  readonly fatigue: { readonly drainBase: number; readonly drainSpeed2: number; readonly staminaSlope: number; readonly halfTimeRecovery: number; readonly executionK: number }
+  readonly fatigue: {
+    readonly drainBase: number; readonly drainSpeed2: number; readonly staminaSlope: number; readonly halfTimeRecovery: number; readonly executionK: number
+    readonly tiring: number; readonly hiSpeedMs: number; readonly loadWindowS: number; readonly loadFreeM: number; readonly loadDamp: number; readonly loadFloor: number
+  }
   /** Substitution policy: planned windows (match minute, mean and SD), players per window, chance of a half-time change. */
   /**
    * First touch on a reception: P(error) = sigmoid(b0 + bSpeed x (speed - 12) / 10 + bHigh x height share + bPressure x pressure + bSkill x (skill - 0.6));
@@ -270,9 +335,13 @@ export interface Params {
     /** Chance that each planned window is used. */
     readonly windowChance: readonly [number, number, number]
     readonly halfTimeChance: number
+    /** Weight on each outfield role's claim to come off (score x weight); all 1 keeps the old choice. */
+    readonly roleWeights: Readonly<Record<Exclude<Role, "GK">, number>>
   }
   readonly classifier: ClassifierThresholds
 }
+
+const pr = (a: number, b: number, w0: number, w1: number, w2: number, w3: number, e: number): PosRow => ({ a, b, w0, w1, w2, w3, e })
 
 const row = (o: Partial<Record<Action, number>>): Record<Action, number> => {
   const out = {} as Record<Action, number>
@@ -383,9 +452,48 @@ export const DEFAULT_PARAMS: Params = {
   runs: { runInBehindRatePerS: 0.12 },
   support: { count: 2, distM: 12, speedShare: 0.8 },
   marking: { weight: 0.5, radiusM: 10, goalSideM: 1.5, widthSlackM: 4 },
-  movement: { shapeSpeedShare: 0.7 },
+  movement: { shapeSpeedShare: 0.7, relaxed: 0, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 0 },
   shape: { width: 1, depth: 1, defLineM: 0, defDepth: 1, fwdDropM: 0 },
-  fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25 },
+  // Real fits (IDSSE, 7 matches; fit-report.md, offball-report.md, transitions-report.md, gk-report.md, 2026-10-13).
+  // in / out rows: the spec's table (a, b) and fit-report section 4 (lateral); gk rows: the build-up shape (gk-report).
+  positioning: {
+    rule: 0,
+    roles: {
+      GK: { in: pr(-34.4, 0.28, 0, 0, 0, 0, 0.18), out: pr(-39.9, 0.27, 0, 0, 0, 0, 0.12), gk: pr(-34.4, 0.28, 0, 0, 0, 0, 0.18) },
+      CB: { in: pr(-12.0, 0.59, 8.0, -0.06, 0.35, 0.05, 0.4), out: pr(-18.5, 0.51, 4.8, 0.04, 0.38, 0.05, 0.38), gk: pr(-30, 0, 15.5, 0, 0, 0, 0) },
+      FB: { in: pr(-1.7, 0.58, 17.1, -0.04, 0.28, 0.02, 0), out: pr(-14.0, 0.54, 10.0, 0.07, 0.34, 0.12, 0), gk: pr(-13, 0, 27, 0, 0, 0, 0) },
+      WB: { in: pr(2.8, 0.58, 20.6, -0.04, 0.28, 0.02, 0), out: pr(-10.9, 0.54, 16.3, 0.07, 0.34, 0.12, 0), gk: pr(-11.7, 0, 27, 0, 0, 0, 0) },
+      CM: { in: pr(1.5, 0.59, 2.7, -0.01, 0.45, 0.02, 0.47), out: pr(-8.0, 0.58, 2.7, 0.01, 0.48, 0.01, 0.48), gk: pr(-13.3, 0, 2.7, 0, 0, 0, 0) },
+      AM: { in: pr(8.6, 0.54, 0, 0, 0, 0, 0.4), out: pr(-0.2, 0.62, 0, 0, 0, 0, 0.44), gk: pr(-4.9, 0, 0, 0, 0, 0, 0) },
+      W: { in: pr(10.3, 0.54, 12.4, -0.08, 0.33, 0.09, 0), out: pr(-2.9, 0.62, 11.6, 0.03, 0.35, 0.06, 0), gk: pr(-3.2, 0, 12.4, 0, 0, 0, 0) },
+      ST: { in: pr(16.0, 0.5, 5, 0, 0.35, 0.04, 0.36), out: pr(7.2, 0.59, 5, 0, 0.38, 0, 0.41), gk: pr(3.5, 0, 5, 0, 0, 0, 0) }
+    },
+    eightW0: 8.5,
+    keeperLineM: 2,
+    keeperNearM: 25,
+    styleLineM: 3,
+    styleCompact: 0.35,
+    lineCapM: 4,
+    vsKeeperCapU: 22,
+    tauS: { GK: 2.5, CB: 2.5, FB: 7.5, WB: 7.5, CM: 4, AM: 5, W: 8.5, ST: 4.5 },
+    narrowTauS: 1,
+    spreadDeadS: 2.5,
+    spreadTauS: 4.5,
+    ballLagS: 2,
+    drift: {
+      teamUSdM: 9,
+      teamUTauS: 8,
+      teamYSdM: 5.4,
+      teamYTauS: 5,
+      playerUSdM: 6,
+      playerUTauS: 12,
+      playerSSdM: { GK: 0, CB: 5.7, FB: 9, WB: 9, CM: 6.8, AM: 8.5, W: 9, ST: 8.7 },
+      playerSTauS: { GK: 20, CB: 20, FB: 40, WB: 40, CM: 25, AM: 40, W: 40, ST: 40 },
+      offsetUSdM: { GK: 0, CB: 2.4, FB: 4.8, WB: 4.8, CM: 5.0, AM: 5.9, W: 4.9, ST: 2.9 },
+      offsetSSdM: { GK: 0, CB: 3.0, FB: 7.0, WB: 7.0, CM: 4.0, AM: 5.0, W: 4.9, ST: 3.0 }
+    }
+  },
+  fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 0, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
@@ -395,7 +503,7 @@ export const DEFAULT_PARAMS: Params = {
     momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
-  substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2 },
+  substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 1, FB: 1, DM: 1, CM: 1, AM: 1, W: 1, ST: 1 } },
   classifier: {
     longPassM: 32,
     switchLateralM: 25,
@@ -450,11 +558,11 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
 /** Model coefficients and logits, which may take any sign. */
-const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/]
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
-  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare",
+  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare", "movement.relaxCap", "fatigue.loadFloor",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",

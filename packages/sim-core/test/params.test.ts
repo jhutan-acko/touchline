@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { ACTIONS, assertProvenance, DEFAULT_PARAMS, ParamsError, paramsFromJson } from "../src/params.js"
 import { ACTION_ZONES } from "../src/geometry.js"
+import { CONCERNS } from "../src/types.js"
 
 describe("params", () => {
   it("default priors carry provenance and pass the licence check", () => {
@@ -80,5 +81,26 @@ describe("params from JSON: value ranges", () => {
     for (const bad of [{ substitutions: { windowSdMin: -1 } }, { kinematics: { reachM: -9 } }, { timing: { restartDelayS: { corner: -5 } } }])
       expect(() => paramsFromJson({ provenance: prov, ...bad }), JSON.stringify(bad)).toThrow(/must not be negative/)
     expect(() => paramsFromJson({ provenance: prov, shot: { xg: { b0: -2 } }, firstTouch: { bSkill: -4 }, defending: { tackleBase: -0.5 } })).not.toThrow()
+  })
+})
+
+describe("realism v2 P2 params", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("ship switched off, with the real-data rule table ready, and a drift RNG stream", () => {
+    expect(DEFAULT_PARAMS.positioning.rule).toBe(0)
+    expect(DEFAULT_PARAMS.movement.relaxed).toBe(0)
+    expect(DEFAULT_PARAMS.fatigue.tiring).toBe(0)
+    expect(Object.values(DEFAULT_PARAMS.substitutions.roleWeights).every((v) => v === 1)).toBe(true)
+    expect(DEFAULT_PARAMS.positioning.roles.CB.in).toEqual({ a: -12, b: 0.59, w0: 8, w1: -0.06, w2: 0.35, w3: 0.05, e: 0.4 })
+    expect(DEFAULT_PARAMS.positioning.roles.ST.out.a).toBe(7.2)
+    expect(DEFAULT_PARAMS.positioning.roles.CB.gk).toEqual({ a: -30, b: 0, w0: 15.5, w1: 0, w2: 0, w3: 0, e: 0 })
+    expect(CONCERNS).toContain("drift")
+  })
+  it("accept negative rule-table coefficients from a file, and reject a negative time constant or a share above 1", () => {
+    const p = paramsFromJson({ provenance: cc, positioning: { roles: { CB: { out: { a: -20 } } } } })
+    expect(p.positioning.roles.CB.out.a).toBe(-20)
+    expect(p.positioning.roles.CB.in.a).toBe(-12)
+    expect(() => paramsFromJson({ provenance: cc, positioning: { tauS: { CB: -1 } } })).toThrow(ParamsError)
+    expect(() => paramsFromJson({ provenance: cc, movement: { relaxCap: 1.5 } })).toThrow(/between 0 and 1/)
   })
 })

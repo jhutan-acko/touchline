@@ -36,6 +36,7 @@ import { parryBall, planShot, type ShotMods } from "./shot.js"
 import { ballAfterTouch, drawFirstTouch, firstTouchError, type FirstTouch } from "./touch.js"
 import {
   CONCERNS,
+  type AnchorState,
   type AttrValue,
   type BallState,
   type Concern,
@@ -56,6 +57,10 @@ import {
   type SubsState,
   type TeamSetup
 } from "./types.js"
+// ---- P2 imports, movement seam (plan 8b Task 5 inserts below this line)
+
+// ---- P2 imports, positioning seam (plan 8b Task 7 inserts below this line)
+
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -177,6 +182,10 @@ class Work {
   rng: Record<Concern, Rng>
   seq: number
   events: DomainEvent[] = []
+  /** Positioning state (P2); absent while positioning.rule is 0. */
+  anchor: AnchorState | undefined
+  /** Recent high-intensity metres per player (P2, F1); absent while fatigue.tiring is 0. */
+  load: Record<string, number> | undefined
 
   constructor(s: MatchState) {
     this.cfg = s.config
@@ -207,6 +216,8 @@ class Work {
     this.rng = {} as Record<Concern, Rng>
     for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
     this.seq = s.eventSeq
+    this.anchor = s.anchor
+    this.load = s.load ? { ...s.load } : undefined
   }
 
   get p() {
@@ -312,7 +323,9 @@ class Work {
       rng: out,
       eventSeq: this.seq,
       ...(this.override ? { override: this.override } : {}),
-      ...(Object.values(this.subOrders).some((q) => q.length > 0) ? { subOrders: this.subOrders } : {})
+      ...(Object.values(this.subOrders).some((q) => q.length > 0) ? { subOrders: this.subOrders } : {}),
+      ...(this.anchor ? { anchor: this.anchor } : {}),
+      ...(this.load ? { load: { ...this.load } } : {})
     }
   }
 }
@@ -1062,6 +1075,25 @@ const KEEPER_SPOT_M = 1
 const keeperAtReleaseSpot = (w: Work, pl: PlayerState): boolean =>
   attackX(pl.side, pl.pos.x, w.period) >= -(PITCH.halfL - KEEPER_RELEASE_M) - KEEPER_SPOT_M
 
+// ================================================================ P2 positioning seam (plan 8b Task 7 owns this block)
+
+/** Where a player's shape puts him in open play (also the marking anchor). The old template until Task 7. */
+const shapeTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, inPossession: boolean): Vec2 => {
+  const team = teamOf(w.cfg, pl.side)
+  return anchorFor(team.formation, pl.slot, pl.side, w.period, ballFlat, team.style, inPossession, w.p.shape)
+}
+
+/** A player's spot while a restart (other than a kickoff) is set up, with the ball at the restart spot. */
+const restartTarget = (w: Work, pl: PlayerState, at: Vec2, inPossession: boolean): Vec2 => {
+  const team = teamOf(w.cfg, pl.side)
+  return anchorFor(team.formation, pl.slot, pl.side, w.period, at, team.style, inPossession, w.p.shape)
+}
+
+/** Once per tick, before anyone moves: advance the positioning state (team rows, ball lag, drift). Nothing until Task 7. */
+const advancePositioning = (_w: Work): void => {}
+
+// ================================================================ end of P2 positioning seam
+
 const moveTarget = (
   w: Work,
   pl: PlayerState,
@@ -1071,11 +1103,14 @@ const moveTarget = (
 ): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl, pl.energy, w.p)
-  const shape = () => ({ target: anchorFor(team.formation, pl.slot, pl.side, w.period, ballFlat, team.style, possSide === pl.side, w.p.shape), speedCap: vmax * w.p.movement.shapeSpeedShare })
+  const shape = () => {
+    const target = shapeTarget(w, pl, ballFlat, possSide === pl.side)
+    return { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+  }
   const ph = w.phase
   if (ph.kind === "restart") {
     if (takerFor(w, ph).id === pl.id) return { target: ph.at, speedCap: vmax * 0.8 }
-    const a = anchorFor(team.formation, pl.slot, pl.side, w.period, ph.at, team.style, ph.side === pl.side, w.p.shape)
+    const a = restartTarget(w, pl, ph.at, ph.side === pl.side)
     if (ph.restart === "kickoff") return { target: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), speedCap: vmax * 0.6 }
     if (pl.side !== ph.side && dist(a, ph.at) < 9.15 && pl.role !== "GK") {
       const away = add(ph.at, scale(norm(sub(a, ph.at)), 9.5))
@@ -1133,18 +1168,18 @@ const moveTarget = (
     if (!keeperHolding && presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
       const style = team.style
       const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, w.period, owner.pos)
-      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press * keeperFactor, w.dt))) {
+      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press * keeperFactor * triggerFactor(w, pl), w.dt))) {
         w.setPlayer({ ...pl, intent: { kind: "press", targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) })
         return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
       }
     }
   }
   const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
-  if (mark) return { target: mark, speedCap: vmax * w.p.movement.shapeSpeedShare }
+  if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax) }
   if (pos.kind === "owned" && possSide === pl.side && (pl.role === "ST" || pl.role === "W" || pl.role === "AM")) {
     if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
     const owner = w.player(pos.playerId)
-    if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS, w.dt))) {
+    if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS * triggerFactor(w, pl), w.dt))) {
       const lastDef = lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
       const target = clampToPitch({ x: dirOf(pl.side, w.period) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
       w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
@@ -1167,12 +1202,11 @@ const moveTarget = (
 
 /** This tick's marking targets for `defSide`: outfield defenders who are not pressing, paired with attackers other than the carrier. */
 const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => {
-  const team = teamOf(w.cfg, defSide)
   const ownerId = w.possession.kind === "owned" ? w.possession.playerId : null
   const defenders = w
     .active(defSide)
     .filter((x) => x.role !== "GK" && !(x.intent.kind === "press" && w.tick < x.intentUntil))
-    .map((x) => ({ id: x.id, anchor: anchorFor(team.formation, x.slot, defSide, w.period, ballFlat, team.style, false, w.p.shape) }))
+    .map((x) => ({ id: x.id, anchor: shapeTarget(w, x, ballFlat, false) }))
   const anchors = new Map(defenders.map((d) => [d.id, d.anchor]))
   const attackers = w.active(other(defSide)).filter((x) => x.role !== "GK" && x.id !== ownerId)
   const out = new Map<string, Vec2>()
@@ -1203,9 +1237,26 @@ const moveAll = (w: Work): void => {
         : approach(cur.pos, cur.vel, add(target, scale(sep, 2)), v, m, w.dt)
     const speed = len(next.vel)
     const energy = drainEnergy(cur.energy, speed, cur.attrs.stamina, w.dt, w.p)
+    trackLoad(w, id, speed)
     w.setPlayer({ ...cur, pos: clampToPitch(next.pos, -2), vel: next.vel, energy })
   }
 }
+
+// ================================================================ P2 movement seam (plan 8b Task 5 owns this block)
+
+/** Speed cap moving into shape. */
+const shapeSpeedCap = (w: Work, _pl: PlayerState, _target: Vec2, vmax: number): number => vmax * w.p.movement.shapeSpeedShare
+
+/** Speed cap moving to a marking spot. */
+const markSpeedCap = (w: Work, _pl: PlayerState, _target: Vec2, vmax: number): number => vmax * w.p.movement.shapeSpeedShare
+
+/** Multiplier on new high-intensity triggers (pressing, runs in behind): 1 means no tiring. */
+const triggerFactor = (_w: Work, _pl: PlayerState): number => 1
+
+/** After a player moves: track his recent high-intensity running. */
+const trackLoad = (_w: Work, _id: string, _speed: number): void => {}
+
+// ================================================================ end of P2 movement seam
 
 // ---------------------------------------------------------------- periods and frames
 
@@ -1291,6 +1342,7 @@ export const step = (s: MatchState): StepResult => {
   }
   if (w.phase.kind === "open_play") ownedTick(w)
   cautions(w)
+  advancePositioning(w)
   moveAll(w)
   ballTick(w)
   return { state: w.toState(), frame: frameOf(w), events: w.events }

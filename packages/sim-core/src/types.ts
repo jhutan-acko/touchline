@@ -1,5 +1,5 @@
 import type { Period, Side, Vec2, Vec3 } from "./geometry.js"
-import type { Params } from "./params.js"
+import type { Params, ShapeRow } from "./params.js"
 import type { RngState } from "./rng.js"
 import type { Script, ScriptEntry } from "./script.js"
 
@@ -280,7 +280,7 @@ export interface Frame {
   readonly possession_side: Side | null
 }
 
-export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution"] as const
+export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift"] as const
 export type Concern = (typeof CONCERNS)[number]
 
 /** One team's substitutions: planned windows (match minutes) still to come, changes made, windows used, bench players used. */
@@ -289,6 +289,31 @@ export interface SubsState {
   readonly made: number
   readonly windows: number
   readonly used: ReadonlyArray<string>
+}
+
+/** One team's positioning state (realism v2, P2): its row, the row it is blending out of since `since`, and its team-common drift. */
+export interface TeamShapeState {
+  readonly row: ShapeRow
+  readonly prev: ShapeRow
+  /** Global tick of the last row switch. */
+  readonly since: number
+  /** Team-common drift in the team frame (u along the attack, y toward the team's left when attacking), metres. */
+  readonly drift: { readonly u: number; readonly y: number }
+}
+
+/** One outfield player's drift in the team frame: match offsets with and without the ball, and a slow drift. s is + toward his own touchline (y_team for central slots). */
+export interface PlayerDriftState {
+  readonly offIn: { readonly u: number; readonly s: number }
+  readonly offOut: { readonly u: number; readonly s: number }
+  readonly slow: { readonly u: number; readonly s: number }
+}
+
+/** Positioning state (P2): the ball over the last positioning.ballLagS seconds, each team's row and drift, each outfielder's drift. */
+export interface AnchorState {
+  /** The ball's flat position at each of the last round(ballLagS / dt) + 1 ticks, oldest first. */
+  readonly ballLag: ReadonlyArray<Vec2>
+  readonly teams: Readonly<Record<Side, TeamShapeState>>
+  readonly players: Readonly<Record<string, PlayerDriftState>>
 }
 
 /** A what-if instruction: at their next decision, this player plays the pass to `receiverId` (see whatif.ts). */
@@ -334,6 +359,10 @@ export interface MatchState {
   readonly override?: PassOverride
   /** Substitutions a manager ordered, made at the start of the next tick (orders.ts). */
   readonly subOrders?: Readonly<Partial<Record<Side, ReadonlyArray<{ readonly off: string; readonly on: string }>>>>
+  /** Positioning state; absent while params positioning.rule is 0 (the old template). */
+  readonly anchor?: AnchorState
+  /** Recent high-intensity metres per player (fatigue.tiring); absent while it is 0. */
+  readonly load?: Readonly<Record<string, number>>
 }
 
 export interface StepResult {
