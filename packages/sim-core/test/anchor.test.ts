@@ -228,6 +228,47 @@ describe("Task 7b fix-ups", () => {
     expect(at("4-3-3", 9, deep, still("out", { vsKeeper: true })).x).toBeCloseTo(pos.vsKeeperCapU, 9)
   })
 
+  it("the forward-line cap eases in and out at the group's rate on a change of possession (Task 7d)", () => {
+    const ball = { x: 30, y: 0 }
+    const lastDefU = 20
+    const cap = lastDefU - pos.lineCapM
+    let st = initAnchorState(ball, 0.1, pos, { home: "out", away: "in" })
+    const stU = (s: AnchorState, tick: number, extra: Partial<AnchorInput> = {}) =>
+      at("4-3-3", 9, ball, { ...still("out", { lastDefU, ...extra }), blend: blendFor(s.teams.home, "ST", tick, 0.1, pos) }).x
+    const free = stU(st, 0)
+    expect(free).toBeGreaterThan(cap + 5)
+    expect(at("4-3-3", 9, ball, still("in")).x).toBeGreaterThan(cap + 5)
+    // Win the ball: the target moves from the out spot toward the cap by lambda, not onto the cap in one tick.
+    st = advanceRows(st, 100, ball, { home: "in", away: "out" }, 0.1, pos)
+    const lam = (t: number) => 1 - Math.exp(-(t + 0.5) / pos.tauS.ST)
+    expect(stU(st, 100)).toBeCloseTo(free + lam(0) * (cap - free), 9)
+    expect(stU(st, 110)).toBeCloseTo(free + lam(1) * (cap - free), 9)
+    expect(stU(st, 100 + 600)).toBeCloseTo(cap, 4)
+    // Lose it again 1 s in: back toward the out spot from where it stood.
+    st = advanceRows(st, 110, ball, { home: "out", away: "in" }, 0.1, pos)
+    const held = free + lam(1) * (cap - free)
+    expect(stU(st, 110)).toBeCloseTo(held + lam(0) * (free - held), 9)
+    // Settled with the ball, the cap is the hard cap on the drifted spot, as before; it holds forwards only.
+    expect(at("4-3-3", 9, ball, still("in", { lastDefU, drift: { u: 6, y: 0 } })).x).toBeCloseTo(cap, 9)
+    expect(at("4-3-3", 9, ball, still("gk", { lastDefU: -40 })).x).toBeCloseTo(-40 - pos.lineCapM, 9)
+    const cb = (l: number | null) => at("4-3-3", 1, ball, still("in", { lastDefU: l })).x
+    expect(cb(-40)).toBeCloseTo(cb(null), 9)
+  })
+
+  it("the forward-line cap follows lastDefU continuously, mid-blend and settled (Task 7d)", () => {
+    const ball = { x: 30, y: 0 }
+    let st = initAnchorState(ball, 0.1, pos, { home: "out", away: "in" })
+    st = advanceRows(st, 100, ball, { home: "in", away: "out" }, 0.1, pos)
+    for (const [tick, row] of [[105, "out"], [100 + 600, "in"]] as const) {
+      let prev: number | null = null
+      for (let l = -20; l <= 52.5; l += 0.1) {
+        const x = at("4-3-3", 9, ball, { ...still(row, { lastDefU: l, drift: { u: 3, y: 0 } }), blend: blendFor(st.teams.home, "ST", tick, 0.1, pos) }).x
+        if (prev !== null) expect(Math.abs(x - prev)).toBeLessThanOrEqual(0.1 + 1e-9)
+        prev = x
+      }
+    }
+  })
+
   it("the keeper moves linearly from his line spot to his row between keeperNearInM and keeperNearOutM", () => {
     expect(pos.keeperNearInM).toBe(22)
     expect(pos.keeperNearOutM).toBe(30)

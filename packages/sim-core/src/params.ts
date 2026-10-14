@@ -282,6 +282,11 @@ export interface Params {
       readonly playerSTauS: Readonly<Record<PosGroup, number>>
       readonly offsetUSdM: Readonly<Record<PosGroup, number>>
       readonly offsetSSdM: Readonly<Record<PosGroup, number>>
+      /**
+       * Smoothing time constant (s) of every drift OU (Task 7d): each is a raw OU through a first-order low-pass, rescaled
+       * so the stated SD and time constant hold, so the drift moves smoothly instead of a Brownian-rough step each tick.
+       */
+      readonly smoothS: number
     }
   }
   /**
@@ -502,7 +507,8 @@ export const DEFAULT_PARAMS: Params = {
       playerSSdM: { GK: 0, CB: 5.7, FB: 9, WB: 9, CM: 6.8, AM: 8.5, W: 9, ST: 8.7 },
       playerSTauS: { GK: 20, CB: 20, FB: 40, WB: 40, CM: 25, AM: 40, W: 40, ST: 40 },
       offsetUSdM: { GK: 0, CB: 2.4, FB: 4.8, WB: 4.8, CM: 5.0, AM: 5.9, W: 4.9, ST: 2.9 },
-      offsetSSdM: { GK: 0, CB: 3.0, FB: 7.0, WB: 7.0, CM: 4.0, AM: 5.0, W: 4.9, ST: 3.0 }
+      offsetSSdM: { GK: 0, CB: 3.0, FB: 7.0, WB: 7.0, CM: 4.0, AM: 5.0, W: 4.9, ST: 3.0 },
+      smoothS: 1
     }
   },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 0, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
