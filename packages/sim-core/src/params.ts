@@ -245,7 +245,15 @@ export interface Params {
     readonly eightW0: number
     /** While the ball is within keeperNearM of his goal, the keeper stands keeperLineM off his line, on the goal-ball line (m). */
     readonly keeperLineM: number
+    /** Superseded by keeperNearInM / keeperNearOutM (no longer read). */
     readonly keeperNearM: number
+    /** The keeper's spot moves linearly from his line spot (ball within keeperNearInM of his goal) to his row (beyond keeperNearOutM), m. */
+    readonly keeperNearInM: number
+    readonly keeperNearOutM: number
+    /** A new side in possession must keep the ball this long (s) before the rows switch; restarts and keeper catches switch at once. 0: no debounce. */
+    readonly commitS: number
+    /** 1: a clearance in flight keeps the rows, like a loose ball (a deflection always does); 0: it counts for the clearing side. */
+    readonly clearanceLoose: number
     /** Out of possession only: metres the block moves per unit of lineHeight above the league mean (0.125). */
     readonly styleLineM: number
     /** Out of possession only: share w0 shrinks per unit of compactness above the league mean (0.625). */
@@ -471,6 +479,10 @@ export const DEFAULT_PARAMS: Params = {
     eightW0: 8.5,
     keeperLineM: 2,
     keeperNearM: 25,
+    keeperNearInM: 22,
+    keeperNearOutM: 30,
+    commitS: 0,
+    clearanceLoose: 0,
     styleLineM: 3,
     styleCompact: 0.35,
     lineCapM: 4,

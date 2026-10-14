@@ -7,7 +7,7 @@
  */
 import { clamp, dirOf, PITCH, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { Params, PosGroup, PosRow, ShapeRow } from "./params.js"
-import type { AnchorState, FormationName, Role, TeamShapeState, TeamStyle } from "./types.js"
+import type { AnchorState, FormationName, Role, RowMix, TeamShapeState, TeamStyle } from "./types.js"
 
 export type Positioning = Params["positioning"]
 /** A formation slot (the shape of shape.ts's Slot; kept structural so this module does not import shape.ts). */
@@ -62,10 +62,30 @@ export interface Blend {
   /** Share of the way from `from` to `to`: depth (lamU) and lateral (lamY). */
   readonly lamU: number
   readonly lamY: number
+  /**
+   * The weights the anchor mixes (blendFor): from where the blend started toward the target, by lamU and lamY. Absent
+   * (settled, hand-built blends): from `from` alone to `to`, which is outK when the input says the other keeper has the ball.
+   */
+  readonly mix?: { readonly u: RowMix; readonly y: RowMix }
 }
 
 /** A blend that has arrived: the row alone. */
 export const settled = (row: ShapeRow): Blend => ({ from: row, to: row, lamU: 1, lamY: 1 })
+
+/** The spots a team blends between: the rows, and "out" capped at vsKeeperCapU (outK). */
+export type MixKey = keyof RowMix
+const KEYS: ReadonlyArray<MixKey> = ["in", "out", "gk", "outK"]
+const ZERO: RowMix = { in: 0, out: 0, gk: 0, outK: 0 }
+const only = (k: MixKey): RowMix => ({ ...ZERO, [k]: 1 })
+/** (1 - lam) a + lam b. */
+const lerpMix = (a: RowMix, b: RowMix, lam: number): RowMix => ({
+  in: a.in + lam * (b.in - a.in),
+  out: a.out + lam * (b.out - a.out),
+  gk: a.gk + lam * (b.gk - a.gk),
+  outK: a.outK + lam * (b.outK - a.outK)
+})
+/** A team's target spot: its row, or outK while it is out and the other keeper has the ball. */
+export const targetKey = (team: TeamShapeState): MixKey => (team.row === "out" && team.capped ? "outK" : team.row)
 
 /**
  * How far a player of `group` has moved from his team's previous row into its current one (A2).
@@ -74,7 +94,8 @@ export const settled = (row: ShapeRow): Blend => ({ from: row, to: row, lamU: 1,
  * within possession (in <-> gk) it follows lambda.
  */
 export const blendFor = (team: TeamShapeState, group: PosGroup, tick: number, dt: number, pos: Positioning): Blend => {
-  if (team.prev === team.row) return settled(team.row)
+  const to = targetKey(team)
+  if (team.prev === team.row && !team.start) return to === team.row ? settled(team.row) : { ...settled(team.row), mix: { u: only(to), y: only(to) } }
   const t = (tick - team.since) * dt
   const lamU = 1 - Math.exp(-Math.max(0, t + 0.5) / pos.tauS[group])
   const lamY =
@@ -83,8 +104,24 @@ export const blendFor = (team: TeamShapeState, group: PosGroup, tick: number, dt
       : team.prev === "out"
         ? 1 - Math.exp(-Math.max(0, t - pos.spreadDeadS) / pos.spreadTauS)
         : lamU
-  return { from: team.prev, to: team.row, lamU, lamY }
+  const target = only(to)
+  // Arrived to within 1e-6: the target alone, so a settled team does not keep evaluating the rows it left.
+  if (lamU > 1 - 1e-6 && lamY > 1 - 1e-6) return { from: team.prev, to: team.row, lamU, lamY, mix: { u: target, y: target } }
+  // Continuity (Task 7b): the blend starts where the last one stood at the switch, not at the previous row in full.
+  const start = team.start?.[group] ?? { u: only(team.prev), y: only(team.prev) }
+  return { from: team.prev, to: team.row, lamU, lamY, mix: { u: lerpMix(start.u, target, lamU), y: lerpMix(start.y, target, lamY) } }
 }
+
+/** The mix a blend without one stands for: `from` to `to` by lamU / lamY, the target capped (outK) if vsKeeper. */
+const mixOf = (blend: Blend, vsKeeper: boolean): { u: RowMix; y: RowMix } => {
+  if (blend.mix) return blend.mix
+  const a = only(blend.from)
+  const b = only(blend.to === "out" && vsKeeper ? "outK" : blend.to)
+  return { u: lerpMix(a, b, blend.lamU), y: lerpMix(a, b, blend.lamY) }
+}
+
+/** The share of a mix played without the ball (the drift offsets' offOut weight). */
+export const outShare = (m: RowMix): number => m.out + m.outK
 
 /** One row's spot in the team frame, before blending: the table, the slot's offsets, style (without the ball only) and spread. */
 const rowSpot = (row: ShapeRow, r: PosRow, geo: SlotGeometry, bu: number, by: number, style: TeamStyle, spread: Spread, pos: Positioning): { u: number; y: number } => {
@@ -99,12 +136,19 @@ const rowSpot = (row: ShapeRow, r: PosRow, geo: SlotGeometry, bu: number, by: nu
   return { u, y: geo.sigma * (w0 + r.w1 * bu + r.w3 * Math.abs(by)) + r.w2 * by }
 }
 
-/** The keeper: within keeperNearM of his goal, keeperLineM off the line on the goal-ball line; else his row, clamped. */
+/**
+ * The keeper: keeperLineM off the line on the goal-ball line while the ball is within keeperNearInM of his goal, his row
+ * (clamped) beyond keeperNearOutM, and linearly between the two in between.
+ */
 const keeperSpot = (u: number, y: number, bu: number, by: number, pos: Positioning): { u: number; y: number } => {
   const fromLine = bu + PITCH.halfL
-  if (Math.hypot(fromLine, by) < pos.keeperNearM)
-    return { u: -PITCH.halfL + pos.keeperLineM, y: clamp((by * pos.keeperLineM) / Math.max(1, fromLine), -PITCH.goalHalfWidth, PITCH.goalHalfWidth) }
-  return { u: clamp(u, -51, -20), y: clamp(y, -6, 6) }
+  const d = Math.hypot(fromLine, by)
+  const row = { u: clamp(u, -51, -20), y: clamp(y, -6, 6) }
+  if (d >= pos.keeperNearOutM) return row
+  const line = { u: -PITCH.halfL + pos.keeperLineM, y: clamp((by * pos.keeperLineM) / Math.max(1, fromLine), -PITCH.goalHalfWidth, PITCH.goalHalfWidth) }
+  if (d <= pos.keeperNearInM) return line
+  const f = (d - pos.keeperNearInM) / (pos.keeperNearOutM - pos.keeperNearInM)
+  return { u: line.u + f * (row.u - line.u), y: line.y + f * (row.y - line.y) }
 }
 
 export interface AnchorInput {
@@ -113,7 +157,7 @@ export interface AnchorInput {
   readonly drift: { readonly u: number; readonly y: number }
   /** The opponents' last outfield defender in this side's attack frame, or null for no cap. */
   readonly lastDefU: number | null
-  /** The other team's keeper has the ball. */
+  /** The other team's keeper has the ball (read only for a blend without a mix: blendFor's mix carries the cap itself). */
   readonly vsKeeper: boolean
 }
 
@@ -135,11 +179,22 @@ export const ruleAnchor = (
   const by = ball.y * d
   const geo = slotGeometry(formation, slots, slot)
   const rows = pos.roles[geo.group]
-  const { from, to, lamU, lamY } = input.blend
-  const a = rowSpot(from, rows[from], geo, bu, by, style, spread, pos)
-  const b = from === to ? a : rowSpot(to, rows[to], geo, bu, by, style, spread, pos)
-  let u = a.u + lamU * (b.u - a.u)
-  let y = a.y + lamY * (b.y - a.y)
+  const to = input.blend.to
+  const mix = mixOf(input.blend, input.vsKeeper)
+  // Each spot in the mix (at most four rowSpots); outK is the out spot with its depth capped before blending, so the
+  // cap eases in and out at the group's rate (keepers are not capped).
+  let u = 0
+  let y = 0
+  let outSpot: { u: number; y: number } | null = null
+  for (const k of KEYS) {
+    const wu = mix.u[k]
+    const wy = mix.y[k]
+    if (wu === 0 && wy === 0) continue
+    const row: ShapeRow = k === "outK" ? "out" : k
+    const spot = row === "out" ? (outSpot ??= rowSpot("out", rows.out, geo, bu, by, style, spread, pos)) : rowSpot(row, rows[row], geo, bu, by, style, spread, pos)
+    u += wu * (k === "outK" && geo.group !== "GK" ? Math.min(spot.u, pos.vsKeeperCapU) : spot.u)
+    y += wy * spot.y
+  }
   if (geo.group === "GK") {
     const k = keeperSpot(u, y, bu, by, pos)
     return { x: k.u * d, y: k.y * d }
@@ -147,7 +202,6 @@ export const ruleAnchor = (
   u += input.drift.u
   y += input.drift.y
   if (to !== "out" && input.lastDefU !== null && (geo.group === "ST" || geo.group === "W" || geo.group === "AM")) u = Math.min(u, input.lastDefU - pos.lineCapM)
-  if (to === "out" && input.vsKeeper) u = Math.min(u, pos.vsKeeperCapU)
   u = clamp(u, -PITCH.halfL + 4, PITCH.halfL - 3)
   y = clamp(y, -PITCH.halfW + 1.5, PITCH.halfW - 1.5)
   return { x: u * d, y: y * d }
@@ -157,23 +211,66 @@ export const ruleAnchor = (
 export const rowFor = (side: Side, possSide: Side | null, keeperHasIt: boolean, previous: ShapeRow): ShapeRow =>
   possSide === null ? previous : possSide === side ? (keeperHasIt ? "gk" : "in") : "out"
 
-/** A fresh state: the ball ring filled with the current ball, both teams settled in their rows, no drift yet. */
-export const initAnchorState = (ball: Vec2, dt: number, pos: Positioning, rows: Readonly<Record<Side, ShapeRow>>): AnchorState => ({
-  ballLag: Array.from({ length: Math.max(1, Math.round(pos.ballLagS / dt)) + 1 }, () => ball),
-  teams: {
-    home: { row: rows.home, prev: rows.home, since: 0, drift: { u: 0, y: 0 } },
-    away: { row: rows.away, prev: rows.away, since: 0, drift: { u: 0, y: 0 } }
-  },
-  players: {}
-})
+/** Whether `side`, in `rows`, is out of possession while the other team's keeper has the ball (its target is outK). */
+const cappedIn = (side: Side, rows: Readonly<Record<Side, ShapeRow>>): boolean => rows[side] === "out" && rows[side === "home" ? "away" : "home"] === "gk"
 
-/** One tick: push the ball onto the ring, and start a blend for each team whose row changed (drift is left alone). */
-export const advanceRows = (s: AnchorState, tick: number, ball: Vec2, rows: Readonly<Record<Side, ShapeRow>>): AnchorState => {
+/** A fresh state: the ball ring filled with the current ball, both teams settled in their rows, no drift yet. */
+export const initAnchorState = (ball: Vec2, dt: number, pos: Positioning, rows: Readonly<Record<Side, ShapeRow>>): AnchorState => {
+  const team = (side: Side): TeamShapeState => {
+    const t: TeamShapeState = { row: rows[side], prev: rows[side], since: 0, drift: { u: 0, y: 0 } }
+    return cappedIn(side, rows) ? { ...t, capped: true } : t
+  }
+  return {
+    ballLag: Array.from({ length: Math.max(1, Math.round(pos.ballLagS / dt)) + 1 }, () => ball),
+    teams: { home: team("home"), away: team("away") },
+    players: {}
+  }
+}
+
+const GROUPS: ReadonlyArray<PosGroup> = ["GK", "CB", "FB", "WB", "CM", "AM", "W", "ST"]
+
+/**
+ * One tick: push the ball onto the ring, and start a blend for each team whose target changed (its row, or the vsKeeper
+ * cap coming on or off while it is out). The new blend starts where the old one stands at `tick`, per group (drift is
+ * left alone).
+ */
+export const advanceRows = (s: AnchorState, tick: number, ball: Vec2, rows: Readonly<Record<Side, ShapeRow>>, dt: number, pos: Positioning): AnchorState => {
   const team = (side: Side): TeamShapeState => {
     const t = s.teams[side]
-    return rows[side] === t.row ? t : { ...t, prev: t.row, row: rows[side], since: tick }
+    const capped = cappedIn(side, rows)
+    if (rows[side] === t.row && capped === (t.capped ?? false)) return t
+    const start = {} as Record<PosGroup, { u: RowMix; y: RowMix }>
+    for (const g of GROUPS) {
+      const b = blendFor(t, g, tick, dt, pos)
+      start[g] = mixOf(b, false)
+    }
+    const { capped: _, ...rest } = t
+    return { ...rest, prev: t.row, row: rows[side], since: tick, start, ...(capped ? { capped } : {}) }
   }
   return { ...s, ballLag: [...s.ballLag.slice(1), ball], teams: { home: team("home"), away: team("away") } }
+}
+
+/** Fill the ball ring with one spot (a restart being set up, or the start of a period) and record the period. */
+export const holdBall = (s: AnchorState, ball: Vec2, period: Period): AnchorState => ({ ...s, ballLag: s.ballLag.map(() => ball), period })
+
+/**
+ * The side the rows follow this tick, with the possession-commit debounce (positioning.commitS): a new side in possession
+ * (`raw`) must keep the ball `commitTicks` ticks before the rows switch to it, unless `immediate` (a restart, a keeper's
+ * catch). `committed` is the side the rows follow now (null: none yet). Returns the side to apply (null: keep the rows)
+ * and the pending side, if any. commitTicks 0 applies `raw` at once.
+ */
+export const commitSide = (
+  committed: Side | null,
+  raw: Side | null,
+  immediate: boolean,
+  pending: { readonly side: Side; readonly since: number } | undefined,
+  tick: number,
+  commitTicks: number
+): { side: Side | null; pending: { readonly side: Side; readonly since: number } | undefined } => {
+  if (raw === null) return { side: null, pending }
+  if (raw === committed || committed === null || immediate || commitTicks <= 0) return { side: raw, pending: undefined }
+  const p = pending?.side === raw ? pending : { side: raw, since: tick }
+  return tick - p.since >= commitTicks ? { side: raw, pending: undefined } : { side: null, pending: p }
 }
 
 /** The ball as anchors read it: ballLagS ago. */

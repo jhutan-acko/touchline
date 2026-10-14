@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { attackX, dist, other, PITCH, type Side } from "../src/geometry.js"
 import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
-import { initMatch, isFinished, step } from "../src/step.js"
+import { lagBall } from "../src/anchor.js"
+import { initMatch, isFinished, shapeTargetAt, step } from "../src/step.js"
 import { makeConfig } from "../src/testing.js"
 import type { MatchState } from "../src/types.js"
 
@@ -52,6 +53,56 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!
 
 describe("positioning in a match (rule table on)", () => {
+  it("Task 7b: the keeper reads the current ball, the ring holds the restart spot, a deflection keeps the rows", () => {
+    let s = initMatch(makeConfig(11, { params: on }))
+    let keeperChecks = 0
+    let held = 0
+    let deflections = 0
+    let secondHalfChecked = false
+    let prevRows: string | null = null
+    let prevRestart = false
+    while (!isFinished(s)) {
+      s = step(s).state
+      const a = s.anchor
+      if (!a) continue
+      const rows = `${a.teams.home.row}/${a.teams.away.row}`
+      const ph = s.phase
+      // A restart is set at the end of the tick its ball goes dead (after positioning ran): check from its next tick on.
+      const wasRestart = prevRestart
+      prevRestart = ph.kind === "restart"
+      if (ph.kind === "restart") {
+        if (wasRestart) {
+          held++
+          for (const b of a.ballLag) expect(b).toEqual(ph.at)
+        }
+      } else if (ph.kind === "open_play") {
+        if (s.period === "second_half" && !secondHalfChecked) {
+          secondHalfChecked = true
+          expect(lagBall(a)).toEqual({ x: 0, y: 0 }) // the kickoff spot, not a first-half ball
+        }
+        const pos = s.possession
+        if (pos.kind === "in_flight" && pos.flight.kind === "deflection" && prevRows !== null) {
+          deflections++
+          expect(rows).toBe(prevRows)
+        }
+        // Ball within keeperNearInM of a goal now: that keeper stands keeperLineM off his line, whatever the ball 2 s ago.
+        if (s.tick % 5 === 0)
+          for (const side of ["home", "away"] as const) {
+            const fromGoal = Math.hypot(attackX(side, s.ball.pos.x, s.period) + PITCH.halfL, s.ball.pos.y)
+            const gk = s.players.find((p) => p.side === side && p.role === "GK" && !p.sentOff)
+            if (!gk || fromGoal > on.positioning.keeperNearInM - 0.5) continue
+            keeperChecks++
+            expect(attackX(side, shapeTargetAt(s, gk.id).x, s.period) + PITCH.halfL).toBeCloseTo(on.positioning.keeperLineM, 9)
+          }
+      }
+      prevRows = rows
+    }
+    expect(secondHalfChecked).toBe(true)
+    expect(held).toBeGreaterThan(100)
+    expect(keeperChecks).toBeGreaterThan(100)
+    expect(deflections).toBeGreaterThan(10)
+  }, 300_000)
+
   it("is deterministic, and keeps no positioning state with the rule off", () => {
     const a = finalState(on, 9)
     const b = finalState(on, 9)
