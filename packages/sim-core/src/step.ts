@@ -214,7 +214,8 @@ class Work {
     this.subOrders = { ...s.subOrders }
     this.halfTimeBreak = s.period === "second_half" && s.periodTick === 0
     this.rng = {} as Record<Concern, Rng>
-    for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c])
+    // A state saved before a stream existed has none: derive it from the seed. Nothing drew from it, so it is exact.
+    for (const c of CONCERNS) this.rng[c] = new Rng(s.rng[c] ?? substream(s.config.seed, c))
     this.seq = s.eventSeq
     this.anchor = s.anchor
     this.load = s.load ? { ...s.load } : undefined
