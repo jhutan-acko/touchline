@@ -417,15 +417,26 @@ Without the second change, the recalibrated parameters still put seed 11 at 17.2
 Knobs that moved in run 4: `long_bias` 2.25 -> 2.75, `cross_bias` 0.625 -> 0.125, `xg_b0` -0.5 -> -0.75,
 `yellow_per_foul` 0.15 -> 0.2, `deflect_behind` 1.375 -> 1.625. `foul_per_tackle` went 0.405 -> 0.465 in run 3.
 
+**Net knob change vs pre-P1** (`data/params/touchline-params.json` at a55a39b against the committed file):
+`exec_scale` 0.85 -> 1.15, `aim_noise` 1.35 -> 1.15, `reach_margin` 0.775 -> 0.725, `save_b0` 1.925 -> 2.175,
+`deflect_behind` 1.125 -> 1.625, `fwd_drop` 0 -> 2.5, `long_bias` 2.25 -> 2.75, `cross_bias` 0.625 -> 0.125,
+`foul_per_tackle` 0.405 -> 0.465, `yellow_per_foul` 0.375 -> 0.2. `xg_b0` ended where it started (-0.75, via -0.5).
+Outside the knobs: `script.goalShotLogit` 1.5 -> 1.75, and the new P1 parameters listed at the top of this section.
+Part of the C4 and C1 movement below comes from this recalibration (`fwd_drop` moves the forwards' shape, `exec_scale`
+widens pass execution error), not from the P1 behaviours themselves.
+
 **Sources.** C1, C2 and C4 come from `docs/realism/realism-report.md` (16 matches, seeds 2000-2015). C3, sendings-off and
 penalties come from `pnpm realism:deep` (64 matches, seeds 2000-2063).
 
 - **Gate: MET.** Loss 21.23 against `GATE_LOSS` 30, drift 0 against the refreshed baseline. Before P1 (behaviours off)
   it was 22.9.
 - **C1: NOT MET.**
-  - Of the original 19, 15 are within 1 SD (needs 16) and 18 within 2 SD (needs 19).
+  - Of the original 19, 15 are within 1 SD (needs 16) and 18 within 2 SD (needs 19). Before P1 it was about 12 of 19
+    within 1 SD.
   - Outside 2 SD: pass completion (z -2.53).
   - Within 2 SD but not 1: passes +1.19, blocked shots -1.35, ball in play -1.95.
+  - Across the fix rounds two of these got worse: pass completion went from z -2.15 to -2.53, and ball in play from
+    -1.11 to -1.95.
 - **C2: MET.** Free kicks z +0.58, fouls -0.69, goals -0.32, shots on target share +0.17.
 - **C3: NOT MET.**
   - Team shot-share SD over 64 matches is 0.383 (needs 0.18 or less; real 0.090).
@@ -440,12 +451,13 @@ penalties come from `pnpm realism:deep` (64 matches, seeds 2000-2063).
 - **Cards: MET.** 5.3 per match on 64 matches (real 5.3).
 - **Keeper distribution: MET.** Open-play shots within 20 s after the conceding team's keeper distribution are 9.0 % of
   shots (34 of 379, 16 matches). That is down from 25 % (real 7.6 %).
-- **`yellowPerFoul`: 0.2** (expected about 0.15). Conduct cautions supply the rest of the cards.
+- **`yellowPerFoul`: MET.** 0.2 (expected 0.15–0.2). Conduct cautions supply the rest of the cards.
 - **Keeper still with the ball: MET.** Each test match is within the real bounds (at most 5 stretches and 15.8 s).
 - **`feetPressFactor` 0.25; G2 at-feet pressure: NOT MET.**
-  - An opponent is within 5 m at 44 % of the keeper's open-play releases from his feet (16 matches, measured before the
-    recalibration; target about 12.6 %).
-  - The factor barely moves it: 56 % at 1, 55 % at 0.5, 44 % at 0.25, 41 % at 0.1, 40 % at 0 (no pressing at all).
+  - An opponent is within 5 m at 43 % of the keeper's open-play releases from his feet (60 of 138; the 16 realism
+    matches, seeds 2000-2015, re-measured on the final engine and parameters; target about 12.6 %).
+  - The factor barely moves it. Measured on the 5–12 s hold engine before the recalibration: 56 % at 1, 55 % at 0.5,
+    44 % at 0.25, 41 % at 0.1, 40 % at 0 (no pressing at all).
   - The rest are strikers already standing near him when the back pass arrives (holding, running in behind, or still
     pressing from before). Lowering the factor further doesn't help; fixing it needs positioning work (P2).
 - **Keeper claims:** 25 claims and 8 punches on the test configs' seeds 1-40 (16 and 4 before P1).
@@ -453,3 +465,8 @@ penalties come from `pnpm realism:deep` (64 matches, seeds 2000-2063).
   - With the switches on, `late_comeback` reached its target unforced in 17 of seeds 1-20 (8 of 1-10, below the 90 % this
     design asks for).
   - At 1.75 every built-in scenario does in 20 of 20. Unscripted matches, and so the gate, are unaffected.
+
+**Merge checklist.** After merging, regenerate every run folder under `out/` in the main checkout: `pnpm library`
+(with the agent service running), plus `demo-7`, `m-1`, `eval-ci` and any run folders among those present on 2026-10-14
+(`m-2`, `m-2-25fps`, `m-3-noisy`, `m-7`, `halt-check`, `ab-pilot`, `manager-ab`, `realism`; `library-old` can be deleted). Folders written
+before P1 have their second half played left to right; `readRun`, the advisor and the API library now refuse them.

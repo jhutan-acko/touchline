@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { decodeDecision, decodeDomainEvent, type DomainEvent } from "@touchline/schema"
 import { SCENARIOS } from "@touchline/sim"
 import { initMatch, isFinished, statesAt, step, withLoggedOrders, type LoggedOrders, type MatchConfig, type MatchState, type Params, type Side, type TeamSetup } from "@touchline/sim-core"
+import { PREDATES_END_SWITCH, predatesEndSwitch } from "@touchline/stats"
 
 /** A run folder the advisor cannot re-simulate (missing files, unknown clubs, parameters it does not have). */
 export class AdvisorError extends Error {}
@@ -92,6 +93,7 @@ export class Session {
       managers?: { home: string | null; away: string | null }
     }
     const meta = JSON.parse(read("meta.json")) as { match: { kickoff_time: string } }
+    if (predatesEndSwitch(meta)) throw new AdvisorError(`${join(dir, "meta.json")}: ${PREDATES_END_SWITCH}`)
     const club = (id: string) => {
       const c = league.clubs.find((x) => x.id === id)
       if (!c) throw new AdvisorError(`club "${id}" is not in the league file`)

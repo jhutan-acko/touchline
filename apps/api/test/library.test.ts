@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { beforeAll, describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 import { pickCues, preference } from "../src/cues.js"
-import { readMatch, scanLibrary } from "../src/library.js"
+import { readMatch, scanLibrary, StaleRunError } from "../src/library.js"
 import { league, makeLibrary, MATCH_ID, type TestLibrary } from "./fixture.js"
 
 let lib: TestLibrary
@@ -34,6 +34,25 @@ describe("library", () => {
     expect(m.cues).toEqual([])
     expect(m.info.segments).toEqual([])
     expect(m.info.model).toBeNull()
+  })
+
+  it("leaves out, with a warning, a run folder written before teams switched ends at half-time", () => {
+    const root = join(lib.dir, "..", "stale-lib")
+    const old = join(root, "old-run")
+    mkdirSync(old, { recursive: true })
+    writeFileSync(join(old, "manifest.json"), readFileSync(join(lib.run, "manifest.json")))
+    writeFileSync(join(old, "tracking.jsonl"), "")
+    const meta = JSON.parse(readFileSync(join(lib.run, "meta.json"), "utf8"))
+    writeFileSync(join(old, "meta.json"), JSON.stringify({ ...meta, match: { ...meta.match, periods: meta.match.periods.map((p: object) => ({ ...p, play_direction: "left_right" })) } }))
+    expect(() => readMatch(old, league)).toThrow(StaleRunError)
+    expect(() => readMatch(old, league)).toThrow(/predates the half-time switch.*regenerate/)
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      expect(scanLibrary(root, league).size).toBe(0)
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/old-run.*predates the half-time switch/))
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
 

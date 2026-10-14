@@ -58,6 +58,8 @@ import {
 } from "./types.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
+/** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
+const MATCH_SECONDS_90 = 5400
 const OUTCOME_IN_ATTRS: ReadonlySet<string> = new Set(["take_on", "tackle"])
 
 const teamOf = (cfg: MatchConfig, side: Side): TeamSetup => (side === "home" ? cfg.home : cfg.away)
@@ -491,7 +493,7 @@ const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState): void
 
 /** Cautions for conduct: a Poisson stream over the match, falling on a random player on the pitch. */
 const cautions = (w: Work): void => {
-  const rate = w.p.defending.cautionPerMatch / 5400
+  const rate = w.p.defending.cautionPerMatch / MATCH_SECONDS_90
   if (rate <= 0 || !w.rng.caution.chance(hazard(rate, w.dt))) return
   const pool = [...w.active("home"), ...w.active("away")]
   if (pool.length === 0) return

@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { League } from "@touchline/league"
 import { readCueCache } from "@touchline/agent-gateway"
+import { PREDATES_END_SWITCH, predatesEndSwitch } from "@touchline/stats"
 import type { MatchInfo, MatchSummary, Player, TeamBrief, WhatIfClip } from "@touchline/rpc"
 import { segmentKey, type Cue, type Decision } from "@touchline/schema"
 import { betterPassCues } from "./betterpass.js"
@@ -13,6 +14,9 @@ import { decisionCues, readDecisionLog } from "./decisions.js"
 import { readWhatIfs } from "./whatif.js"
 
 export class LibraryError extends Error {}
+
+/** A run folder written before teams switched ends at half-time: left out of the library until it is regenerated. */
+export class StaleRunError extends LibraryError {}
 
 export interface LibraryMatch {
   readonly dir: string
@@ -51,6 +55,7 @@ const team = (league: League, id: string, side: "home" | "away"): { brief: TeamB
 /** Read one run folder (manifest, league names and kits, cue cache). */
 export const readMatch = (dir: string, league: League): LibraryMatch => {
   if (!existsSync(join(dir, "manifest.json")) || !existsSync(join(dir, "tracking.jsonl"))) throw new LibraryError(`${dir} is not a run folder (no manifest.json or tracking.jsonl)`)
+  if (existsSync(join(dir, "meta.json")) && predatesEndSwitch(json(join(dir, "meta.json")))) throw new StaleRunError(`${dir}: ${PREDATES_END_SWITCH}`)
   const m = json<Manifest>(join(dir, "manifest.json"))
   const [home, away] = [team(league, m.home, "home"), team(league, m.away, "away")]
   const [h, a] = m.stats.score.split("-").map(Number)
@@ -68,7 +73,7 @@ export const readMatch = (dir: string, league: League): LibraryMatch => {
   return { dir, info, cues: [...cues, ...betterPassCues(info, clips.values()), ...decisionCues(info, decisions)], clips, decisions }
 }
 
-/** Every run folder directly under `root`, by match id (folders that are not runs are skipped). */
+/** Every run folder directly under `root`, by match id (folders that are not runs are skipped; stale runs with a warning). */
 export const scanLibrary = (root: string, league: League): Map<string, LibraryMatch> => {
   const out = new Map<string, LibraryMatch>()
   if (!existsSync(root)) return out
@@ -78,6 +83,7 @@ export const scanLibrary = (root: string, league: League): Map<string, LibraryMa
       out.set(m.info.match_id, m)
     } catch (e) {
       if (!(e instanceof LibraryError)) throw e
+      if (e instanceof StaleRunError) console.error(`library: skipped ${e.message}`)
     }
   }
   return out

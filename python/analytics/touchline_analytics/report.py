@@ -246,7 +246,7 @@ def balance_section(rows: list[dict]) -> list[str]:
     sd = math.sqrt(sum((s - m) ** 2 for s in share) / (n - 1)) if n > 1 else 0.0
     per = lambda k: sum(r[k] for r in rows) / n  # noqa: E731
     lines = ["## Match balance and discipline", "",
-             f"From {n} matches." + ("" if n >= DEEP_MATCHES else f" These are rare or noisy measures: judge them on {DEEP_MATCHES} or more (`pnpm realism:deep`); this report has fewer than 64 matches."),
+             f"From {n} matches." + ("" if n >= DEEP_MATCHES else f" These are rare or noisy measures: judge them on {DEEP_MATCHES} or more (`pnpm realism:deep`); this report has fewer than {DEEP_MATCHES} matches."),
              "", "| Measure | Real | Simulated | Target | Status |", "|---|---|---|---|---|",
              f"| Team shot share, SD over matches (C3) | {REAL_BALANCE['shot_share_sd']:.3f} | {sd:.3f} | ≤ {C3_MAX_SHOT_SHARE_SD:.2f} | {'MET' if sd <= C3_MAX_SHOT_SHARE_SD else 'NOT MET'} |",
              f"| Players sent off per match | {REAL_BALANCE['sent_off']:.2f} | {per('sent_off'):.2f} | about 0.2–0.3 | — |",

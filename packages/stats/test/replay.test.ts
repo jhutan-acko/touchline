@@ -118,4 +118,20 @@ describe("replay and streams", () => {
     const err = await Effect.runPromise(Effect.flip(readRun(bad)))
     expect(err.message).toMatch(/domain\.jsonl:4/)
   })
+
+  it("refuse a run folder written before teams switched ends at half-time, asking for it to be regenerated", async () => {
+    const old = mkdtempSync(join(tmpdir(), "touchline-old-"))
+    const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"))
+    expect(meta.match.periods.find((p: { period: string }) => p.period === "second_half").play_direction).toBe("right_left")
+    // Pre-P1 meta: every period, the second half included, played left to right.
+    meta.match.periods = meta.match.periods.map((p: object) => ({ ...p, play_direction: "left_right" }))
+    writeFileSync(join(old, "meta.json"), JSON.stringify(meta))
+    writeFileSync(join(old, "domain.jsonl"), readFileSync(join(dir, "domain.jsonl")))
+    writeFileSync(join(old, "tracking.jsonl"), "")
+    const err = await Effect.runPromise(Effect.flip(readRun(old)))
+    expect(err).toBeInstanceOf(ReplayError)
+    expect(err.message).toMatch(/meta\.json/)
+    expect(err.message).toMatch(/predates the half-time switch/)
+    expect(err.message).toMatch(/regenerate/)
+  })
 })

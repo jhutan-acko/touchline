@@ -9,6 +9,18 @@ import { emittedAt, type MatchInfo, type StatsInput, type TeamInfo, type TrackFr
 /** A run folder that cannot be replayed (missing or malformed file). */
 export class ReplayError extends Error {}
 
+/**
+ * Teams switch ends at half-time since realism v2 P1. A run folder written before that has its second half still
+ * played left to right, so its coordinates no longer match the stats models, the pitch view or a re-simulation.
+ */
+export const PREDATES_END_SWITCH = "run predates the half-time switch of ends (second half played left_right); regenerate it"
+
+/** True when CDF match meta was written before teams switched ends at half-time (see PREDATES_END_SWITCH). */
+export const predatesEndSwitch = (meta: unknown): boolean => {
+  const periods = (meta as { match?: { periods?: unknown } } | null)?.match?.periods
+  return Array.isArray(periods) && periods.some((p: { period?: unknown; play_direction?: unknown } | null) => p?.period === "second_half" && p.play_direction === "left_right")
+}
+
 /** Clubs whose players' names and roles fill in what CDF meta leaves out (data/league/league.json). */
 export interface Roster {
   readonly clubs: ReadonlyArray<{
@@ -80,6 +92,7 @@ export const readRun = (dir: string, roster?: Roster): Effect.Effect<Replay, Rep
     try: () => {
       const meta = readJson(join(dir, "meta.json")) as CdfMeta
       if (!meta?.teams?.home || !meta?.meta?.tracking?.fps) throw new ReplayError(`${join(dir, "meta.json")}: not CDF match meta`)
+      if (predatesEndSwitch(meta)) throw new ReplayError(`${join(dir, "meta.json")}: ${PREDATES_END_SWITCH}`)
       const info = infoFromMeta(meta, roster)
       const events = readEvents(join(dir, "domain.jsonl"))
       // Global tick = the period's offset + the CDF frame id; every event carries both.

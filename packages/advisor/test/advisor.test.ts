@@ -68,6 +68,15 @@ describe("session", () => {
     expect(() => Session.fromRun(bad, league, [DEFAULT_PARAMS])).toThrow(/does not match/)
   })
 
+  it("refuses a run folder written before teams switched ends at half-time", () => {
+    const old = mkdtempSync(join(tmpdir(), "touchline-advisor-old-"))
+    cpSync(dir, old, { recursive: true })
+    const meta = JSON.parse(readFileSync(join(old, "meta.json"), "utf8"))
+    writeFileSync(join(old, "meta.json"), JSON.stringify({ ...meta, match: { ...meta.match, periods: meta.match.periods.map((p: object) => ({ ...p, play_direction: "left_right" })) } }))
+    expect(() => Session.fromRun(old, league, [DEFAULT_PARAMS])).toThrow(AdvisorError)
+    expect(() => Session.fromRun(old, league, [DEFAULT_PARAMS])).toThrow(/predates the half-time switch.*regenerate/)
+  })
+
   it("rebuilds a scripted match through the scenario runner", async () => {
     const sc = SCENARIOS.late_comeback!
     const sdir = mkdtempSync(join(tmpdir(), "touchline-advisor-script-"))
