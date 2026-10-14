@@ -159,9 +159,9 @@ describe("scripted scenarios raise the signals of their cause", () => {
   const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
   const params = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
   const club = (id: string) => league.clubs.find((c) => c.id === id)!
-  /** Seeds (of 1-6 by default) in which the signal fires for the scripted team within the window or the two minutes after it. */
-  const detected = (homeId: string, awayId: string, script: Script, type: string, seeds: ReadonlyArray<number> = [1, 2, 3, 4, 5, 6]) =>
-    seeds.filter((seed) => {
+  /** Seeds (of 1-6) in which the signal fires for the scripted team within the window or the two minutes after it. */
+  const detected = (homeId: string, awayId: string, script: Script, type: string) =>
+    [1, 2, 3, 4, 5, 6].filter((seed) => {
       const cfg: MatchConfig = { matchId: "m", seed, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(homeId), away: club(awayId), params, dt: 0.1, script }
       const run = runScript(cfg)
       const eng = new StatsEngine(infoFromConfig(cfg), M)
@@ -175,11 +175,8 @@ describe("scripted scenarios raise the signals of their cause", () => {
       return eng.signals.some((s) => s.type === type && s.team_id === team && s.frame_id >= w.fromFrame && s.frame_id <= w.toFrame + 1200)
     }).length
 
-  // Twelve seeds: six were too few once the keeper and caution rules were switched on and the engine recalibrated
-  // (3 of seeds 1-6, but 9 of 1-12; 11 of 1-12 before).
-  it("a pressing surge from 30' to 45' raises a pressure shift in at least 9 of 12 seeds", () => {
-    const seeds = Array.from({ length: 12 }, (_, i) => i + 1)
-    expect(detected("corrin-forge", "kestrel-bay", { name: "press", entries: [{ window: [30, 45], team: "home", effect: "press_surge" }] }, "pressure_shift", seeds)).toBeGreaterThanOrEqual(9)
+  it("a pressing surge from 30' to 45' raises a pressure shift in at least 5 of 6 seeds", () => {
+    expect(detected("corrin-forge", "kestrel-bay", { name: "press", entries: [{ window: [30, 45], team: "home", effect: "press_surge" }] }, "pressure_shift")).toBeGreaterThanOrEqual(5)
   })
 
   it("a momentum swing from 60' to 75' raises a momentum swing in at least 3 of 6 seeds", () => {

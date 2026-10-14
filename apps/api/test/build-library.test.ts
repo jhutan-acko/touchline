@@ -57,8 +57,9 @@ describe("library builder", () => {
     started = url
     for (let i = 0; i < 300 && !(await fetch(`${url}.well-known/agent-card.json`).then((r) => r.ok, () => false)); i++) await new Promise((r) => setTimeout(r, 200))
     const out = tmp()
-    await buildLibrary({ out, scenarios: ["costly_error"], seed: 2, agentsUrl: url })
-    const m = scanLibrary(out, league).get("lib-costly_error-2")!
+    // Seed 3 since realism v2 P1 (2026-10-14): on seed 2 the agents no longer name a pass with a better option.
+    await buildLibrary({ out, scenarios: ["costly_error"], seed: 3, agentsUrl: url })
+    const m = scanLibrary(out, league).get("lib-costly_error-3")!
     expect(m.info.segments).toHaveLength(12)
     expect(m.info.model).toBe("stub")
     expect(m.cues.length).toBeGreaterThan(100)

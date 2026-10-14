@@ -12,16 +12,20 @@ const params = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/to
 const play = (cfg: MatchConfig) => {
   let s = initMatch(cfg)
   const events: DomainEvent[] = []
-  // Tackles on a player who had the ball in his hands the tick before (only a keeper can).
+  // Tackles on a player who had the ball in his hands the tick before (only a keeper can), and how many such ticks there were.
   const handsTackles: DomainEvent[] = []
+  let handsTicks = 0
   while (!isFinished(s)) {
     const prev = s.possession
     const r = step(s)
     s = r.state
     events.push(...r.events)
-    if (prev.kind === "owned" && prev.inHands) handsTackles.push(...r.events.filter((e) => e.type === "tackle" && e.attrs.opponent_id === prev.playerId))
+    if (prev.kind === "owned" && prev.inHands) {
+      handsTicks++
+      handsTackles.push(...r.events.filter((e) => e.type === "tackle" && e.attrs.opponent_id === prev.playerId))
+    }
   }
-  return { events, handsTackles }
+  return { events, handsTackles, handsTicks }
 }
 const run = (seed: number) => ({ cfg: makeConfig(seed, { params }), ...play(makeConfig(seed, { params })) })
 const runs = Array.from({ length: 16 }, (_, i) => i + 1).map(run)
@@ -30,8 +34,9 @@ const runs = Array.from({ length: 16 }, (_, i) => i + 1).map(run)
 // realism regression. To keep a real check on claims, these are the seeds of 1-40 on which a keeper claims (13 claims,
 // 7 punches over all 40 since carriers stopped standing on the ball, 2026-10-10; 14 and 3 before). Re-picked when teams started
 // switching ends at half-time (16 claims, 4 punches over 1-40): the second halves are mirrored, not replayed. Re-picked again
-// when the keeper-in-hands rule and conduct cautions were switched on and the engine recalibrated (23 claims, 10 punches over 1-40).
-const CLAIM_SEEDS = [1, 5, 6, 9, 11, 12, 17, 18, 19, 20, 26, 27, 29, 33, 34, 35, 38, 39]
+// when the keeper-in-hands rule (hold 5-10 s) and conduct cautions were switched on and the engine recalibrated (20 claims,
+// 3 punches over 1-40).
+const CLAIM_SEEDS = [2, 9, 11, 12, 14, 17, 21, 23, 26, 27, 28, 29, 33, 34, 38, 40]
 const claimRuns = CLAIM_SEEDS.map((seed) => runs[seed - 1] ?? run(seed))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
@@ -67,6 +72,8 @@ describe("high balls into the box", () => {
   it("nobody tackles a keeper holding the ball in his hands", () => {
     // With the hands rule on, a keeper in his own box with the ball at his feet (a team-mate played it to him) can be
     // tackled; one holding it in his hands cannot.
+    // Keepers do hold it in their hands on these seeds, so the check below is not vacuous.
+    expect(runs.reduce((n, r) => n + r.handsTicks, 0)).toBeGreaterThan(1000)
     for (const r of runs) for (const e of r.handsTackles) expect.fail(`${e.id} tackles keeper ${e.attrs.opponent_id} while he holds the ball in his hands`)
   })
   it("defenders head high balls away from their own third", () => {
