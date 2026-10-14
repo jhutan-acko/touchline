@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { advanceRows, blendFor, initAnchorState, lagBall, rowFor, ruleAnchor, settled, slotGeometry, type AnchorInput } from "../src/anchor.js"
+import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, outShare, rowFor, ruleAnchor, settled, slotGeometry, type AnchorInput, type Blend } from "../src/anchor.js"
+import { driftFor } from "../src/drift.js"
 import type { Side } from "../src/geometry.js"
 import { DEFAULT_PARAMS as P, type ShapeRow } from "../src/params.js"
 import { anchorFor, FORMATIONS } from "../src/shape.js"
 import { STYLES } from "../src/testing.js"
-import type { FormationName, TeamShapeState, TeamStyle } from "../src/types.js"
+import type { AnchorState, FormationName, TeamShapeState, TeamStyle } from "../src/types.js"
 
 const pos = { ...P.positioning, rule: 1 }
+const PITCH_HALF = 52.5
 const NEUTRAL: TeamStyle = { ...STYLES.direct, lineHeight: 0.125, compactness: 0.625 }
 const flat = { width: 1, depth: 1, defDepth: 1 }
 const still = (row: ShapeRow, extra: Partial<AnchorInput> = {}): AnchorInput => ({ blend: settled(row), drift: { u: 0, y: 0 }, lastDefU: null, vsKeeper: false, ...extra })
@@ -146,7 +148,7 @@ describe("positioning state", () => {
       let s = initAnchorState({ x: 0, y: 0 }, dt, pos, rows)
       const n = Math.round(pos.ballLagS / dt)
       expect(s.ballLag).toHaveLength(n + 1)
-      for (let i = 1; i <= n + 5; i++) s = advanceRows(s, i, { x: i, y: 0 }, rows)
+      for (let i = 1; i <= n + 5; i++) s = advanceRows(s, i, { x: i, y: 0 }, rows, dt, pos)
       expect(lagBall(s).x).toBe(5)
     }
   })
@@ -157,10 +159,112 @@ describe("positioning state", () => {
     expect(rowFor("home", "away", false, "in")).toBe("out")
     expect(rowFor("home", null, false, "gk")).toBe("gk")
     let s = initAnchorState({ x: 0, y: 0 }, 0.1, pos, { home: "in", away: "out" })
-    s = advanceRows(s, 40, { x: 0, y: 0 }, { home: "out", away: "gk" })
-    expect(s.teams.home).toEqual({ row: "out", prev: "in", since: 40, drift: { u: 0, y: 0 } })
-    expect(s.teams.away).toEqual({ row: "gk", prev: "out", since: 40, drift: { u: 0, y: 0 } })
-    const same = advanceRows(s, 41, { x: 0, y: 0 }, { home: "out", away: "gk" })
+    s = advanceRows(s, 40, { x: 0, y: 0 }, { home: "out", away: "gk" }, 0.1, pos)
+    expect(s.teams.home).toMatchObject({ row: "out", prev: "in", since: 40, drift: { u: 0, y: 0 }, capped: true })
+    expect(s.teams.away).toMatchObject({ row: "gk", prev: "out", since: 40, drift: { u: 0, y: 0 } })
+    expect(s.teams.away.capped).toBeUndefined()
+    const same = advanceRows(s, 41, { x: 0, y: 0 }, { home: "out", away: "gk" }, 0.1, pos)
     expect(same.teams.home.since).toBe(40)
+  })
+})
+
+describe("Task 7b fix-ups", () => {
+  const ball = { x: 5, y: 4 }
+  const anchorOf = (st: AnchorState, slot: number, tick: number, b = ball) =>
+    at("4-4-2", slot, b, { ...still(st.teams.home.row), blend: blendFor(st.teams.home, slotGeometry("4-4-2", FORMATIONS["4-4-2"], slot).group, tick, 0.1, pos) })
+  const flip = (st: AnchorState, tick: number, home: ShapeRow, away: ShapeRow) => advanceRows(st, tick, ball, { home, away }, 0.1, pos)
+
+  it("a flip back partway through a blend starts from where the blend stands, not from the full previous row", () => {
+    let st = initAnchorState(ball, 0.1, pos, { home: "in", away: "out" })
+    st = flip(st, 0, "out", "in")
+    st = flip(st, 10, "in", "out") // 1 s into the in -> out blend, the ball changes hands again
+    for (const slot of [1, 2, 6, 9]) {
+      const g = slotGeometry("4-4-2", FORMATIONS["4-4-2"], slot).group
+      const before = at("4-4-2", slot, ball, { ...still("out"), blend: blendFor({ ...st.teams.home, row: "out", prev: "in", since: 0, start: undefined }, g, 10, 0.1, pos) })
+      const after = anchorOf(st, slot, 10)
+      const lam0 = 1 - Math.exp(-0.5 / pos.tauS[g])
+      const inSpot = at("4-4-2", slot, ball, still("in"))
+      // The step at the switch is the blend's head start toward the new row, from the old blended point.
+      expect(after.x).toBeCloseTo(before.x + lam0 * (inSpot.x - before.x), 9)
+      // The old code restarted from the full "out" row: a much larger step for slow roles.
+      const fromFullOut = at("4-4-2", slot, ball, { ...still("in"), blend: { from: "out", to: "in", lamU: lam0, lamY: 0 } })
+      expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(Math.abs(fromFullOut.x - before.x) + 1e-9)
+    }
+  })
+
+  it("the drift offsets blend continuously across a flip too (by the mix's out share)", () => {
+    let st = initAnchorState(ball, 0.1, pos, { home: "in", away: "out" })
+    st = { ...st, players: { p: { offIn: { u: 4, s: -3 }, offOut: { u: -6, s: 5 }, slow: { u: 0, s: 0 } } } }
+    st = flip(st, 0, "out", "in")
+    const mixAt = (s: AnchorState, tick: number) => blendFor(s.teams.home, "FB", tick, 0.1, pos).mix!
+    const before = mixAt(st, 20)
+    const d0 = driftFor(st, "home", "p", outShare(before.u), outShare(before.y), "in", "out", 1)
+    st = flip(st, 20, "in", "out")
+    const after = mixAt(st, 20)
+    const d1 = driftFor(st, "home", "p", outShare(after.u), outShare(after.y), "in", "out", 1)
+    const lam0 = 1 - Math.exp(-0.5 / pos.tauS.FB)
+    expect(outShare(after.u)).toBeCloseTo(outShare(before.u) * (1 - lam0), 9)
+    expect(Math.abs(d1.u - d0.u)).toBeLessThanOrEqual(lam0 * 10 + 1e-9)
+    expect(d1.y).toBeCloseTo(d0.y, 9) // lateral: the spread waits spreadDeadS after a win
+  })
+
+  it("the cap while the other keeper holds the ball eases in and out at the group's rate", () => {
+    const deep = { x: 40, y: 0 }
+    let st = initAnchorState(deep, 0.1, pos, { home: "out", away: "in" })
+    const stU = (s: AnchorState, tick: number) =>
+      at("4-3-3", 9, deep, { ...still("out", { vsKeeper: s.teams.away.row === "gk" }), blend: blendFor(s.teams.home, "ST", tick, 0.1, pos) }).x
+    const free = stU(st, 0)
+    expect(free).toBeGreaterThan(pos.vsKeeperCapU + 5)
+    st = advanceRows(st, 100, deep, { home: "out", away: "gk" }, 0.1, pos)
+    const lam = (t: number) => 1 - Math.exp(-(t + 0.5) / pos.tauS.ST)
+    expect(stU(st, 100)).toBeCloseTo(free + lam(0) * (pos.vsKeeperCapU - free), 9)
+    expect(stU(st, 110)).toBeCloseTo(free + lam(1) * (pos.vsKeeperCapU - free), 9)
+    expect(stU(st, 100 + 600)).toBeCloseTo(pos.vsKeeperCapU, 4)
+    // Released 1 s into the catch: back toward the free spot from where it stood, no jump.
+    st = advanceRows(st, 110, deep, { home: "out", away: "in" }, 0.1, pos)
+    const held = free + lam(1) * (pos.vsKeeperCapU - free)
+    expect(stU(st, 110)).toBeCloseTo(held + lam(0) * (free - held), 9)
+    // A settled, hand-built blend (restarts) still takes the cap at once.
+    expect(at("4-3-3", 9, deep, still("out", { vsKeeper: true })).x).toBeCloseTo(pos.vsKeeperCapU, 9)
+  })
+
+  it("the keeper moves linearly from his line spot to his row between keeperNearInM and keeperNearOutM", () => {
+    expect(pos.keeperNearInM).toBe(22)
+    expect(pos.keeperNearOutM).toBe(30)
+    const gk = (bx: number) => at("4-4-2", 0, { x: bx, y: 0 }, still("out"))
+    const line = -PITCH_HALF + pos.keeperLineM
+    expect(gk(-PITCH_HALF + 21.9).x).toBeCloseTo(line, 9)
+    const row = (bx: number) => Math.min(-20, Math.max(-51, -39.9 + 0.27 * bx))
+    expect(gk(-PITCH_HALF + 30).x).toBeCloseTo(row(-PITCH_HALF + 30), 9)
+    expect(gk(-PITCH_HALF + 26).x).toBeCloseTo(line + 0.5 * (row(-PITCH_HALF + 26) - line), 9)
+    let worst = 0
+    for (let d = 15; d < 40; d += 0.1) worst = Math.max(worst, Math.abs(gk(-PITCH_HALF + d + 0.1).x - gk(-PITCH_HALF + d).x))
+    expect(worst).toBeLessThan(0.15)
+  })
+
+  it("commits a new side in possession only after commitTicks, at once for restarts and keeper catches", () => {
+    expect(commitSide("home", "away", false, undefined, 50, 0)).toEqual({ side: "away", pending: undefined })
+    const a = commitSide("home", "away", false, undefined, 50, 10)
+    expect(a).toEqual({ side: null, pending: { side: "away", since: 50 } })
+    expect(commitSide("home", null, false, a.pending, 55, 10)).toEqual({ side: null, pending: a.pending })
+    expect(commitSide("home", "away", false, a.pending, 59, 10).side).toBeNull()
+    expect(commitSide("home", "away", false, a.pending, 60, 10)).toEqual({ side: "away", pending: undefined })
+    expect(commitSide("home", "home", false, a.pending, 56, 10)).toEqual({ side: "home", pending: undefined })
+    expect(commitSide("home", "away", true, undefined, 50, 10)).toEqual({ side: "away", pending: undefined })
+    expect(commitSide(null, "away", false, undefined, 50, 10).side).toBe("away")
+  })
+
+  it("holdBall fills the ring with one spot and records the period", () => {
+    let st = initAnchorState({ x: 0, y: 0 }, 0.1, pos, { home: "in", away: "out" })
+    for (let i = 1; i <= 25; i++) st = advanceRows(st, i, { x: i, y: i }, { home: "in", away: "out" }, 0.1, pos)
+    const h = holdBall(st, { x: 0, y: 0 }, "second_half")
+    expect(h.period).toBe("second_half")
+    expect(h.ballLag.every((b) => b.x === 0 && b.y === 0)).toBe(true)
+    expect(h.ballLag).toHaveLength(st.ballLag.length)
+  })
+
+  it("settled blends without a mix are unchanged: blendFor still returns settled() for a team that never switched", () => {
+    const b: Blend = blendFor(team("out", "out"), "CB", 99, 0.1, pos)
+    expect(b).toEqual(settled("out"))
   })
 })

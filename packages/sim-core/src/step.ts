@@ -61,7 +61,7 @@ import {
 import { loadAfter, relaxedSpeed, tiringFactor } from "./kinematics.js"
 
 // ---- P2 imports, positioning seam (plan 8b Task 7 inserts below this line)
-import { advanceRows, blendFor, initAnchorState, lagBall, rowFor, settled, slotGeometry, type Blend } from "./anchor.js"
+import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, outShare, rowFor, settled, slotGeometry, type Blend, type SlotGeometry } from "./anchor.js"
 import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
@@ -1089,55 +1089,120 @@ const keeperRestart = (w: Work): boolean => {
   return ph.kind === "restart" && ph.restart !== "kickoff" && takerFor(w, ph).role === "GK"
 }
 
-/** This tick's row for each team: with the ball, without it, or with its own keeper holding it or restarting (G4); loose and dead balls keep the rows. */
-const rowsNow = (w: Work): Record<Side, ShapeRow> => {
+/**
+ * This tick's row for each team: with the ball, without it, or with its own keeper holding it or restarting (G4); loose
+ * and dead balls keep the rows, and so does a deflection in flight (a clearance too with clearanceLoose). A new side in
+ * possession commits after positioning.commitS (restarts and keeper catches at once). Also returns the pending side.
+ */
+const rowsNow = (w: Work): { rows: Record<Side, ShapeRow>; pending: AnchorState["pending"] } => {
+  const pp = w.p.positioning
   const pos = w.possession
   const owner = pos.kind === "owned" ? w.player(pos.playerId) : null
-  const possSide: Side | null = owner ? owner.side : pos.kind === "in_flight" ? pos.flight.side : w.phase.kind === "restart" ? w.phase.side : null
+  const flight = pos.kind === "in_flight" ? pos.flight : null
+  const loose = flight !== null && (flight.kind === "deflection" || (flight.kind === "clearance" && pp.clearanceLoose > 0))
+  const raw: Side | null = owner ? owner.side : flight ? (loose ? null : flight.side) : w.phase.kind === "restart" ? w.phase.side : null
   const keeper = owner ? owner.role === "GK" : keeperRestart(w)
   const prev = w.anchor?.teams
+  const committed: Side | null = !prev
+    ? null
+    : prev.home.row !== "out" && prev.away.row === "out"
+      ? "home"
+      : prev.away.row !== "out" && prev.home.row === "out"
+        ? "away"
+        : null
+  const c = commitSide(committed, raw, w.phase.kind === "restart" || keeper, w.anchor?.pending, w.tick, Math.round(pp.commitS / w.dt))
   return {
-    home: rowFor("home", possSide, keeper, prev?.home.row ?? (possSide === "away" ? "out" : "in")),
-    away: rowFor("away", possSide, keeper, prev?.away.row ?? (possSide === "home" ? "out" : "in"))
+    rows: {
+      home: rowFor("home", c.side, keeper, prev?.home.row ?? (raw === "away" ? "out" : "in")),
+      away: rowFor("away", c.side, keeper, prev?.away.row ?? (raw === "home" ? "out" : "in"))
+    },
+    pending: c.pending
   }
 }
 
-const groupFor = (w: Work, pl: PlayerState): PosGroup => {
-  const f = teamOf(w.cfg, pl.side).formation
-  return slotGeometry(f, FORMATIONS[f], pl.slot).group
+/** Per-tick positioning context, built once per tick before anyone moves: each side's slot geometry and the opponents' last defender. */
+interface PosTick {
+  readonly geo: Readonly<Record<Side, ReadonlyArray<SlotGeometry>>>
+  readonly lastDefU: Readonly<Record<Side, number>>
+}
+const posTicks = new WeakMap<Work, PosTick>()
+const posTick = (w: Work): PosTick => {
+  const hit = posTicks.get(w)
+  if (hit) return hit
+  const geoOf = (side: Side) => {
+    const f = teamOf(w.cfg, side).formation
+    return FORMATIONS[f].map((_, i) => slotGeometry(f, FORMATIONS[f], i))
+  }
+  const c: PosTick = {
+    geo: { home: geoOf("home"), away: geoOf("away") },
+    lastDefU: { home: lastDefenderAttackX("home", w.period, w.active("away")), away: lastDefenderAttackX("away", w.period, w.active("home")) }
+  }
+  posTicks.set(w, c)
+  return c
 }
 
-/** Once per tick, before anyone moves: the team rows and ball ring (anchor.ts), then drift (drift.ts). Nothing with the rule off. */
+const groupFor = (w: Work, pl: PlayerState): PosGroup => posTick(w).geo[pl.side][pl.slot]!.group
+
+/**
+ * Once per tick, before anyone moves: the per-tick context, the team rows and ball ring (anchor.ts), then drift
+ * (drift.ts). While a restart is set up, and at the start of a period, the ring holds the restart spot. Nothing with the rule off.
+ */
 const advancePositioning = (w: Work): void => {
   const pos = w.p.positioning
   if (pos.rule <= 0) return
-  const ball = { x: w.ball.pos.x, y: w.ball.pos.y }
-  const rows = rowsNow(w)
-  const s = advanceRows(w.anchor ?? initAnchorState(ball, w.dt, pos, rows), w.tick, ball, rows)
+  posTick(w)
+  const ph = w.phase
+  const held = ph.kind === "restart" ? ph.at : null
+  const ball = held ?? { x: w.ball.pos.x, y: w.ball.pos.y }
+  const { rows, pending } = rowsNow(w)
+  let s0 = w.anchor ?? initAnchorState(ball, w.dt, pos, rows)
+  if (held || s0.period !== w.period) s0 = holdBall(s0, ball, w.period)
+  const s = advanceRows(s0, w.tick, ball, rows, w.dt, pos)
   const outfield = w.active().filter((p) => p.role !== "GK").map((p) => ({ id: p.id, group: groupFor(w, p) }))
-  w.anchor = advanceDrift(s, outfield, w.dt, pos.drift, w.rng.drift)
+  const { pending: _, ...next } = advanceDrift(s, outfield, w.dt, pos.drift, w.rng.drift)
+  w.anchor = pending ? { ...next, pending } : next
 }
 
-/** The rule-table context for a player: his blend, his drift (none for keepers) and the caps that apply now. */
+/** The rule-table context for a player: his blend, his drift (none for keepers; weighted by the blend's out share) and the caps that apply now. */
 const anchorCtx = (w: Work, pl: PlayerState, blend: Blend) => {
   const st = w.anchor!
-  const f = teamOf(w.cfg, pl.side).formation
-  const geo = slotGeometry(f, FORMATIONS[f], pl.slot)
-  const drift = geo.group === "GK" ? { u: 0, y: 0 } : driftFor(st, pl.side, pl.id, blend.lamU, blend.lamY, blend.from, blend.to, geo.sigma)
+  const c = posTick(w)
+  const geo = c.geo[pl.side][pl.slot]!
+  const drift =
+    geo.group === "GK"
+      ? { u: 0, y: 0 }
+      : blend.mix
+        ? driftFor(st, pl.side, pl.id, outShare(blend.mix.u), outShare(blend.mix.y), "in", "out", geo.sigma)
+        : driftFor(st, pl.side, pl.id, blend.lamU, blend.lamY, blend.from, blend.to, geo.sigma)
   return {
     pos: w.p.positioning,
-    input: { blend, drift, lastDefU: lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side))), vsKeeper: st.teams[other(pl.side)].row === "gk" }
+    input: { blend, drift, lastDefU: c.lastDefU[pl.side], vsKeeper: st.teams[other(pl.side)].row === "gk" }
   }
 }
 
-/** Where a player's shape puts him in open play (also the marking anchor): the rule table against the lagged ball, or the old template. */
+/**
+ * Where a player's shape puts him in open play (also the marking anchor): the rule table against the lagged ball (the
+ * keeper against the current ball: his line rule is measured on it), or the old template.
+ */
 const shapeTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, inPossession: boolean): Vec2 => {
   const team = teamOf(w.cfg, pl.side)
   const st = w.anchor
   if (w.p.positioning.rule <= 0 || !st)
     return anchorFor(team.formation, pl.slot, pl.side, w.period, ballFlat, team.style, inPossession, w.p.shape)
-  const blend = blendFor(st.teams[pl.side], groupFor(w, pl), w.tick, w.dt, w.p.positioning)
-  return anchorFor(team.formation, pl.slot, pl.side, w.period, lagBall(st), team.style, inPossession, w.p.shape, anchorCtx(w, pl, blend))
+  const group = groupFor(w, pl)
+  const blend = blendFor(st.teams[pl.side], group, w.tick, w.dt, w.p.positioning)
+  const ball = group === "GK" ? ballFlat : lagBall(st)
+  return anchorFor(team.formation, pl.slot, pl.side, w.period, ball, team.style, inPossession, w.p.shape, anchorCtx(w, pl, blend))
+}
+
+/** For tests: the open-play shape target the seam gives `playerId` at state `s` (its tick, anchor state and positions). */
+export const shapeTargetAt = (s: MatchState, playerId: string): Vec2 => {
+  const w = new Work(s)
+  w.tick = s.tick
+  const pl = w.player(playerId)
+  const pos = w.possession
+  const possSide = pos.kind === "owned" ? w.player(pos.playerId).side : pos.kind === "in_flight" ? pos.flight.side : null
+  return shapeTarget(w, pl, { x: w.ball.pos.x, y: w.ball.pos.y }, possSide === pl.side)
 }
 
 /** A player's spot while a restart (other than a kickoff) is set up: the rule table settled at the restart spot, or the old template.

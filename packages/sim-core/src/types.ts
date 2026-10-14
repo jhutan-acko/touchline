@@ -1,5 +1,5 @@
 import type { Period, Side, Vec2, Vec3 } from "./geometry.js"
-import type { Params, ShapeRow } from "./params.js"
+import type { Params, PosGroup, ShapeRow } from "./params.js"
 import type { RngState } from "./rng.js"
 import type { Script, ScriptEntry } from "./script.js"
 
@@ -291,6 +291,12 @@ export interface SubsState {
   readonly used: ReadonlyArray<string>
 }
 
+/**
+ * Weights over the spots a team blends between (they sum to 1): the three table rows, and outK, the "out" row with its
+ * depth capped at positioning.vsKeeperCapU while the other team's keeper has the ball.
+ */
+export interface RowMix { readonly in: number; readonly out: number; readonly gk: number; readonly outK: number }
+
 /** One team's positioning state (realism v2, P2): its row, the row it is blending out of since `since`, and its team-common drift. */
 export interface TeamShapeState {
   readonly row: ShapeRow
@@ -299,6 +305,13 @@ export interface TeamShapeState {
   readonly since: number
   /** Team-common drift in the team frame (u along the attack, y toward the team's left when attacking), metres. */
   readonly drift: { readonly u: number; readonly y: number }
+  /** The row is "out" and the other team's keeper has the ball: the target is outK (absent: false). */
+  readonly capped?: boolean
+  /**
+   * Per group, where the blend stood at the last switch (depth u and lateral y mixes); the new blend starts from there,
+   * so a flip partway through a blend is continuous. Absent: the blend starts from `prev` alone.
+   */
+  readonly start?: Readonly<Record<PosGroup, { readonly u: RowMix; readonly y: RowMix }>>
 }
 
 /** One outfield player's drift in the team frame: match offsets with and without the ball, and a slow drift. s is + toward his own touchline (y_team for central slots). */
@@ -314,6 +327,10 @@ export interface AnchorState {
   readonly ballLag: ReadonlyArray<Vec2>
   readonly teams: Readonly<Record<Side, TeamShapeState>>
   readonly players: Readonly<Record<string, PlayerDriftState>>
+  /** A side that has won the ball but not yet held it for positioning.commitS (the rows keep the old side), and since when. */
+  readonly pending?: { readonly side: Side; readonly since: number }
+  /** The period the ball ring was last filled in (a new period refills it). */
+  readonly period?: Period
 }
 
 /** A what-if instruction: at their next decision, this player plays the pass to `receiverId` (see whatif.ts). */
