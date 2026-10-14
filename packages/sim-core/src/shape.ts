@@ -1,3 +1,4 @@
+import { ruleAnchor, type AnchorInput, type Positioning } from "./anchor.js"
 import { clamp, dirOf, PITCH, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { FormationName, Role, TeamStyle } from "./types.js"
 
@@ -75,8 +76,14 @@ export const anchorFor = (
   ball: Vec2,
   style: TeamStyle,
   inPossession: boolean,
-  spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number; readonly fwdDropM?: number } = { width: 1, depth: 1 }
+  spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number; readonly fwdDropM?: number } = { width: 1, depth: 1 },
+  /**
+   * With the rule table switched on (positioning.rule 1): this player's blend, drift and caps (anchor.ts). `inPossession`
+   * is then ignored (the blend names the rows) and `ball` is the ball as anchors read it.
+   */
+  ctx?: { readonly pos: Positioning; readonly input: AnchorInput }
 ): Vec2 => {
+  if (ctx && ctx.pos.rule > 0) return ruleAnchor(formation, FORMATIONS[formation], slot, side, period, ball, style, spread, ctx.pos, ctx.input)
   const s = FORMATIONS[formation][slot]!
   const d = dirOf(side, period)
   const bx = ball.x * d
