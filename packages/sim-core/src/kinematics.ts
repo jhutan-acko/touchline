@@ -136,3 +136,17 @@ export const interceptPoint = (chaser: Vec2, speed: number, target: Vec2, target
   if (!Number.isFinite(t) || t <= 0) return target
   return add(target, scale(targetVel, t))
 }
+
+/** Relaxed shape motion (realism v2 A0): head for the spot at the speed that arrives in arriveS, never above cap x vmax. */
+export const relaxedSpeed = (distM: number, vmax: number, cap: number, arriveS: number): number => Math.min(cap * vmax, distM / arriveS)
+
+/** Tiring on new high-intensity triggers (realism v2 F1): 0.8 + 0.2 energy, times the recent-load damping (never below loadFloor). */
+export const tiringFactor = (energy: number, load: number, f: Params["fatigue"]): number =>
+  (0.8 + 0.2 * energy) * Math.max(f.loadFloor, 1 - f.loadDamp * Math.max(0, load / f.loadFreeM - 1))
+
+/** e^-x for the small per-tick x of the load window, as a fifth-order Taylor series: plain arithmetic, so replays stay bit-identical across engines. */
+const decayFactor = (x: number): number => 1 - x * (1 - (x / 2) * (1 - (x / 3) * (1 - (x / 4) * (1 - x / 5))))
+
+/** Recent high-intensity metres: an exponential window of loadWindowS over distance run at hiSpeedMs or faster. */
+export const loadAfter = (load: number, speed: number, dt: number, f: Params["fatigue"]): number =>
+  load * decayFactor(dt / f.loadWindowS) + (speed >= f.hiSpeedMs ? speed * dt : 0)
