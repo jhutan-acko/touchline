@@ -58,6 +58,7 @@ import {
   type TeamSetup
 } from "./types.js"
 // ---- P2 imports, movement seam (plan 8b Task 5 inserts below this line)
+import { loadAfter, relaxedSpeed, tiringFactor } from "./kinematics.js"
 
 // ---- P2 imports, positioning seam (plan 8b Task 7 inserts below this line)
 
@@ -1245,17 +1246,26 @@ const moveAll = (w: Work): void => {
 
 // ================================================================ P2 movement seam (plan 8b Task 5 owns this block)
 
-/** Speed cap moving into shape. */
-const shapeSpeedCap = (w: Work, _pl: PlayerState, _target: Vec2, vmax: number): number => vmax * w.p.movement.shapeSpeedShare
+/** Speed cap moving into shape: relaxed (A0) arrives in relaxArriveS at up to relaxCap of top speed; else shapeSpeedShare. */
+const shapeSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>
+  w.p.movement.relaxed > 0 ? relaxedSpeed(dist(pl.pos, target), vmax, w.p.movement.relaxCap, w.p.movement.relaxArriveS) : vmax * w.p.movement.shapeSpeedShare
 
-/** Speed cap moving to a marking spot. */
-const markSpeedCap = (w: Work, _pl: PlayerState, _target: Vec2, vmax: number): number => vmax * w.p.movement.shapeSpeedShare
+/** Speed cap moving to a marking spot: relaxed only with relaxMarks (the spec keeps marking speeds). */
+const markSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>
+  w.p.movement.relaxed > 0 && w.p.movement.relaxMarks > 0
+    ? relaxedSpeed(dist(pl.pos, target), vmax, w.p.movement.relaxCap, w.p.movement.relaxArriveS)
+    : vmax * w.p.movement.shapeSpeedShare
 
-/** Multiplier on new high-intensity triggers (pressing, runs in behind): 1 means no tiring. */
-const triggerFactor = (_w: Work, _pl: PlayerState): number => 1
+/** Multiplier on new high-intensity triggers (pressing, runs in behind): tiring (F1), else 1. */
+const triggerFactor = (w: Work, pl: PlayerState): number =>
+  w.p.fatigue.tiring > 0 ? tiringFactor(pl.energy, w.load?.[pl.id] ?? 0, w.p.fatigue) : 1
 
-/** After a player moves: track his recent high-intensity running. */
-const trackLoad = (_w: Work, _id: string, _speed: number): void => {}
+/** After a player moves: his recent high-intensity metres (only with tiring on). */
+const trackLoad = (w: Work, id: string, speed: number): void => {
+  if (w.p.fatigue.tiring <= 0) return
+  const load = (w.load ??= {})
+  load[id] = loadAfter(load[id] ?? 0, speed, w.dt, w.p.fatigue)
+}
 
 // ================================================================ end of P2 movement seam
 
