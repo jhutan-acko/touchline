@@ -93,7 +93,7 @@ describe("nudges raise the scripted outcome's rate", () => {
     const base = 1 - rate()
     expect(1 - rate(one("keeper_heroics"))).toBeLessThan(base * 0.6)
     expect(1 - rate(one("keeper_howler"))).toBeGreaterThan(base * 1.5)
-  })
+  }, 300_000) // 36 simulated matches: past the default 120 s on a busy machine
   it("defensive error: the team's defenders mis-hit far more passes in their own half", () => {
     const cfg = cfgFor(1)
     const defenders = new Set([...cfg.home.starters, ...(cfg.home.bench ?? [])].filter((p) => ["CB", "FB", "DM"].includes(p.role)).map((p) => p.id))

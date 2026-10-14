@@ -34,8 +34,9 @@ describe("scenario runner", () => {
     expect(run.steps.at(-1)!.events.at(-1)!.type).toBe("match_end")
   })
   it("retries a window that missed its target, then forces it; forced events are marked scripted", () => {
-    // Five goals in fifteen minutes almost never happens on its own.
-    const script: Script = { name: "t", entries: [{ window: [30, 45], team: "home", effect: "goal", count: 5 }] }
+    // Eight goals in fifteen minutes never happens on its own, even with the goal nudge (five did on seed 8 once the
+    // nudge was raised and the engine recalibrated for realism v2 P1).
+    const script: Script = { name: "t", entries: [{ window: [30, 45], team: "home", effect: "goal", count: 8 }] }
     const run = runScript(makeConfig(8, { params, script }), { retries: 2 })
     const w = run.windows[0]!
     expect(w.attempts).toBe(4)

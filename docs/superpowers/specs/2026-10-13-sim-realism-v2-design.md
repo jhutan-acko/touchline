@@ -393,43 +393,63 @@ Source: `finalthird-report.md`.
 ## Results: P1 (2026-10-14)
 
 Switched on in `DEFAULT_PARAMS`: teams switch ends, `keeper.handsRule` 1 (`feetPressFactor` 0.25),
-`defending.cautionPerMatch` 1.7, `bookedFoulFactor` 0.5, `bookedYellowFactor` 0.6. The hold in hands is drawn from
-**5–10 s**, not the 5–12 s planned above: at 5–12 s keepers stood still with the ball longer than real keepers do (seed
-11: 20.1 s in 7 stretches, against a real maximum of 15.8 s; over seeds 11-16 a mean of 11.5 s against a real mean of
-7.8 s), and the still-carrier test failed. At 5–10 s: 8.4, 0, 7.7, 6.0, 4.5 and 0 s.
+`defending.cautionPerMatch` 1.7, `bookedFoulFactor` 0.5, `bookedYellowFactor` 0.6.
 
-Recalibrated twice with the 5–12 s hold (12 matches, 1 round each). The first run continued from the previous knobs
-(`yellow_per_foul` 0.375) and stopped at 0.325, with 7.7 cards per match (loss 19.60). The second started
-`yellow_per_foul` at 0.15, as planned, and ended at loss 17.81. Knobs that moved in the second run: `cross_bias`
-0.625 -> 0.125, `exec_scale` 0.85 -> 1.15, `deflect_behind` 1.125 -> 1.375, `save_b0` 1.925 -> 2.175. In the first:
-`xg_b0` -0.75 -> -0.5, `aim_noise` 1.35 -> 1.15, `fwd_drop` 0 -> 2.5. The hold then went to 5–10 s without another
-calibration (the gate below is on the final parameters). C1, C2 and C4 come from `docs/realism/realism-report.md` (16
-matches, seeds 2000-2015). C3, sendings-off and penalties come from `pnpm realism:deep` (64 matches, seeds 2000-2063).
+**Keeper hold, two changes from the plan above.** At 5–12 s, keepers stood still with the ball longer than real keepers
+do. Seed 11 had 20.1 s in 7 stretches, against a real maximum of 15.8 s and 5 stretches. The cause: in his hands the
+keeper walks to his release spot (14 m out) and then stands there until the hold ends. So:
 
-- **Gate: MET.** Loss 20.71 against `GATE_LOSS` 30 (it was 22.9 with the behaviours off). Drift against the refreshed
-  baseline is 0.
-- **C1: NOT MET.** Of the original 19, 13 are within 1 SD (needs 16) and 18 within 2 SD (needs 19). Outside 2 SD: pass
-  completion (z -2.21).
-- **C2: NOT MET.** Fouls z -1.23 is outside 1 SD. Free kicks +0.38, goals -0.52 and shots on target share -0.25 are within.
-- **C3: NOT MET.** The team shot-share SD over 64 matches is 0.370 (needs 0.18 or less; real 0.090). It was already about
-  0.34 before P1 (previous parameters, keeper and caution switches off, seeds 2000-2015). In most matches one side takes
-  most of the shots (30-3, 31-0, 41-1). This is the territory problem P2 targets.
-- **C4: NOT MET.** Width out of possession is z +3.03. The other six are within the band: width in possession +0.17,
-  defending length +1.77, line height -0.12, ball pressure -0.88, support within 15 m -0.89, free space +1.38.
-- **Sendings-off: NOT MET (just).** 0.16 per match (target about 0.2-0.3; real 0.29; was 0.89). It was 0.23 with the 5–12 s
-  hold.
-- **Penalties: MET.** 0.38 per match against 0.43 real.
-- **Cards:** 4.1 per match on 64 matches (real 5.3, z -0.35), against about 5 planned.
-- **Keeper distribution: MET.** Open-play shots within 20 s after the conceding team's keeper distribution are 8.6 % of
-  shots (38 of 443, 16 matches), down from 25 % (real 7.6 %).
-- **`yellowPerFoul`: MET.** 0.15 (expected about 0.15).
+- the hold is drawn from **5–10 s**;
+- a keeper who is already at his release spot lets the ball go once the 5 s minimum has passed (`step.ts`
+  `ownerDecision`).
+
+Without the second change, the recalibrated parameters still put seed 11 at 17.2 s, with one 8.6 s stretch.
+
+**Calibration.** Four runs, each 12 matches and 1 round:
+
+| Run | Engine | Start | Loss |
+|---|---|---|---|
+| 1 | 5–12 s hold | previous knobs | 19.60 (`yellow_per_foul` stopped at 0.325, 7.7 cards per match) |
+| 2 | 5–12 s hold | `yellow_per_foul` 0.15 | 17.81 |
+| 3 | 5–10 s hold | run 2 | 18.47; gate 19.28. Kept C2 and sendings-off in band but failed the keeper still-time check |
+| 4 | final engine | run 3 | 21.69 at the start -> **19.27**, the committed one |
+
+Knobs that moved in run 4: `long_bias` 2.25 -> 2.75, `cross_bias` 0.625 -> 0.125, `xg_b0` -0.5 -> -0.75,
+`yellow_per_foul` 0.15 -> 0.2, `deflect_behind` 1.375 -> 1.625. `foul_per_tackle` went 0.405 -> 0.465 in run 3.
+
+**Sources.** C1, C2 and C4 come from `docs/realism/realism-report.md` (16 matches, seeds 2000-2015). C3, sendings-off and
+penalties come from `pnpm realism:deep` (64 matches, seeds 2000-2063).
+
+- **Gate: MET.** Loss 21.23 against `GATE_LOSS` 30, drift 0 against the refreshed baseline. Before P1 (behaviours off)
+  it was 22.9.
+- **C1: NOT MET.**
+  - Of the original 19, 15 are within 1 SD (needs 16) and 18 within 2 SD (needs 19).
+  - Outside 2 SD: pass completion (z -2.53).
+  - Within 2 SD but not 1: passes +1.19, blocked shots -1.35, ball in play -1.95.
+- **C2: MET.** Free kicks z +0.58, fouls -0.69, goals -0.32, shots on target share +0.17.
+- **C3: NOT MET.**
+  - Team shot-share SD over 64 matches is 0.383 (needs 0.18 or less; real 0.090).
+  - It was already about 0.34 before P1 (previous parameters, keeper and caution switches off, seeds 2000-2015).
+  - In most matches one side takes most of the shots (30-3, 31-0, 41-1). This is the territory problem P2 targets.
+- **C4: NOT MET.** Width out of possession is z +3.04. The other six are within the band: width in possession +0.13,
+  defending length +1.84, line height +0.12, ball pressure -0.90, support within 15 m -1.15, free space +1.57.
+- **Sendings-off: NOT MET (just above).**
+  - 0.34 per match (target about 0.2-0.3; real 0.29; 0.89 before P1).
+  - Calibration run 3 gave 0.22, but failed the keeper still-time check. The 5–10 s hold without recalibration gave 0.16.
+- **Penalties: MET.** 0.45 per match against 0.43 real.
+- **Cards: MET.** 5.3 per match on 64 matches (real 5.3).
+- **Keeper distribution: MET.** Open-play shots within 20 s after the conceding team's keeper distribution are 9.0 % of
+  shots (34 of 379, 16 matches). That is down from 25 % (real 7.6 %).
+- **`yellowPerFoul`: 0.2** (expected about 0.15). Conduct cautions supply the rest of the cards.
 - **Keeper still with the ball: MET.** Each test match is within the real bounds (at most 5 stretches and 15.8 s).
-- **`feetPressFactor` 0.25; G2 at-feet pressure: NOT MET.** An opponent is within 5 m at 44 % of the keeper's open-play
-  releases from his feet (16 matches, measured before the recalibration; target about 12.6 %). The factor barely moves
-  it: 56 % at 1, 55 % at 0.5, 44 % at 0.25, 41 % at 0.1, 40 % at 0 (no pressing at all). The rest are strikers already
-  standing near him when the back pass arrives (holding, running in behind, or still pressing from before). Lowering
-  the factor further doesn't help; fixing it needs positioning work (P2).
-- **Keeper claims:** 20 claims and 3 punches on the test configs' seeds 1-40 (16 and 4 before P1).
-- **Scenario nudge:** `script.goalShotLogit` 1.5 -> 1.75. With the switches on, `late_comeback` reached its target
-  unforced in 17 of seeds 1-20 (8 of 1-10, below the 90 % this design asks for). At 1.75 every built-in scenario does in
-  20 of 20. Unscripted matches, and so the gate, are unaffected.
+- **`feetPressFactor` 0.25; G2 at-feet pressure: NOT MET.**
+  - An opponent is within 5 m at 44 % of the keeper's open-play releases from his feet (16 matches, measured before the
+    recalibration; target about 12.6 %).
+  - The factor barely moves it: 56 % at 1, 55 % at 0.5, 44 % at 0.25, 41 % at 0.1, 40 % at 0 (no pressing at all).
+  - The rest are strikers already standing near him when the back pass arrives (holding, running in behind, or still
+    pressing from before). Lowering the factor further doesn't help; fixing it needs positioning work (P2).
+- **Keeper claims:** 25 claims and 8 punches on the test configs' seeds 1-40 (16 and 4 before P1).
+- **Scenario nudge:** `script.goalShotLogit` 1.5 -> 1.75.
+  - With the switches on, `late_comeback` reached its target unforced in 17 of seeds 1-20 (8 of 1-10, below the 90 % this
+    design asks for).
+  - At 1.75 every built-in scenario does in 20 of 20. Unscripted matches, and so the gate, are unaffected.

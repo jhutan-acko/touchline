@@ -836,7 +836,11 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
   if (owner.role === "GK" && !restart) {
     const rule = w.p.keeper.handsRule > 0
     const holdTicks = rule ? (poss.inHands ? (poss.holdTicks ?? 0) : 0) : Math.round(w.p.timing.keeperHoldS / w.dt)
-    if (w.tick - poss.since < holdTicks) return
+    // In his hands he walks to his release spot and lets it go there once the shortest hold has passed: he does not
+    // stand still on the spot for the rest of a long hold (real keepers stand still with the ball at most about 8 s).
+    const atSpot = rule && poss.inHands === true && keeperAtReleaseSpot(w, owner)
+    const minTicks = Math.round(w.p.keeper.handsHoldS[0] / w.dt)
+    if (w.tick - poss.since < (atSpot ? Math.min(holdTicks, minTicks) : holdTicks)) return
   }
   // Under the new rule a keeper's hold is over once he decides: from here he plays it from his feet.
   w.possession = w.p.keeper.handsRule > 0 ? { ...poss, restart: null, inHands: false } : { ...poss, restart: null }
@@ -1050,6 +1054,11 @@ const ballTick = (w: Work): void => {
 
 /** How far from the goal line a keeper walks with the ball before releasing it (inside the 16.5 m box). */
 const KEEPER_RELEASE_M = 14
+/** A keeper within this distance of his release depth has walked as far as he will with the ball in his hands. */
+const KEEPER_SPOT_M = 1
+
+const keeperAtReleaseSpot = (w: Work, pl: PlayerState): boolean =>
+  attackX(pl.side, pl.pos.x, w.period) >= -(PITCH.halfL - KEEPER_RELEASE_M) - KEEPER_SPOT_M
 
 const moveTarget = (
   w: Work,

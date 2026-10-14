@@ -34,9 +34,9 @@ const runs = Array.from({ length: 16 }, (_, i) => i + 1).map(run)
 // realism regression. To keep a real check on claims, these are the seeds of 1-40 on which a keeper claims (13 claims,
 // 7 punches over all 40 since carriers stopped standing on the ball, 2026-10-10; 14 and 3 before). Re-picked when teams started
 // switching ends at half-time (16 claims, 4 punches over 1-40): the second halves are mirrored, not replayed. Re-picked again
-// when the keeper-in-hands rule (hold 5-10 s) and conduct cautions were switched on and the engine recalibrated (20 claims,
-// 3 punches over 1-40).
-const CLAIM_SEEDS = [2, 9, 11, 12, 14, 17, 21, 23, 26, 27, 28, 29, 33, 34, 38, 40]
+// when the keeper-in-hands rule (hold 5-10 s, released at his spot after 5 s) and conduct cautions were switched on and
+// the engine recalibrated (25 claims, 8 punches over 1-40).
+const CLAIM_SEEDS = [3, 5, 6, 8, 9, 12, 13, 17, 18, 19, 21, 27, 28, 29, 33, 34, 35, 36, 38, 39]
 const claimRuns = CLAIM_SEEDS.map((seed) => runs[seed - 1] ?? run(seed))
 const sideOf = (cfg: MatchConfig, teamId: string | null) => (teamId === cfg.home.id ? "home" : "away")
 /** True when (x, y) is inside the penalty area that `side` defends. */
