@@ -61,6 +61,10 @@ import {
 import { loadAfter, relaxedSpeed, tiringFactor } from "./kinematics.js"
 
 // ---- P2 imports, positioning seam (plan 8b Task 7 inserts below this line)
+import { advanceRows, blendFor, initAnchorState, lagBall, rowFor, settled, slotGeometry, type Blend } from "./anchor.js"
+import { advanceDrift, driftFor } from "./drift.js"
+import type { PosGroup, ShapeRow } from "./params.js"
+import { FORMATIONS } from "./shape.js"
 
 
 const HALF_TIME_MS = 15 * 60 * 1000
@@ -1079,20 +1083,72 @@ const keeperAtReleaseSpot = (w: Work, pl: PlayerState): boolean =>
 
 // ================================================================ P2 positioning seam (plan 8b Task 7 owns this block)
 
-/** Where a player's shape puts him in open play (also the marking anchor). The old template until Task 7. */
+/** True while a restart taken by the team's own keeper (a goal kick) is being set up: the build-up row applies, as in his hands (Ruling 7). */
+const keeperRestart = (w: Work): boolean => {
+  const ph = w.phase
+  return ph.kind === "restart" && ph.restart !== "kickoff" && takerFor(w, ph).role === "GK"
+}
+
+/** This tick's row for each team: with the ball, without it, or with its own keeper holding it or restarting (G4); loose and dead balls keep the rows. */
+const rowsNow = (w: Work): Record<Side, ShapeRow> => {
+  const pos = w.possession
+  const owner = pos.kind === "owned" ? w.player(pos.playerId) : null
+  const possSide: Side | null = owner ? owner.side : pos.kind === "in_flight" ? pos.flight.side : w.phase.kind === "restart" ? w.phase.side : null
+  const keeper = owner ? owner.role === "GK" : keeperRestart(w)
+  const prev = w.anchor?.teams
+  return {
+    home: rowFor("home", possSide, keeper, prev?.home.row ?? (possSide === "away" ? "out" : "in")),
+    away: rowFor("away", possSide, keeper, prev?.away.row ?? (possSide === "home" ? "out" : "in"))
+  }
+}
+
+const groupFor = (w: Work, pl: PlayerState): PosGroup => {
+  const f = teamOf(w.cfg, pl.side).formation
+  return slotGeometry(f, FORMATIONS[f], pl.slot).group
+}
+
+/** Once per tick, before anyone moves: the team rows and ball ring (anchor.ts), then drift (drift.ts). Nothing with the rule off. */
+const advancePositioning = (w: Work): void => {
+  const pos = w.p.positioning
+  if (pos.rule <= 0) return
+  const ball = { x: w.ball.pos.x, y: w.ball.pos.y }
+  const rows = rowsNow(w)
+  const s = advanceRows(w.anchor ?? initAnchorState(ball, w.dt, pos, rows), w.tick, ball, rows)
+  const outfield = w.active().filter((p) => p.role !== "GK").map((p) => ({ id: p.id, group: groupFor(w, p) }))
+  w.anchor = advanceDrift(s, outfield, w.dt, pos.drift, w.rng.drift)
+}
+
+/** The rule-table context for a player: his blend, his drift (none for keepers) and the caps that apply now. */
+const anchorCtx = (w: Work, pl: PlayerState, blend: Blend) => {
+  const st = w.anchor!
+  const f = teamOf(w.cfg, pl.side).formation
+  const geo = slotGeometry(f, FORMATIONS[f], pl.slot)
+  const drift = geo.group === "GK" ? { u: 0, y: 0 } : driftFor(st, pl.side, pl.id, blend.lamU, blend.lamY, blend.from, blend.to, geo.sigma)
+  return {
+    pos: w.p.positioning,
+    input: { blend, drift, lastDefU: lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side))), vsKeeper: st.teams[other(pl.side)].row === "gk" }
+  }
+}
+
+/** Where a player's shape puts him in open play (also the marking anchor): the rule table against the lagged ball, or the old template. */
 const shapeTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, inPossession: boolean): Vec2 => {
   const team = teamOf(w.cfg, pl.side)
-  return anchorFor(team.formation, pl.slot, pl.side, w.period, ballFlat, team.style, inPossession, w.p.shape)
+  const st = w.anchor
+  if (w.p.positioning.rule <= 0 || !st)
+    return anchorFor(team.formation, pl.slot, pl.side, w.period, ballFlat, team.style, inPossession, w.p.shape)
+  const blend = blendFor(st.teams[pl.side], groupFor(w, pl), w.tick, w.dt, w.p.positioning)
+  return anchorFor(team.formation, pl.slot, pl.side, w.period, lagBall(st), team.style, inPossession, w.p.shape, anchorCtx(w, pl, blend))
 }
 
-/** A player's spot while a restart (other than a kickoff) is set up, with the ball at the restart spot. */
+/** A player's spot while a restart (other than a kickoff) is set up: the rule table settled at the restart spot, or the old template.
+ *  The taking side settles in the build-up row when its own keeper takes it (Ruling 7), else "in"; the other side "out". */
 const restartTarget = (w: Work, pl: PlayerState, at: Vec2, inPossession: boolean): Vec2 => {
   const team = teamOf(w.cfg, pl.side)
-  return anchorFor(team.formation, pl.slot, pl.side, w.period, at, team.style, inPossession, w.p.shape)
+  if (w.p.positioning.rule <= 0 || !w.anchor)
+    return anchorFor(team.formation, pl.slot, pl.side, w.period, at, team.style, inPossession, w.p.shape)
+  const row: ShapeRow = inPossession ? (keeperRestart(w) ? "gk" : "in") : "out"
+  return anchorFor(team.formation, pl.slot, pl.side, w.period, at, team.style, inPossession, w.p.shape, anchorCtx(w, pl, settled(row)))
 }
-
-/** Once per tick, before anyone moves: advance the positioning state (team rows, ball lag, drift). Nothing until Task 7. */
-const advancePositioning = (_w: Work): void => {}
 
 // ================================================================ end of P2 positioning seam
 
