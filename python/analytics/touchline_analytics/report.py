@@ -287,6 +287,10 @@ def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict |
         from .carriers import still_carriers
 
         lines += carriers_section([still_carriers(simulated_carrier_halves(d, roles)) for d in run_dirs], carriers)
+    if roles and "bands" in targets:
+        from .bands import bands_section, match_bands
+
+        lines += bands_section([match_bands(d, roles) for d in run_dirs], targets["bands"])
     lines += balance_section([balance(d) for d in run_dirs])
     return "\n".join(lines)
 

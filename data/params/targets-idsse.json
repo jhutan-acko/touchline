@@ -200,5 +200,20 @@
     2e-05
    ]
   }
+ },
+ "bands": {
+  "source": "realism v2 analysis 2026-10-13 (physical-report.md, dominance-report.md): IDSSE, 7 matches, full-match outfielders; aggregates only",
+  "walk_m": 3501,
+  "jog_m": 3883,
+  "run_m": 1825,
+  "hsr_m": 521,
+  "sprint_m": 173,
+  "sprints": 8.4,
+  "accelerations": 50,
+  "live_m_per_min": 147,
+  "dead_m_per_min": 65,
+  "territory_sd_m": 1.9,
+  "centroid_in_m": 3.9,
+  "centroid_out_m": -9.5
  }
 }

@@ -121,6 +121,18 @@ def build(root: Path, tracking: list[str], spatial: list[str]) -> dict:
     }
 
 
+# Blocks copied by hand from the 2026-10-13 analysis (aggregates only), which build() does not measure.
+HAND_BLOCKS = ("bands",)
+
+
+def keep_hand_blocks(new: dict, old_path: Path) -> dict:
+    """Carry the hand-copied blocks of the existing targets file over into a freshly built one."""
+    if not old_path.exists():
+        return new
+    old = json.loads(old_path.read_text())
+    return {**new, **{k: old[k] for k in HAND_BLOCKS if k in old}}
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -130,7 +142,7 @@ if __name__ == "__main__":
     ap.add_argument("--tracking", nargs="*", default=["J03WPY"], help="match ids whose tracking gives the in-play, distance and speed targets")
     ap.add_argument("--spatial", nargs="*", default=list(MATCHES), help="match ids whose tracking gives the spatial targets")
     a = ap.parse_args()
-    t = build(Path(a.root), a.tracking, a.spatial)
+    t = keep_hand_blocks(build(Path(a.root), a.tracking, a.spatial), Path(a.out))
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(t, indent=1) + "\n")
     print(json.dumps(t["metrics"], indent=1))
