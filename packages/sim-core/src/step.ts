@@ -387,7 +387,7 @@ const makeSubs = (w: Work, side: Side, n: number, halfTime: boolean): number => 
   const outgoing = w
     .active(side)
     .filter((pl) => pl.role !== "GK" && !st.used.includes(pl.id))
-    .map((pl) => ({ pl, score: 1 - pl.energy + 0.25 * pl.yellow + 0.05 * rng.uniform() }))
+    .map((pl) => ({ pl, score: (1 - pl.energy + 0.25 * pl.yellow + 0.05 * rng.uniform()) * w.p.substitutions.roleWeights[pl.role as Exclude<Role, "GK">] }))
     .sort((a, b) => b.score - a.score)
   let made = 0
   const used = [...st.used]
