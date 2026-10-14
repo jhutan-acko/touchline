@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { advanceDrift, driftFor, newPlayerDrift, ouStep } from "../src/drift.js"
+import { advanceDrift, driftFor, newPlayerDrift, ouStep, smoothOuStep } from "../src/drift.js"
 import { DEFAULT_PARAMS as P } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
 import type { AnchorState } from "../src/types.js"
@@ -84,4 +84,88 @@ describe("drift (A3)", () => {
     expect(right.y).toBeCloseTo(2 - (1 + 0.25 * 2 + 0.25), 9)
     expect(driftFor(s, "home", "nobody", 1, 1, "in", "in", 0)).toEqual({ u: 1, y: 2 })
   })
+  // ---- Task 7d: smoothed drift (a raw OU through a first-order low-pass of smoothS)
+  const acf = (xs: number[], lag: number) => {
+    const m = xs.reduce((a, b) => a + b, 0) / xs.length
+    let num = 0
+    let den = 0
+    for (let i = 0; i + lag < xs.length; i++) num += (xs[i]! - m) * (xs[i + lag]! - m)
+    for (const v of xs) den += (v - m) ** 2
+    return num / den
+  }
+  const incSd = (xs: number[]) => sdOf(xs.slice(1).map((v, i) => v - xs[i]!))
+
+  it("a smoothed OU keeps its stationary SD and time constant at 10 Hz and at 25 Hz", () => {
+    for (const [sd, tau] of [[9, 8], [5.4, 5]] as const)
+      for (const dt of [0.1, 0.04]) {
+        const rng = new Rng(seedRng(11))
+        const xs: number[] = []
+        let st = { x: 0, z: 0 }
+        for (let i = 0; i < Math.round(20000 / dt); i++) xs.push((st = smoothOuStep(st.x, st.z, sd, tau, d.smoothS, dt, rng)).z)
+        expect(sdOf(xs)).toBeGreaterThan(sd * 0.92)
+        expect(sdOf(xs)).toBeLessThan(sd * 1.08)
+        const r = acf(xs, Math.round(tau / dt))
+        expect(r).toBeGreaterThan(Math.exp(-1) - 0.08)
+        expect(r).toBeLessThan(Math.exp(-1) + 0.08)
+      }
+  }, 120_000)
+
+  it("a smoothed OU moves little per tick: increment SD under 0.1 m at 25 Hz for players (team drift under 0.15 m), a fraction of the plain OU's", () => {
+    expect(d.smoothS).toBeGreaterThan(0)
+    const dt = 0.04
+    const cases: Array<[number, number, number]> = [
+      [d.teamUSdM, d.teamUTauS, 0.15],
+      [d.teamYSdM, d.teamYTauS, 0.15],
+      [d.playerUSdM, d.playerUTauS, 0.1],
+      [d.playerSSdM.W, d.playerSTauS.W, 0.1],
+      [d.playerSSdM.CB, d.playerSTauS.CB, 0.1]
+    ]
+    for (const [sd, tau, bound] of cases) {
+      const rng = new Rng(seedRng(12))
+      const zs: number[] = []
+      const os: number[] = []
+      let st = { x: 0, z: 0 }
+      let o = 0
+      for (let i = 0; i < 100_000; i++) {
+        zs.push((st = smoothOuStep(st.x, st.z, sd, tau, d.smoothS, dt, rng)).z)
+        os.push((o = ouStep(o, sd, tau, dt, rng)))
+      }
+      expect(incSd(zs)).toBeLessThan(bound)
+      // Theory: about sd dt / sqrt(smoothS (tau - smoothS)), against sd sqrt(2 dt / tau) for the plain OU.
+      expect(incSd(zs)).toBeLessThan(incSd(os) * 0.2)
+      expect(incSd(zs) / ((sd * dt) / Math.sqrt(d.smoothS * (tau - d.smoothS)))).toBeGreaterThan(0.9)
+      expect(incSd(zs) / ((sd * dt) / Math.sqrt(d.smoothS * (tau - d.smoothS)))).toBeLessThan(1.1)
+    }
+  }, 120_000)
+
+  it("a smoothed OU always draws two normals; smoothS 0 is the plain OU; sd 0 is 0", () => {
+    const rng = new Rng(seedRng(13))
+    const ref = new Rng(seedRng(13))
+    for (const [sd, tau, sm] of [[0, 8, 1], [9, 8, 1], [9, 8, 0], [9, 8, 50]] as const) {
+      smoothOuStep(1, 2, sd, tau, sm, 0.1, rng)
+      ref.normal()
+      ref.normal()
+      expect(rng.state).toEqual(ref.state)
+    }
+    expect(smoothOuStep(1, 2, 0, 8, 1, 0.1, new Rng(seedRng(14)))).toEqual({ x: 0, z: 0 })
+    const plain = ouStep(3, 9, 8, 0.1, new Rng(seedRng(15)))
+    expect(smoothOuStep(3, 3, 9, 8, 0, 0.1, new Rng(seedRng(15)))).toEqual({ x: plain, z: plain })
+  })
+
+  it("advanceDrift's team and player drift are smooth: per-tick change well under the plain OU's at 10 Hz", () => {
+    const rng = new Rng(seedRng(16))
+    let s = empty()
+    const us: number[] = []
+    const ps: number[] = []
+    for (let i = 0; i < 50_000; i++) {
+      s = advanceDrift(s, [{ id: "w", group: "W" }], 0.1, d, rng)
+      us.push(s.teams.home.drift.u)
+      ps.push(s.players.w!.slow.u)
+    }
+    // Plain OU at 10 Hz: 9 sqrt(1 - e^(-0.025)) = 1.41 m (team u), 6 sqrt(1 - e^(-1/60)) = 0.77 m (player u).
+    expect(incSd(us)).toBeLessThan(0.4)
+    expect(incSd(ps)).toBeLessThan(0.2)
+    expect(s.teams.home.driftRaw).toBeDefined()
+    expect(s.players.w!.raw).toBeDefined()
+  }, 120_000)
 })

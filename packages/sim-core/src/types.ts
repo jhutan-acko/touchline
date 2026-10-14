@@ -305,6 +305,8 @@ export interface TeamShapeState {
   readonly since: number
   /** Team-common drift in the team frame (u along the attack, y toward the team's left when attacking), metres. */
   readonly drift: { readonly u: number; readonly y: number }
+  /** The raw OU behind the smoothed team drift (drift.ts smoothOuStep); absent: equal to `drift`. */
+  readonly driftRaw?: { readonly u: number; readonly y: number }
   /** The row is "out" and the other team's keeper has the ball: the target is outK (absent: false). */
   readonly capped?: boolean
   /**
@@ -319,6 +321,8 @@ export interface PlayerDriftState {
   readonly offIn: { readonly u: number; readonly s: number }
   readonly offOut: { readonly u: number; readonly s: number }
   readonly slow: { readonly u: number; readonly s: number }
+  /** The raw OU behind the smoothed slow drift (drift.ts smoothOuStep); absent: equal to `slow`. */
+  readonly raw?: { readonly u: number; readonly s: number }
 }
 
 /** Positioning state (P2): the ball over the last positioning.ballLagS seconds, each team's row and drift, each outfielder's drift. */

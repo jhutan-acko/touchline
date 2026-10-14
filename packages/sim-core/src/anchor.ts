@@ -179,8 +179,12 @@ export const ruleAnchor = (
   const by = ball.y * d
   const geo = slotGeometry(formation, slots, slot)
   const rows = pos.roles[geo.group]
-  const to = input.blend.to
   const mix = mixOf(input.blend, input.vsKeeper)
+  // The forward-line cap (Task 7d): forwards (ST, W, AM) keep lineCapM below the opponents' last defender in the rows
+  // with the ball (in, gk). It caps those row spots, drift included, before blending, so it eases in and out at the
+  // group's rate on a change of possession and follows lastDefU continuously; settled in a row with the ball it is the
+  // hard cap on the drifted spot, as before.
+  const lineCap = input.lastDefU !== null && (geo.group === "ST" || geo.group === "W" || geo.group === "AM") ? input.lastDefU - pos.lineCapM : null
   // Each spot in the mix (at most four rowSpots); outK is the out spot with its depth capped before blending, so the
   // cap eases in and out at the group's rate (keepers are not capped).
   let u = 0
@@ -192,16 +196,18 @@ export const ruleAnchor = (
     if (wu === 0 && wy === 0) continue
     const row: ShapeRow = k === "outK" ? "out" : k
     const spot = row === "out" ? (outSpot ??= rowSpot("out", rows.out, geo, bu, by, style, spread, pos)) : rowSpot(row, rows[row], geo, bu, by, style, spread, pos)
-    u += wu * (k === "outK" && geo.group !== "GK" ? Math.min(spot.u, pos.vsKeeperCapU) : spot.u)
+    let su = k === "outK" && geo.group !== "GK" ? Math.min(spot.u, pos.vsKeeperCapU) : spot.u
+    if (lineCap !== null && (k === "in" || k === "gk")) su = Math.min(su + input.drift.u, lineCap) - input.drift.u
+    u += wu * su
     y += wy * spot.y
   }
   if (geo.group === "GK") {
     const k = keeperSpot(u, y, bu, by, pos)
     return { x: k.u * d, y: k.y * d }
   }
+  // The mix weights sum to 1, so the drift added here is the drift each capped spot above was measured with.
   u += input.drift.u
   y += input.drift.y
-  if (to !== "out" && input.lastDefU !== null && (geo.group === "ST" || geo.group === "W" || geo.group === "AM")) u = Math.min(u, input.lastDefU - pos.lineCapM)
   u = clamp(u, -PITCH.halfL + 4, PITCH.halfL - 3)
   y = clamp(y, -PITCH.halfW + 1.5, PITCH.halfW - 1.5)
   return { x: u * d, y: y * d }
