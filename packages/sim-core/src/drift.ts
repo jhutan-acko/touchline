@@ -11,18 +11,12 @@ import type { AnchorState, PlayerDriftState, TeamShapeState } from "./types.js"
 
 export type DriftParams = Params["positioning"]["drift"]
 
-/** One exact OU step: x e^(-dt/tau) + sd sqrt(1 - e^(-2 dt/tau)) N(0, 1); stationary SD `sd` at any dt. sd <= 0: 0, no draw. */
-export const ouStep = (x: number, sd: number, tauS: number, dt: number, rng: Rng): number => {
-  if (sd <= 0) return 0
-  const k = Math.exp(-dt / tauS)
-  return x * k + sd * Math.sqrt(1 - k * k) * rng.normal()
-}
-
 /** A newcomer's drift: match offsets with and without the ball, and a slow drift started from its stationary spread. */
 export const newPlayerDrift = (group: PosGroup, d: DriftParams, rng: Rng): PlayerDriftState => {
   const draw = (sd: number) => (sd > 0 ? sd * rng.normal() : 0)
   const offIn = { u: draw(d.offsetUSdM[group]), s: draw(d.offsetSSdM[group]) }
   const offOut = { u: draw(d.offsetUSdM[group]), s: draw(d.offsetSSdM[group]) }
+  // GK branches: defensive (the keeper has no depth drift; rows never move a GK by it).
   const slow = { u: group === "GK" ? 0 : draw(d.playerUSdM), s: draw(d.playerSSdM[group]) }
   return { offIn, offOut, slow }
 }
@@ -87,6 +81,7 @@ export const advanceDrift = (s: AnchorState, players: ReadonlyArray<{ readonly i
   for (const { id, group } of players) {
     const cur = out[id] ?? newPlayerDrift(group, d, rng)
     const raw = cur.raw ?? cur.slow
+    // GK: defensive (no depth drift for a keeper, as in newPlayerDrift).
     const u = smoothOuStep(raw.u, cur.slow.u, group === "GK" ? 0 : d.playerUSdM, d.playerUTauS, d.smoothS, dt, rng)
     const sl = smoothOuStep(raw.s, cur.slow.s, d.playerSSdM[group], d.playerSTauS[group], d.smoothS, dt, rng)
     out[id] = { ...cur, slow: { u: u.z, s: sl.z }, raw: { u: u.x, s: sl.x } }

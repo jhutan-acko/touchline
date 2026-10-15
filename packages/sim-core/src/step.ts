@@ -4,6 +4,7 @@ import { buildEvent, round2 } from "./events.js"
 import { behindPoint, clearAway, crossBlocker, DEFLECT_SPEED, deflectLoose, inOwnBox, keeperAction, keeperCanCome } from "./deflect.js"
 import { executeKick, pressureFrom } from "./execute.js"
 import { keeperInHands } from "./keeper.js"
+import { loadAfter, relaxedSpeed, tiringFactor } from "./kinematics.js"
 import { scoringFactor } from "./gamestate.js"
 import {
   add,
@@ -57,15 +58,10 @@ import {
   type SubsState,
   type TeamSetup
 } from "./types.js"
-// ---- P2 imports, movement seam (plan 8b Task 5 inserts below this line)
-import { loadAfter, relaxedSpeed, tiringFactor } from "./kinematics.js"
-
-// ---- P2 imports, positioning seam (plan 8b Task 7 inserts below this line)
 import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, outShare, rowFor, settled, slotGeometry, type Blend, type SlotGeometry } from "./anchor.js"
 import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
-
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -1081,7 +1077,7 @@ const KEEPER_SPOT_M = 1
 const keeperAtReleaseSpot = (w: Work, pl: PlayerState): boolean =>
   attackX(pl.side, pl.pos.x, w.period) >= -(PITCH.halfL - KEEPER_RELEASE_M) - KEEPER_SPOT_M
 
-// ================================================================ P2 positioning seam (plan 8b Task 7 owns this block)
+// ================================================================ P2 positioning
 
 /** True while a restart taken by the team's own keeper (a goal kick) is being set up: the build-up row applies, as in his hands (Ruling 7). */
 const keeperRestart = (w: Work): boolean => {
@@ -1379,7 +1375,7 @@ const moveAll = (w: Work): void => {
   }
 }
 
-// ================================================================ P2 movement seam (plan 8b Task 5 owns this block)
+// ================================================================ P2 movement
 
 /** Speed cap moving into shape: relaxed (A0) arrives in relaxArriveS at up to relaxCap of top speed; else shapeSpeedShare. */
 const shapeSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>

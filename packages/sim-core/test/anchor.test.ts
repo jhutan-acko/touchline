@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, outShare, rowFor, ruleAnchor, settled, slotGeometry, type AnchorInput, type Blend } from "../src/anchor.js"
-import { driftFor } from "../src/drift.js"
+import { advanceDrift, driftFor } from "../src/drift.js"
+import { Rng, seedRng } from "../src/rng.js"
 import type { Side } from "../src/geometry.js"
 import { DEFAULT_PARAMS as P, type ShapeRow } from "../src/params.js"
 import { anchorFor, FORMATIONS } from "../src/shape.js"
@@ -319,5 +320,41 @@ describe("Task 7b fix-ups", () => {
   it("settled blends without a mix are unchanged: blendFor still returns settled() for a team that never switched", () => {
     const b: Blend = blendFor(team("out", "out"), "CB", 99, 0.1, pos)
     expect(b).toEqual(settled("out"))
+  })
+})
+
+describe("mirroring and substitutes", () => {
+  it("ruleAnchor mirrors for the away side and for the second half, in the team frame", () => {
+    const ball = { x: 12, y: 5 }
+    for (const slot of [1, 2, 5, 9]) {
+      const homeFirst = ruleAnchor("4-4-2", FORMATIONS["4-4-2"], slot, "home", "first_half", ball, NEUTRAL, flat, pos, still("in"))
+      const awayFirst = ruleAnchor("4-4-2", FORMATIONS["4-4-2"], slot, "away", "first_half", ball, NEUTRAL, flat, pos, still("in"))
+      const homeSecond = ruleAnchor("4-4-2", FORMATIONS["4-4-2"], slot, "home", "second_half", ball, NEUTRAL, flat, pos, still("in"))
+      // Away first half faces the other way: with the ball mirrored through the centre, the anchor is minus the home one.
+      const mirrored = ruleAnchor("4-4-2", FORMATIONS["4-4-2"], slot, "away", "first_half", { x: -ball.x, y: -ball.y }, NEUTRAL, flat, pos, still("in"))
+      expect(mirrored.x).toBeCloseTo(-homeFirst.x, 9)
+      expect(mirrored.y).toBeCloseTo(-homeFirst.y, 9)
+      // Away in the second half faces home's first-half way: the same ball gives the same anchor.
+      const awaySecond = ruleAnchor("4-4-2", FORMATIONS["4-4-2"], slot, "away", "second_half", ball, NEUTRAL, flat, pos, still("in"))
+      expect(awaySecond.x).toBeCloseTo(homeFirst.x, 9)
+      expect(awaySecond.y).toBeCloseTo(homeFirst.y, 9)
+      // Away first half and home second half face the same way: same team frame, same pitch spot.
+      expect(awayFirst.x).toBeCloseTo(homeSecond.x, 9)
+      expect(awayFirst.y).toBeCloseTo(homeSecond.y, 9)
+    }
+  })
+
+  it("a substitute keeps the slot's group and gets a drift entry", () => {
+    const slot = 2
+    const group = slotGeometry("4-4-2", FORMATIONS["4-4-2"], slot).group
+    const s0 = initAnchorState({ x: 0, y: 0 }, 0.1, pos, { home: "in", away: "out" })
+    const rng = new Rng(seedRng(21))
+    const s1 = advanceDrift(s0, [{ id: "h-starter", group }], 0.1, pos.drift, rng)
+    expect(s1.players["h-sub"]).toBeUndefined()
+    // The substitute takes the same slot, so the engine lists him with the slot's group (groupFor reads geo by slot).
+    const s2 = advanceDrift(s1, [{ id: "h-sub", group: slotGeometry("4-4-2", FORMATIONS["4-4-2"], slot).group }], 0.1, pos.drift, rng)
+    expect(group).toBe("CB")
+    expect(s2.players["h-sub"]).toBeDefined()
+    expect(s2.players["h-starter"]).toEqual(s1.players["h-starter"])
   })
 })

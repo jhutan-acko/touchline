@@ -34,10 +34,11 @@ export const createPool = (league: League, size: number): EvalPool => {
         let next = 0
         let done = 0
         let failed = false
-        const cleanup = () => workers.forEach((w) => { w.off("message", onMsg); w.off("error", onErr) })
+        const cleanup = () => workers.forEach((w) => { w.off("message", onMsg); w.off("error", onErr); w.off("exit", onExit) })
         const fail = (e: unknown) => { if (!failed) { failed = true; cleanup(); reject(e instanceof Error ? e : new Error(String(e))) } }
         const feed = (w: Worker) => { if (next < matches) w.postMessage({ id, params, index: next++ }) }
         const onErr = (e: Error) => fail(e)
+        const onExit = (code: number) => { if (code !== 0) fail(new Error(`worker exited with code ${code}`)) }
         const onMsg = function (this: Worker, r: Reply) {
           if (r.id !== id || failed) return
           if (r.error !== undefined) return fail(new Error(`worker: ${r.error}`))
@@ -46,7 +47,7 @@ export const createPool = (league: League, size: number): EvalPool => {
           feed(this)
         }
         if (matches === 0) return resolve(out)
-        for (const w of workers) { w.on("message", onMsg); w.on("error", onErr); feed(w) }
+        for (const w of workers) { w.on("message", onMsg); w.on("error", onErr); w.on("exit", onExit); feed(w) }
       }),
     close: async () => { await Promise.all(workers.map((w) => w.terminate())) }
   }

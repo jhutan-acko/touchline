@@ -514,7 +514,7 @@ before P1 have their second half played left to right; `readRun`, the advisor an
 
 ### Deviations from the plan
 
-1. **Drift scaled down: `team_drift` 0.25 and `player_drift` 1.**
+1. **Drift: team drift scaled to 0.25; player drift kept at 1.**
    - At the fitted SDs, the smoothed drift moves anchors at an RMS speed of about sd/√(smoothS·(τ − smoothS)): team u
      3.4 m/s and team y 2.7 m/s, plus 1–2 m/s per player.
    - Players chased those anchors: 19.7 km per outfielder, 210 m/min with the ball dead, 623 accelerations per 90.
@@ -522,7 +522,7 @@ before P1 have their second half played left to right; `readRun`, the advisor an
      size they double-count it.
    - The `player_drift` knob was added so the tuner could scale the player processes as well as the team ones.
 2. **`positioning.drift.smoothS` 1 → 3** (capped at τ/3 per process). It was untuned before.
-3. **`movement.relaxMarks` 1 (Ruling 13).** Live running without drift was 172 m/min against 130–150. I switched it on
+3. **`movement.relaxMarks` 1 (Ruling 13).** Live running without drift was 172 m/min against 130–150. It was switched on
    before calibrating, not after.
 4. **Task 8b engine fixes.** Each one's "off" value reproduces the old arithmetic.
    - **`positioning.drift.deadRate` 0.25.** Drift advances at a quarter rate while a restart is set up. Dead-ball running
@@ -538,6 +538,15 @@ before P1 have their second half played left to right; `readRun`, the advisor an
    that fail are in `it.fails`, marked NOT MET (user ruling):
    - relIn > −3 (measured −3.63);
    - deep count while the keeper holds ≤ 6 (measured 7).
+
+   These tests measure on `DEFAULT_PARAMS` (team drift SD 9), not on the shipped JSON (team drift scaled to 2.25).
+7. **Task 7b/7d engine changes beyond the plan.**
+   - The keeper reads the current ball, not the lagged one (7b).
+   - The blend is continuous: a change of row eases at the group's rate instead of switching (7b).
+   - The keeper and forward-line caps are eased in and out with the blend, not applied as hard caps (7b, 7d).
+   - Deflections keep the row (7b).
+   - `commitS` and `clearanceLoose` ship at 0 (off).
+   - The drift is smooth: a smoothed OU, two draws per process (7d; see deviation 2).
 
 ### Calibration
 
@@ -560,7 +569,7 @@ before P1 have their second half played left to right; `readRun`, the advisor an
 
 ### Results
 
-- **Gate: MET.** Loss 26.87 against `GATE_LOSS` 30, maxDrift 0 against the refreshed baseline, 11 within 1 SD and 19
+- **Gate: MET** (the gate's figures come from the held-out seeds). Loss 26.87 against `GATE_LOSS` 30, maxDrift 0 against the refreshed baseline, 11 within 1 SD and 19
   within 2 SD. Physics: 2 of 13 inside (max_speed and, new, metres above 25 km/h). It was 21.23 at P1.
 - **C1: NOT MET.**
   - Of the 19, 9 are within 1 SD (needs 16) and 18 within 2 SD (needs 19).
@@ -590,9 +599,9 @@ before P1 have their second half played left to right; `readRun`, the advisor an
   | high-speed + sprint (km) | 1.01 | 0.69 | NOT MET; was 3.35 |
   | accelerations over 2.5 m/s² | 289 | 50 | NOT MET; was 712 |
   | live running (m/min) | 156 | 130–150 | NOT MET, just above |
-  | dead-ball running (m/min) | 50 | 65 | |
-  | sprints | 4.9 | 8.4 | |
-  | distance (km) | 10.06 | 10.88 | z −1.51 |
+  | dead-ball running (m/min) | 50 | 65 | NOT MET |
+  | sprints | 4.9 | 8.4 | NOT MET |
+  | distance (km) | 9.99 | 10.88 | z −1.65 |
 
 - **Territory and centroids** (64 matches):
   - territory SD 4.5 m, against real 1.9: NOT MET (was 11.7);
@@ -638,9 +647,16 @@ before P1 have their second half played left to right; `readRun`, the advisor an
 
 ### Rulings
 
-The plan's rulings 1–17 ("Rulings on the spec", plan 8b) hold as written, with these notes:
+The plan's rulings ("Rulings on the spec", plan 8b) hold as written, with these notes:
+- Rulings 1–18 hold. Ruling 18's 25 m keeper rule became a 22–30 m blend (Task 7b).
 - Ruling 4: offsets are the real per-player ones.
 - Ruling 11: team drift is scaled by `team_drift` 0.25.
 - Ruling 13: `relaxMarks` is on (deviation 3).
 
 `pnpm library` was not rebuilt. It needs the agent service and the LLM, and is on the merge checklist (as for P1).
+
+### P2 merge checklist
+
+- Regenerate every `out/` run folder in main (pre-P1 folders are refused).
+- Regenerate `realism-deep.md`.
+- Run `pnpm library`. It needs the agent service and the LLM, and stays pending until the user OKs it.

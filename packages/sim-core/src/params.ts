@@ -226,7 +226,7 @@ export interface Params {
   readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   /**
-   * Movement into shape. shapeSpeedShare: share of top speed (the old rule, and marking). relaxed 1 (A0): shape movement
+   * Movement into shape. shapeSpeedShare: share of top speed (the old rule, and marking); read only when relaxed is 0 (it has no effect with relaxed 1 and relaxMarks 1, so it has no tuner knob). relaxed 1 (A0): shape movement
    * heads for the spot at the speed that arrives in relaxArriveS, never above relaxCap of top speed, so a player near his
    * spot walks; relaxMarks 1 does the same for marking.
    */

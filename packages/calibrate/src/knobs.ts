@@ -71,8 +71,6 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, shape: { ...p.shape, width: v } }) },
   { name: "shape_depth", what: "distance between lines (pass length, long passes)", init: 1, min: 0.8, max: 1.6, step: 0.1,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, depth: v } }) },
-  { name: "shape_speed", what: "share of top speed used when moving into shape (speeds, distance)", init: 0.7, min: 0.5, max: 1, step: 0.05,
-    apply: (p, v) => ({ ...p, movement: { ...p.movement, shapeSpeedShare: v } }) },
   { name: "deflect_behind", what: "scale on the shares of blocks, headers and sliced clearances that go behind (corners)", init: 1, min: 0.3, max: 2, step: 0.25,
     apply: (p, v) => ({
       ...p,
@@ -91,7 +89,7 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) },
   { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: DEFAULT_PARAMS.shape.defDepth, min: 0.5, max: 1.2, step: 0.1,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) },
-  { name: "pos_in_shift", what: "metres every in-possession row moves upfield (block height with the ball, territory)", init: 0, min: -6, max: 6, step: 1.5,
+  { name: "pos_in_shift", what: "metres every in-possession row moves upfield (block height with the ball, territory); shifts only the in row, decoupled from the gk row", init: 0, min: -6, max: 6, step: 1.5,
     apply: (p, v) => shiftRows(p, "in", v) },
   { name: "pos_out_shift", what: "metres every out-of-possession row moves upfield (defensive line height, defending length)", init: 0, min: -6, max: 6, step: 1.5,
     apply: (p, v) => shiftRows(p, "out", v) },

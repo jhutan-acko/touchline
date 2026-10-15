@@ -113,6 +113,8 @@ describe("positioning in a match (rule table on)", () => {
     expect(finalState({ ...P, positioning: { ...P.positioning, rule: 0 } }, 9).anchor).toBeUndefined()
   }, 300_000)
 
+  // These real-target tests measure on DEFAULT_PARAMS (team drift SD 9), not on the shipped touchline-params.json
+  // (team drift scaled to 0.25, SD 2.25).
   // Real-data targets (the plan's bounds, restored by the Task 8 ruling) on DEFAULT_PARAMS, seed 7. Those that hold are
   // plain tests; those not met yet are it.fails below, unwidened: each flips (and fails the suite) once it is met, and
   // then moves back to a plain test. Measured once and shared.

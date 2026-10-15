@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest"
-import { advanceDrift, driftFor, newPlayerDrift, ouStep, smoothOuStep } from "../src/drift.js"
+import { advanceDrift, driftFor, newPlayerDrift, smoothOuStep } from "../src/drift.js"
 import { DEFAULT_PARAMS as P } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
 import type { AnchorState } from "../src/types.js"
 
 const d = P.positioning.drift
+/** Reference plain OU (exact step), kept here: the engine uses only the smoothed form. */
+const ouStep = (x: number, sd: number, tauS: number, dt: number, rng: Rng): number => {
+  if (sd <= 0) return 0
+  const k = Math.exp(-dt / tauS)
+  return x * k + sd * Math.sqrt(1 - k * k) * rng.normal()
+}
+
 const sdOf = (xs: number[]) => {
   const m = xs.reduce((a, b) => a + b, 0) / xs.length
   return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1))

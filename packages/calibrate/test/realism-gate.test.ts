@@ -70,4 +70,4 @@ const GATE_LOSS = 30
 const WITHIN_1SD = 11
 const WITHIN_2SD = 17
 // Player movement statistics inside the real envelope with the fitted physics (max_speed only): a known gap, spec P3.
-const PHYSICS_INSIDE = 1
+const PHYSICS_INSIDE = 2
