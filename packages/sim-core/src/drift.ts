@@ -41,6 +41,8 @@ export const smoothOuStep = (x: number, z: number, sd: number, tauS: number, smo
   const n1 = rng.normal()
   const n2 = rng.normal()
   if (sd <= 0) return { x: 0, z: 0 }
+  // A frozen step (dt 0, the drift's dead-ball rate at 0) still draws, so the draw count stays independent of the params.
+  if (dt <= 0) return { x, z }
   const ts = Math.min(smoothS, tauS / 3)
   if (ts <= 0) {
     const k = Math.exp(-dt / tauS)
@@ -92,8 +94,11 @@ export const advanceDrift = (s: AnchorState, players: ReadonlyArray<{ readonly i
   return { ...s, teams: { home, away }, players: out }
 }
 
-/** A player's summed drift in the team frame under a blend from `from` to `to` (no entry: the team's shift alone). */
-export const driftFor = (s: AnchorState, side: Side, playerId: string, lamU: number, lamY: number, from: ShapeRow, to: ShapeRow, sigma: -1 | 0 | 1): { u: number; y: number } => {
+/**
+ * A player's summed drift in the team frame under a blend from `from` to `to` (no entry: the team's shift alone). uScale
+ * scales the player's own depth drift (offsets and slow u), not the team's shift (positioning.drift.backLineOutU).
+ */
+export const driftFor = (s: AnchorState, side: Side, playerId: string, lamU: number, lamY: number, from: ShapeRow, to: ShapeRow, sigma: -1 | 0 | 1, uScale = 1, sScale = 1): { u: number; y: number } => {
   const t = s.teams[side].drift
   const p = s.players[playerId]
   if (!p) return { u: t.u, y: t.y }
@@ -101,5 +106,8 @@ export const driftFor = (s: AnchorState, side: Side, playerId: string, lamU: num
   const a = off(from)
   const b = off(to)
   const sgn = sigma === 0 ? 1 : sigma
-  return { u: t.u + a.u + lamU * (b.u - a.u) + p.slow.u, y: t.y + sgn * (a.s + lamY * (b.s - a.s) + p.slow.s) }
+  // uScale 1 keeps the original sum order, so a run without the back-line damping stays bit-identical.
+  const u = uScale === 1 ? t.u + a.u + lamU * (b.u - a.u) + p.slow.u : t.u + uScale * (a.u + lamU * (b.u - a.u) + p.slow.u)
+  const y = sScale === 1 ? t.y + sgn * (a.s + lamY * (b.s - a.s) + p.slow.s) : t.y + sgn * sScale * (a.s + lamY * (b.s - a.s) + p.slow.s)
+  return { u, y }
 }

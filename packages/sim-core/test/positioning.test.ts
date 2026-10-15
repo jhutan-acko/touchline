@@ -113,21 +113,72 @@ describe("positioning in a match (rule table on)", () => {
     expect(finalState({ ...P, positioning: { ...P.positioning, rule: 0 } }, 9).anchor).toBeUndefined()
   }, 300_000)
 
-  it("puts the block ahead of the ball with it and well behind without it, builds up with few players deep, keeps keepers near their line, and switches ends", () => {
-    const m = measure(on, 7)
-    // Regression bounds, not targets: Task 8 measures the real-data targets on 16 and 64 matches and calibrates
-    // (pos_in_shift, pos_out_shift). The plan's first bounds (relIn > -3, relOut < -4, deep <= 6, keeper < 3.5) do not
-    // hold with the table as fitted: teams switch rows ~250 times a match (median spell 6 s), so the slow per-role blends
-    // (tau up to 8.5 s) rarely settle, anchors read the ball 2 s ago, and markers follow the attackers. Measured on seeds
-    // 7/9/11: relIn -4.8/-4.6/-5.1, relOut -1.5/-2.2/-2.3, deep median 7/7/8, keeper median 4.9/5.8/5.0 (task-7-report.md).
-    expect(mean(m.relIn)).toBeGreaterThan(-7) // real +3.9 m; the old template -7.2 m (-9.8 m with relaxed motion)
+  // Real-data targets (the plan's bounds, restored by the Task 8 ruling) on DEFAULT_PARAMS, seed 7. Those that hold are
+  // plain tests; those not met yet are it.fails below, unwidened: each flips (and fails the suite) once it is met, and
+  // then moves back to a plain test. Measured once and shared.
+  let m7: ReturnType<typeof measure> | undefined
+  const seven = () => (m7 ??= measure(on, 7))
+
+  it("keeps the block well behind the ball without it, keepers near their line, and switches ends", () => {
+    const m = seven()
     expect(mean(m.relIn)).toBeLessThan(10)
-    expect(mean(m.relOut)).toBeLessThan(-0.5) // real -9.5 m; the old template -14 m
+    expect(mean(m.relOut)).toBeLessThan(-4) // real -9.5 m
     expect(m.deepWhileKeeper.length).toBeGreaterThan(20)
-    expect(median(m.deepWhileKeeper)).toBeLessThanOrEqual(8) // real 3; the old template 8
     expect(m.keeperOffLine.length).toBeGreaterThan(50)
     expect(median(m.keeperOffLine)).toBeGreaterThan(1.2) // real 2.2 m; the old template 4.0 m
-    expect(median(m.keeperOffLine)).toBeLessThan(6.5)
+    expect(median(m.keeperOffLine)).toBeLessThan(3.5)
     expect(mean(m.cbSecondHalf)).toBeLessThan(-5)
+  }, 300_000)
+
+  // NOT MET (Task 8b, seed 7 on DEFAULT_PARAMS): relIn -3.6 (real +3.9), deep while the keeper holds 7 (real 3). The
+  // in-possession centroid is held back by the sim's ball distribution (the ball sits ~7 m further upfield than real
+  // while a team has it) and by players tracking their anchors with a relaxed-motion lag on top of the fitted lag and
+  // blend (task-8b-report.md). These flip when met; then move them back to plain tests.
+  it.fails("NOT MET: puts the block ahead of the ball with it (relIn > -3; real +3.9 m)", () => {
+    expect(mean(seven().relIn)).toBeGreaterThan(-3)
+  }, 300_000)
+
+  it.fails("NOT MET: builds up with few players deep while the keeper holds (median <= 6; real 3)", () => {
+    expect(median(seven().deepWhileKeeper)).toBeLessThanOrEqual(6)
+  }, 300_000)
+
+  it("Task 8b: the drift runs at deadRate while a restart is set up (0 freezes it), and a back line without the ball holds a flatter line", () => {
+    const frozen: Params = { ...on, positioning: { ...on.positioning, drift: { ...on.positioning.drift, deadRate: 0 } } }
+    let s = initMatch(makeConfig(5, { params: frozen }))
+    let checked = 0
+    let prev: MatchState | null = null
+    while (!isFinished(s) && checked < 400) {
+      const before = s
+      s = step(s).state
+      // A tick that starts and ends in the same restart set-up advanced the drift by 0 s.
+      if (prev && before.phase.kind === "restart" && s.phase.kind === "restart" && before.anchor && s.anchor) {
+        expect(s.anchor.teams.home.drift).toEqual(before.anchor.teams.home.drift)
+        expect(s.anchor.teams.away.drift).toEqual(before.anchor.teams.away.drift)
+        for (const [id, d] of Object.entries(before.anchor.players)) expect(s.anchor.players[id]!.slow).toEqual(d.slow)
+        checked++
+      }
+      prev = before
+    }
+    expect(checked).toBe(400)
+    // Back-line depth spread (SD of CB and FB u) without the ball: smaller with backLineOutU 0 than 1.
+    const spread = (backLineOutU: number) => {
+      const p: Params = { ...on, positioning: { ...on.positioning, drift: { ...on.positioning.drift, backLineOutU } } }
+      const cfg = makeConfig(7, { params: p })
+      let st = initMatch(cfg)
+      const sds: number[] = []
+      while (!isFinished(st)) {
+        st = step(st).state
+        if (st.phase.kind !== "open_play" || st.tick % 10 !== 0) continue
+        const pos = st.possession
+        const possSide: Side | null = pos.kind === "owned" ? st.players.find((q) => q.id === pos.playerId)!.side : pos.kind === "in_flight" ? pos.flight.side : null
+        if (possSide === null) continue
+        const def = other(possSide)
+        const us = st.players.filter((q) => q.side === def && !q.sentOff && (q.role === "CB" || q.role === "FB")).map((q) => attackX(def, q.pos.x, st.period))
+        const mu = mean(us)
+        sds.push(Math.sqrt(us.reduce((a, u) => a + (u - mu) ** 2, 0) / us.length))
+      }
+      return mean(sds)
+    }
+    expect(spread(0)).toBeLessThan(spread(1) - 0.3)
   }, 300_000)
 })

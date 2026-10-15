@@ -349,7 +349,7 @@
  },
  "marking": {
   "weight": 0.75,
-  "radiusM": 10,
+  "radiusM": 15,
   "goalSideM": 1.5,
   "widthSlackM": 4
  },
@@ -446,7 +446,7 @@
      "e": 0
     },
     "gk": {
-     "a": -17.5,
+     "a": -13,
      "b": 0,
      "w0": 27,
      "w1": 0,
@@ -625,22 +625,23 @@
   "spreadDeadS": 2.5,
   "spreadTauS": 4.5,
   "ballLagS": 2,
+  "gkTauS": 1.5,
   "drift": {
    "teamUSdM": 2.25,
    "teamUTauS": 8,
    "teamYSdM": 1.35,
    "teamYTauS": 5,
-   "playerUSdM": 3,
+   "playerUSdM": 6,
    "playerUTauS": 12,
    "playerSSdM": {
     "GK": 0,
-    "CB": 2.85,
-    "FB": 4.5,
-    "WB": 4.5,
-    "CM": 3.4,
-    "AM": 4.25,
-    "W": 4.5,
-    "ST": 4.35
+    "CB": 5.7,
+    "FB": 9,
+    "WB": 9,
+    "CM": 6.8,
+    "AM": 8.5,
+    "W": 9,
+    "ST": 8.7
    },
    "playerSTauS": {
     "GK": 20,
@@ -672,7 +673,10 @@
     "W": 4.9,
     "ST": 3
    },
-   "smoothS": 3
+   "smoothS": 3,
+   "deadRate": 0.25,
+   "backLineOutU": 0.25,
+   "outS": 0.5
   }
  },
  "fatigue": {
@@ -809,7 +813,7 @@
    "pos_in_shift": 0,
    "pos_out_shift": 0,
    "team_drift": 0.25,
-   "player_drift": 0.5,
+   "player_drift": 1,
    "relax_cap": 0.6,
    "marking_weight": 0.75,
    "support_dist": 14

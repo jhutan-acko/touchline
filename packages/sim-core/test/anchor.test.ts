@@ -54,13 +54,13 @@ describe("rule-table anchors", () => {
     expect(cb(STYLES.high_press) - cb(STYLES.low_block)).toBeCloseTo(pos.styleLineM * 1.6, 9)
   })
 
-  it("build-up row (G4): centre backs split at u -30.5, full-backs push to u -17.5, whatever the ball", () => {
+  it("build-up row (G4): centre backs split at u -30.5, full-backs push to u -13, whatever the ball", () => {
     const ball = { x: -46, y: 2 }
     const cb = at("4-4-2", 2, ball, still("gk"))
     expect(cb.x).toBeCloseTo(-30.5, 9)
     expect(cb.y).toBeCloseTo(15.5, 9)
     const fb = at("4-4-2", 1, ball, still("gk"))
-    expect(fb.x).toBeCloseTo(-17.5, 9)
+    expect(fb.x).toBeCloseTo(-13, 9)
     expect(fb.y).toBeCloseTo(27, 9)
   })
 
@@ -120,6 +120,17 @@ describe("phase-switch blend (A2)", () => {
     expect(t1("W")).toBeGreaterThan(t1("FB"))
     expect(blendFor(team("out", "in"), "CB", 0, 0.1, pos).lamU).toBeCloseTo(1 - Math.exp(-0.5 / 3), 9)
     expect(blendFor(team("in", "in"), "W", 5, 0.1, pos)).toEqual(settled("in"))
+  })
+
+  it("blends into the gk row at gkTauS for every group (Task 8b), and at the group's tau with gkTauS 0", () => {
+    expect(pos.gkTauS).toBe(1.5)
+    for (const g of ["CB", "FB", "CM", "W", "ST"] as const) {
+      expect(blendFor(team("out", "gk"), g, 10, 0.1, pos).lamU).toBeCloseTo(1 - Math.exp(-1.5 / 1.5), 9)
+      expect(blendFor(team("out", "gk"), g, 10, 0.1, { ...pos, gkTauS: 0 }).lamU).toBeCloseTo(1 - Math.exp(-1.5 / pos.tauS[g]), 9)
+    }
+    // Out of the gk row (a release) the group's tau applies.
+    expect(blendFor(team("gk", "in"), "FB", 10, 0.1, pos).lamU).toBeCloseTo(1 - Math.exp(-1.5 / 3.5), 9)
+    expect(blendFor(team("gk", "out"), "CB", 10, 0.1, pos).lamU).toBeCloseTo(1 - Math.exp(-1.5 / 3), 9)
   })
 
   it("narrows fast after a loss, spreads after a win only after a dead time, and follows lambda within possession", () => {

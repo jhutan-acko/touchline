@@ -1159,21 +1159,32 @@ const advancePositioning = (w: Work): void => {
   if (held || s0.period !== w.period) s0 = holdBall(s0, ball, w.period)
   const s = advanceRows(s0, w.tick, ball, rows, w.dt, pos)
   const outfield = w.active().filter((p) => p.role !== "GK").map((p) => ({ id: p.id, group: groupFor(w, p) }))
-  const { pending: _, ...next } = advanceDrift(s, outfield, w.dt, pos.drift, w.rng.drift)
+  // While a restart is set up the drift runs at deadRate of real time (0 freezes it).
+  const driftDt = ph.kind === "restart" ? w.dt * pos.drift.deadRate : w.dt
+  const { pending: _, ...next } = advanceDrift(s, outfield, driftDt, pos.drift, w.rng.drift)
   w.anchor = pending ? { ...next, pending } : next
 }
 
-/** The rule-table context for a player: his blend, his drift (none for keepers; weighted by the blend's out share) and the caps that apply now. */
+/**
+ * The rule-table context for a player: his blend, his drift (none for keepers; weighted by the blend's out share; a back
+ * line's own depth drift damped out of possession) and the caps that apply now.
+ */
 const anchorCtx = (w: Work, pl: PlayerState, blend: Blend) => {
   const st = w.anchor!
   const c = posTick(w)
   const geo = c.geo[pl.side][pl.slot]!
+  // A back line without the ball holds a flat line: its players keep backLineOutU of their own depth drift, by the out share.
+  const outU = blend.mix ? outShare(blend.mix.u) : (blend.from === "out" ? 1 - blend.lamU : 0) + (blend.to === "out" ? blend.lamU : 0)
+  const back = geo.group === "CB" || geo.group === "FB" || geo.group === "WB"
+  const uScale = back ? 1 - (1 - w.p.positioning.drift.backLineOutU) * outU : 1
+  const outY = blend.mix ? outShare(blend.mix.y) : (blend.from === "out" ? 1 - blend.lamY : 0) + (blend.to === "out" ? blend.lamY : 0)
+  const sScale = 1 - (1 - w.p.positioning.drift.outS) * outY
   const drift =
     geo.group === "GK"
       ? { u: 0, y: 0 }
       : blend.mix
-        ? driftFor(st, pl.side, pl.id, outShare(blend.mix.u), outShare(blend.mix.y), "in", "out", geo.sigma)
-        : driftFor(st, pl.side, pl.id, blend.lamU, blend.lamY, blend.from, blend.to, geo.sigma)
+        ? driftFor(st, pl.side, pl.id, outShare(blend.mix.u), outShare(blend.mix.y), "in", "out", geo.sigma, uScale, sScale)
+        : driftFor(st, pl.side, pl.id, blend.lamU, blend.lamY, blend.from, blend.to, geo.sigma, uScale, sScale)
   return {
     pos: w.p.positioning,
     input: { blend, drift, lastDefU: c.lastDefU[pl.side], vsKeeper: st.teams[other(pl.side)].row === "gk" }
