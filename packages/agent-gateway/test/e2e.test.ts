@@ -29,11 +29,11 @@ let run: string
 let result: GatewayResult
 
 beforeAll(async () => {
-  // Seed 402: the test needs a costly error explained as a mis-hit clearance under pressure. It is the agents suite's error
+  // Seed 116: the test needs a costly error explained as a mis-hit clearance under pressure. It is the agents suite's error
   // match (services/agents/tests/conftest.py ERROR_SEED, found by services/agents/scripts/find_test_seed.py): its only
   // critical error is such a clearance. Re-pin both together when the engine or the params file changes.
-  run = join(mkdtempSync(join(tmpdir(), "gw-e2e-")), "e2e-err-402")
-  spawnSync("pnpm", ["-s", "sim", "--scenario", "costly_error", "--seed", "402", "--match-id", "e2e-err-402", "--out", run], { cwd: root, stdio: "ignore" })
+  run = join(mkdtempSync(join(tmpdir(), "gw-e2e-")), "e2e-err-116")
+  spawnSync("pnpm", ["-s", "sim", "--scenario", "costly_error", "--seed", "116", "--match-id", "e2e-err-116", "--out", run], { cwd: root, stdio: "ignore" })
   const port = await freePort()
   agents = spawn("uv", ["run", "--project", "services/agents", "touchline-agents", "--port", String(port)], { cwd: root, env: { ...process.env, TOUCHLINE_LLM: "stub" }, detached: true, stdio: "ignore" })
   const url = `http://127.0.0.1:${port}/`
