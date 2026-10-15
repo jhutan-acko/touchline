@@ -52,14 +52,18 @@ const targets = readJson("targets", o.targets) as Targets
 const base = o.physics === "none" ? DEFAULT_PARAMS : withPhysics(DEFAULT_PARAMS, readJson("physics", o.physics) as PhysicsFile)
 const t0 = Date.now()
 const pool = createPool(league, Number(o.workers))
-const res = await tune(league, base, targets, {
-  matches,
-  rounds,
-  start,
-  pool,
-  onEval: (evals, loss) => process.stdout.write(`eval ${evals}: loss ${loss.toFixed(2)} (${Math.round((Date.now() - t0) / 1000)} s)\n`)
-})
-await pool.close()
+let res: Awaited<ReturnType<typeof tune>>
+try {
+  res = await tune(league, base, targets, {
+    matches,
+    rounds,
+    start,
+    pool,
+    onEval: (evals, loss) => process.stdout.write(`eval ${evals}: loss ${loss.toFixed(2)} (${Math.round((Date.now() - t0) / 1000)} s)\n`)
+  })
+} finally {
+  await pool.close()
+}
 const today = new Date().toISOString().slice(0, 10)
 const tuned = applyKnobs(base, res.knobs)
 const out = {
