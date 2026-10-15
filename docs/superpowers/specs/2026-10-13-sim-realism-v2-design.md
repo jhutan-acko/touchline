@@ -613,6 +613,12 @@ before P1 have their second half played left to right; `readRun`, the advisor an
 - **Discipline** (64 matches): 0.50 players sent off per match (real 0.29, target about 0.2–0.3): NOT MET. Penalties 0.28
   (real 0.43). The re-tune raised `yellow_per_foul` to 0.35.
 
+- **Scenario nudge: `script.goalShotLogit` 1.75 → 2.**
+  - At 1.75, `late_comeback` reached its target unforced in 8 of seeds 1–10 and 9 of 11–20, against the 90 % this
+    design asks for.
+  - At 2 it is 9 and 10, and the other built-in scenarios are unchanged (all 9–10 of 10).
+  - Unscripted matches, and so the gate, are unaffected.
+
 ### Gaps outside P2 (found by Task 8b)
 
 - **Ball upfield (P3, decision side).** While a team has the ball, the sim's mean ball u is +2.4, against −5.2 in real
