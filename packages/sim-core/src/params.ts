@@ -308,7 +308,11 @@ export interface Params {
        * the back four 2.8-4.6 m out of possession, 6.9-10 m with the ball). 1 keeps it all.
        */
       readonly backLineOutU: number
-      /** OUTS */
+      /**
+       * Share of their own lateral drift (match offsets and slow drift, not the team's shift) that outfielders keep without
+       * the ball, by the blend's out share: a defending block stays compact across the pitch (width out of possession
+       * 38.96 m at 1 against real 37.0). 1 keeps it all.
+       */
       readonly outS: number
     }
   }
