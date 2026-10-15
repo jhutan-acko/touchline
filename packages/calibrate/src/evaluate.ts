@@ -45,14 +45,17 @@ const club = (league: League, id: string): Club => {
   return c
 }
 
-/** Metrics for `matches` simulated matches (fixture i uses seed 1000 + i, so every evaluation sees the same matches). */
+/** Metrics of fixture `i` (seed 1000 + i, so every evaluation sees the same matches). Pure in (league, params, i). */
+export const evaluateMatch = (league: League, params: Params, i: number): MatchMetrics => {
+  const [h, a] = FIXTURES[i % FIXTURES.length]!
+  const cfg: MatchConfig = { matchId: `cal-${i}`, seed: 1000 + i, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(league, h), away: club(league, a), params, dt: 0.1 }
+  const { events, frames } = runMatch(cfg)
+  return matchMetrics(events, frames, cfg.dt)
+}
+
+/** Metrics for `matches` simulated matches, serially in this thread. */
 export const evaluate = (league: League, params: Params, matches: number): MatchMetrics[] =>
-  Array.from({ length: matches }, (_, i) => {
-    const [h, a] = FIXTURES[i % FIXTURES.length]!
-    const cfg: MatchConfig = { matchId: `cal-${i}`, seed: 1000 + i, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(league, h), away: club(league, a), params, dt: 0.1 }
-    const { events, frames } = runMatch(cfg)
-    return matchMetrics(events, frames, cfg.dt)
-  })
+  Array.from({ length: matches }, (_, i) => evaluateMatch(league, params, i))
 
 export const meanMetrics = (ms: ReadonlyArray<MatchMetrics>): Record<GateKey, number> =>
   Object.fromEntries(GATE_KEYS.map((k) => [k, ms.reduce((s, m) => s + m[k], 0) / ms.length])) as Record<GateKey, number>

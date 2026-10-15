@@ -8,6 +8,7 @@ import type { Targets } from "./evaluate.js"
 import { applyKnobs, KNOBS } from "./knobs.js"
 import { GATE_KEYS } from "./gate.js"
 import { withPhysics, type PhysicsFile } from "./physics.js"
+import { createPool, defaultWorkers } from "./pool.js"
 import { tune } from "./tune.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -20,6 +21,7 @@ const o = cliOptions("calibrate: tune engine knobs to real-match targets (method
   rounds: { default: "3", check: positiveInteger, help: "coordinate-search rounds" },
   // --from <file>: continue from that file's calibration knobs instead of the defaults.
   from: { default: "", help: "start from the calibration.knobs of this file" },
+  workers: { default: String(defaultWorkers()), check: positiveInteger, help: "worker threads evaluating matches in parallel (1 = serial, in-process)" },
   // The fitted physics is fixed: the tuner calibrates behaviour on top of it.
   physics: { default: join(root, "data/params/physics.json"), help: "physics fit (physics.json), or \"none\" for the literature defaults" }
 })
@@ -49,12 +51,19 @@ const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "u
 const targets = readJson("targets", o.targets) as Targets
 const base = o.physics === "none" ? DEFAULT_PARAMS : withPhysics(DEFAULT_PARAMS, readJson("physics", o.physics) as PhysicsFile)
 const t0 = Date.now()
-const res = tune(league, base, targets, {
-  matches,
-  rounds,
-  start,
-  onEval: (evals, loss) => process.stdout.write(`eval ${evals}: loss ${loss.toFixed(2)} (${Math.round((Date.now() - t0) / 1000)} s)\n`)
-})
+const pool = createPool(league, Number(o.workers))
+let res: Awaited<ReturnType<typeof tune>>
+try {
+  res = await tune(league, base, targets, {
+    matches,
+    rounds,
+    start,
+    pool,
+    onEval: (evals, loss) => process.stdout.write(`eval ${evals}: loss ${loss.toFixed(2)} (${Math.round((Date.now() - t0) / 1000)} s)\n`)
+  })
+} finally {
+  await pool.close()
+}
 const today = new Date().toISOString().slice(0, 10)
 const tuned = applyKnobs(base, res.knobs)
 const out = {
