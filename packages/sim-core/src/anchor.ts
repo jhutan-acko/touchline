@@ -72,7 +72,7 @@ export interface Blend {
 /** A blend that has arrived: the row alone. */
 export const settled = (row: ShapeRow): Blend => ({ from: row, to: row, lamU: 1, lamY: 1 })
 
-/** The spots a team blends between: the rows, and "out" capped at vsKeeperCapU (outK). */
+/** The spots a team blends between: the rows, and "out" capped at vsKeeperCapU (outK; drift is added after, so it can carry an anchor past the cap). */
 export type MixKey = keyof RowMix
 const KEYS: ReadonlyArray<MixKey> = ["in", "out", "gk", "outK"]
 const ZERO: RowMix = { in: 0, out: 0, gk: 0, outK: 0 }

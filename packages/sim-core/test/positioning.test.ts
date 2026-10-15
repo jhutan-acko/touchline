@@ -110,7 +110,7 @@ describe("positioning in a match (rule table on)", () => {
     expect(a.eventSeq).toBe(b.eventSeq)
     expect(a.anchor).toEqual(b.anchor)
     expect(a.anchor).toBeDefined()
-    expect(finalState(P, 9).anchor).toBeUndefined()
+    expect(finalState({ ...P, positioning: { ...P.positioning, rule: 0 } }, 9).anchor).toBeUndefined()
   }, 300_000)
 
   it("puts the block ahead of the ball with it and well behind without it, builds up with few players deep, keeps keepers near their line, and switches ends", () => {

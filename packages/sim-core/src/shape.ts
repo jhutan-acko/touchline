@@ -76,7 +76,7 @@ export const anchorFor = (
   ball: Vec2,
   style: TeamStyle,
   inPossession: boolean,
-  spread: { readonly width: number; readonly depth: number; readonly defLineM?: number; readonly defDepth?: number; readonly fwdDropM?: number } = { width: 1, depth: 1 },
+  spread: { readonly width: number; readonly depth: number; readonly defDepth?: number } = { width: 1, depth: 1 },
   /**
    * With the rule table switched on (positioning.rule 1): this player's blend, drift and caps (anchor.ts). `inPossession`
    * is then ignored (the blend names the rows) and `ball` is the ball as anchors read it.
@@ -98,11 +98,10 @@ export const anchorFor = (
   // Width stretches the shape fully in possession and partly without it; depth stretches the
   // distance between lines around the team's centre (x = -18 in attacking space).
   const width = inPossession ? spread.width : 1 + (spread.width - 1) * 0.4
-  // Without the ball, defDepth squeezes the lines further and defLineM pushes the whole shape upfield (both identity by default).
+  // Without the ball, defDepth squeezes the lines further (identity by default).
   const depth = spread.depth * (inPossession ? 1 : (spread.defDepth ?? 1))
   const sx = -18 + (s.x + 18) * depth
-  const drop = !inPossession && (s.role === "ST" || s.role === "W" || s.role === "AM") ? (spread.fwdDropM ?? 0) : 0
-  const x = clamp(sx + slide * bx + line + (inPossession ? 0 : (spread.defLineM ?? 0)) - drop, -PITCH.halfL + 4, PITCH.halfL - 3)
+  const x = clamp(sx + slide * bx + line, -PITCH.halfL + 4, PITCH.halfL - 3)
   const y = clamp(s.y * compact * width + 0.35 * by, -PITCH.halfW + 1.5, PITCH.halfW - 1.5)
   return { x: x * d, y: y * d }
 }

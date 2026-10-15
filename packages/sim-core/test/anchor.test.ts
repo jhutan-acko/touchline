@@ -20,15 +20,15 @@ describe("rule-table anchors", () => {
   it("reproduce the real-data table at lambda = 1", () => {
     // 4-2-3-1 AM (slot 8, central): u = a + b bu, y = e by.
     const am = at("4-2-3-1", 8, { x: 10, y: 6 }, still("in"))
-    expect(am.x).toBeCloseTo(8.6 + 0.54 * 10, 9)
-    expect(am.y).toBeCloseTo(0.4 * 6, 9)
+    expect(am.x).toBeCloseTo(13.2 + 0.57 * 10, 9)
+    expect(am.y).toBeCloseTo(0.38 * 6, 9)
     // 4-4-2 left FB (slot 1, y +23): s = w0 + w1 bu + w2 bs + w3 |by|.
     const fb = at("4-4-2", 1, { x: 10, y: 6 }, still("in"))
-    expect(fb.x).toBeCloseTo(-1.7 + 0.58 * 10, 9)
-    expect(fb.y).toBeCloseTo(17.1 - 0.04 * 10 + 0.28 * 6 + 0.02 * 6, 9)
+    expect(fb.x).toBeCloseTo(4.6 + 0.59 * 10, 9)
+    expect(fb.y).toBeCloseTo(23.3 - 0.12 * 10 + 0.24 * 6 - 0.12 * 6, 9)
     const fbOut = at("4-4-2", 1, { x: 10, y: 6 }, still("out"))
-    expect(fbOut.x).toBeCloseTo(-14 + 0.54 * 10, 9)
-    expect(fbOut.y).toBeCloseTo(10 + 0.07 * 10 + 0.34 * 6 + 0.12 * 6, 9)
+    expect(fbOut.x).toBeCloseTo(-19.5 + 0.48 * 10, 9)
+    expect(fbOut.y).toBeCloseTo(9.9 + 0.08 * 10 + 0.34 * 6 + 0.1 * 6, 9)
     // The right FB mirrors: s is measured toward his own touchline.
     const rfb = at("4-4-2", 4, { x: 10, y: -6 }, still("in"))
     expect(rfb.y).toBeCloseTo(-fb.y, 9)
@@ -38,7 +38,7 @@ describe("rule-table anchors", () => {
     const ball = { x: 0, y: 0 }
     const cm = at("4-3-3", 5, ball, still("in"))
     const dm = at("4-3-3", 6, ball, still("in"))
-    expect(cm.x).toBeCloseTo(1.5 + 2, 9)
+    expect(cm.x).toBeCloseTo(5.3 + 2, 9)
     expect(cm.x - dm.x).toBeCloseTo(6, 9)
     expect(cm.y).toBeCloseTo(pos.eightW0, 9)
     expect(dm.y).toBeCloseTo(0, 9)
@@ -54,13 +54,13 @@ describe("rule-table anchors", () => {
     expect(cb(STYLES.high_press) - cb(STYLES.low_block)).toBeCloseTo(pos.styleLineM * 1.6, 9)
   })
 
-  it("build-up row (G4): centre backs split at u -30, full-backs push to u -13, whatever the ball", () => {
+  it("build-up row (G4): centre backs split at u -30.5, full-backs push to u -17.5, whatever the ball", () => {
     const ball = { x: -46, y: 2 }
     const cb = at("4-4-2", 2, ball, still("gk"))
-    expect(cb.x).toBeCloseTo(-30, 9)
+    expect(cb.x).toBeCloseTo(-30.5, 9)
     expect(cb.y).toBeCloseTo(15.5, 9)
     const fb = at("4-4-2", 1, ball, still("gk"))
-    expect(fb.x).toBeCloseTo(-13, 9)
+    expect(fb.x).toBeCloseTo(-17.5, 9)
     expect(fb.y).toBeCloseTo(27, 9)
   })
 
@@ -69,14 +69,14 @@ describe("rule-table anchors", () => {
     expect(near.x).toBeCloseTo(-50.5, 9)
     expect(near.y).toBeCloseTo((5 * 2) / 12.5, 9)
     const far = at("4-4-2", 0, { x: 30, y: 0 }, still("out"))
-    expect(far.x).toBeCloseTo(-39.9 + 0.27 * 30, 9)
+    expect(far.x).toBeCloseTo(-42 + 0.25 * 30, 9)
     expect(far.y).toBeCloseTo(0, 9)
   })
 
   it("caps forwards below the opponents' last defender with the ball, and every anchor at vsKeeperCapU while the other keeper has it", () => {
     const st = at("4-3-3", 9, { x: 30, y: 0 }, still("in", { lastDefU: 28 }))
     expect(st.x).toBeCloseTo(28 - pos.lineCapM, 9)
-    expect(at("4-3-3", 9, { x: 30, y: 0 }, still("out", { lastDefU: 28 })).x).toBeCloseTo(7.2 + 0.59 * 30, 9)
+    expect(at("4-3-3", 9, { x: 30, y: 0 }, still("out", { lastDefU: 28 })).x).toBeCloseTo(2.7 + 0.59 * 30, 9)
     expect(at("4-3-3", 9, { x: 40, y: 0 }, still("out", { vsKeeper: true })).x).toBeCloseTo(pos.vsKeeperCapU, 9)
   })
 
@@ -102,22 +102,23 @@ describe("rule-table anchors", () => {
     const ball = { x: 10, y: 6 }
     const input = still("in")
     expect(anchorFor("4-4-2", 1, "home", "first_half", ball, NEUTRAL, true, flat, { pos, input })).toEqual(at("4-4-2", 1, ball, input))
-    expect(anchorFor("4-4-2", 1, "home", "first_half", ball, NEUTRAL, true, flat, { pos: P.positioning, input })).toEqual(
+    expect(anchorFor("4-4-2", 1, "home", "first_half", ball, NEUTRAL, true, flat, { pos: { ...P.positioning, rule: 0 }, input })).toEqual(
       anchorFor("4-4-2", 1, "home", "first_half", ball, NEUTRAL, true, flat)
     )
   })
 })
 
 describe("phase-switch blend (A2)", () => {
-  it("ramps by role: centre backs convert fastest, wingers slowest", () => {
+  it("ramps by role at the group's tau (re-fitted: CB 3, CM/AM/ST 2.75, W 3.25, FB/WB 3.5 s)", () => {
     const t1 = (g: Parameters<typeof blendFor>[1]) => blendFor(team("out", "in"), g, 10, 0.1, pos).lamU
-    expect(t1("CB")).toBeCloseTo(1 - Math.exp(-1.5 / 2.5), 9)
-    expect(t1("CB")).toBeGreaterThan(t1("CM"))
-    expect(t1("CM")).toBeGreaterThan(t1("ST"))
-    expect(t1("ST")).toBeGreaterThan(t1("AM"))
-    expect(t1("AM")).toBeGreaterThan(t1("FB"))
-    expect(t1("FB")).toBeGreaterThan(t1("W"))
-    expect(blendFor(team("out", "in"), "CB", 0, 0.1, pos).lamU).toBeCloseTo(1 - Math.exp(-0.5 / 2.5), 9)
+    expect(t1("CB")).toBeCloseTo(1 - Math.exp(-1.5 / 3), 9)
+    expect(t1("CM")).toBeCloseTo(1 - Math.exp(-1.5 / 2.75), 9)
+    expect(t1("W")).toBeCloseTo(1 - Math.exp(-1.5 / 3.25), 9)
+    expect(t1("FB")).toBeCloseTo(1 - Math.exp(-1.5 / 3.5), 9)
+    expect(t1("CM")).toBeGreaterThan(t1("CB"))
+    expect(t1("CB")).toBeGreaterThan(t1("W"))
+    expect(t1("W")).toBeGreaterThan(t1("FB"))
+    expect(blendFor(team("out", "in"), "CB", 0, 0.1, pos).lamU).toBeCloseTo(1 - Math.exp(-0.5 / 3), 9)
     expect(blendFor(team("in", "in"), "W", 5, 0.1, pos)).toEqual(settled("in"))
   })
 
@@ -209,7 +210,7 @@ describe("Task 7b fix-ups", () => {
   })
 
   it("the cap while the other keeper holds the ball eases in and out at the group's rate", () => {
-    const deep = { x: 40, y: 0 }
+    const deep = { x: 48, y: 0 }
     let st = initAnchorState(deep, 0.1, pos, { home: "out", away: "in" })
     const stU = (s: AnchorState, tick: number) =>
       at("4-3-3", 9, deep, { ...still("out", { vsKeeper: s.teams.away.row === "gk" }), blend: blendFor(s.teams.home, "ST", tick, 0.1, pos) }).x
@@ -230,7 +231,7 @@ describe("Task 7b fix-ups", () => {
 
   it("the forward-line cap eases in and out at the group's rate on a change of possession (Task 7d)", () => {
     const ball = { x: 30, y: 0 }
-    const lastDefU = 20
+    const lastDefU = 15
     const cap = lastDefU - pos.lineCapM
     let st = initAnchorState(ball, 0.1, pos, { home: "out", away: "in" })
     const stU = (s: AnchorState, tick: number, extra: Partial<AnchorInput> = {}) =>
@@ -275,7 +276,7 @@ describe("Task 7b fix-ups", () => {
     const gk = (bx: number) => at("4-4-2", 0, { x: bx, y: 0 }, still("out"))
     const line = -PITCH_HALF + pos.keeperLineM
     expect(gk(-PITCH_HALF + 21.9).x).toBeCloseTo(line, 9)
-    const row = (bx: number) => Math.min(-20, Math.max(-51, -39.9 + 0.27 * bx))
+    const row = (bx: number) => Math.min(-20, Math.max(-51, -42 + 0.25 * bx))
     expect(gk(-PITCH_HALF + 30).x).toBeCloseTo(row(-PITCH_HALF + 30), 9)
     expect(gk(-PITCH_HALF + 26).x).toBeCloseTo(line + 0.5 * (row(-PITCH_HALF + 26) - line), 9)
     let worst = 0

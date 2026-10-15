@@ -56,8 +56,8 @@ describe("relaxed shape motion in a match", () => {
   }
 
   it("cuts outfield running in live play and high-speed metres", () => {
-    const off = physical(P)
-    const on = physical({ ...P, movement: { ...P.movement, relaxed: 1 } })
+    const off = physical({ ...P, movement: { ...P.movement, relaxed: 0, relaxMarks: 0 } })
+    const on = physical(P)
     expect(on.perLiveMin).toBeLessThan(0.85 * off.perLiveMin)
     expect(on.hsrM).toBeLessThan(0.5 * off.hsrM)
   }, 300_000)

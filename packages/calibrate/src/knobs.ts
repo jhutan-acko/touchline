@@ -1,4 +1,4 @@
-import { ACTION_ZONES, DEFAULT_PARAMS, type Action, type Params } from "@touchline/sim-core"
+import { ACTION_ZONES, DEFAULT_PARAMS, type Action, type Params, type ShapeRow } from "@touchline/sim-core"
 
 /**
  * The settings the tuner may move, each a pure transform of the base parameters.
@@ -26,6 +26,17 @@ const shiftLogits = (p: Params, actions: ReadonlyArray<Action>, v: number): Para
   }
   return { ...p, actions: { ...p.actions, logits } }
 }
+
+/** Every outfield group's row `row` moved upfield by v metres (the rule table's depth intercepts). */
+const shiftRows = (p: Params, row: ShapeRow, v: number): Params => ({
+  ...p,
+  positioning: {
+    ...p.positioning,
+    roles: Object.fromEntries(
+      Object.entries(p.positioning.roles).map(([g, r]) => [g, g === "GK" ? r : { ...r, [row]: { ...r[row], a: r[row].a + v } }])
+    ) as Params["positioning"]["roles"]
+  }
+})
 
 export const KNOBS: ReadonlyArray<Knob> = [
   { name: "decision_scale", what: "time on the ball before each decision (passes per match)", init: 1, min: 0.6, max: 2.5, step: 0.25,
@@ -78,12 +89,18 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, pass: { ...p.pass, arriveSpeed: v } }) },
   { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, clearToTouch: v } }) },
-  { name: "def_line", what: "metres a team without the ball pushes its shape upfield (defensive line height)", init: DEFAULT_PARAMS.shape.defLineM, min: 0, max: 20, step: 2.5,
-    apply: (p, v) => ({ ...p, shape: { ...p.shape, defLineM: v } }) },
   { name: "def_depth", what: "extra squeeze between the lines without the ball (defending team length)", init: DEFAULT_PARAMS.shape.defDepth, min: 0.5, max: 1.2, step: 0.1,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, defDepth: v } }) },
-  { name: "fwd_drop", what: "metres forwards drop back without the ball (defending team length)", init: DEFAULT_PARAMS.shape.fwdDropM, min: 0, max: 20, step: 2.5,
-    apply: (p, v) => ({ ...p, shape: { ...p.shape, fwdDropM: v } }) },
+  { name: "pos_in_shift", what: "metres every in-possession row moves upfield (block height with the ball, territory)", init: 0, min: -6, max: 6, step: 1.5,
+    apply: (p, v) => shiftRows(p, "in", v) },
+  { name: "pos_out_shift", what: "metres every out-of-possession row moves upfield (defensive line height, defending length)", init: 0, min: -6, max: 6, step: 1.5,
+    apply: (p, v) => shiftRows(p, "out", v) },
+  { name: "team_drift", what: "scale on the team-common drift (line-height variability, territory)", init: 1, min: 0, max: 1.5, step: 0.25,
+    apply: (p, v) => ({ ...p, positioning: { ...p.positioning, drift: { ...p.positioning.drift, teamUSdM: p.positioning.drift.teamUSdM * v, teamYSdM: p.positioning.drift.teamYSdM * v } } }) },
+  { name: "player_drift", what: "scale on each player's slow drift (positional variability, running between restarts)", init: 1, min: 0, max: 1.5, step: 0.25,
+    apply: (p, v) => ({ ...p, positioning: { ...p.positioning, drift: { ...p.positioning.drift, playerUSdM: p.positioning.drift.playerUSdM * v, playerSSdM: Object.fromEntries(Object.entries(p.positioning.drift.playerSSdM).map(([g, x]) => [g, x * v])) as Params["positioning"]["drift"]["playerSSdM"] } } }) },
+  { name: "relax_cap", what: "share of top speed for relaxed shape movement (speeds, high-speed running)", init: DEFAULT_PARAMS.movement.relaxCap, min: 0.4, max: 0.85, step: 0.05,
+    apply: (p, v) => ({ ...p, movement: { ...p.movement, relaxCap: v } }) },
   { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: DEFAULT_PARAMS.marking.weight, min: 0, max: 1, step: 0.25,
     apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
   { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: DEFAULT_PARAMS.support.distM, min: 8, max: 18, step: 2,

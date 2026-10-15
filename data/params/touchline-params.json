@@ -3,14 +3,14 @@
   "dataset": "calibrated by simulated moments against IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
   "licence": "CC-BY-4.0",
   "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
-  "fitted_at": "2026-10-14",
-  "version": "calib-2026-10-14"
+  "fitted_at": "2026-10-15",
+  "version": "calib-2026-10-15"
  },
  "kinematics": {
   "accelMax": 4.5,
   "reactionS": 0.7,
   "reachM": 1,
-  "reachMargin": 0.725,
+  "reachMargin": 0.675,
   "controlHeightM": 1,
   "headerHeightM": 2.4
  },
@@ -128,106 +128,106 @@
   "logits": {
    "def_wide": {
     "short_pass": 1.6,
-    "long_pass": 3.15,
+    "long_pass": 3.4,
     "through_ball": -4,
-    "lofted_through": -1.25,
-    "switch": 2.15,
+    "lofted_through": -1,
+    "switch": 2.4,
     "cross": -3.875,
     "cutback": -4,
     "back_pass": -0.1,
     "carry": 0.5,
     "take_on": -1.2,
-    "shot": -4,
+    "shot": -3.6,
     "clear": -0.4,
     "hold": -0.6
    },
    "def_central": {
     "short_pass": 1.8,
-    "long_pass": 3.25,
+    "long_pass": 3.5,
     "through_ball": -4,
-    "lofted_through": -1.25,
-    "switch": 2.35,
+    "lofted_through": -1,
+    "switch": 2.6,
     "cross": -3.875,
     "cutback": -4,
     "back_pass": -0.2,
     "carry": 0.4,
     "take_on": -1.5,
-    "shot": -4,
+    "shot": -3.6,
     "clear": -0.2,
     "hold": -0.6
    },
    "mid_wide": {
     "short_pass": 1.7,
-    "long_pass": 2.75,
+    "long_pass": 3,
     "through_ball": -0.6,
-    "lofted_through": 1.75,
-    "switch": 2.25,
+    "lofted_through": 2,
+    "switch": 2.5,
     "cross": -1.075,
     "cutback": -4,
     "back_pass": -0.3,
     "carry": 0.7,
     "take_on": -0.4,
-    "shot": -4,
+    "shot": -3.6,
     "clear": -4,
     "hold": -0.6
    },
    "mid_central": {
     "short_pass": 1.9,
-    "long_pass": 2.65,
+    "long_pass": 2.9,
     "through_ball": -0.3,
-    "lofted_through": 1.85,
-    "switch": 2.35,
+    "lofted_through": 2.1,
+    "switch": 2.6,
     "cross": -3.875,
     "cutback": -4,
     "back_pass": -0.2,
     "carry": 0.6,
     "take_on": -0.6,
-    "shot": -3,
+    "shot": -2.6,
     "clear": -4,
     "hold": -0.6
    },
    "att_wide": {
     "short_pass": 1.3,
-    "long_pass": 1.75,
+    "long_pass": 2,
     "through_ball": -0.4,
-    "lofted_through": 1.75,
-    "switch": -1.25,
+    "lofted_through": 2,
+    "switch": -1,
     "cross": 0.725,
     "cutback": -0.2,
     "back_pass": -0.2,
     "carry": 0.6,
     "take_on": 0,
-    "shot": -2,
+    "shot": -1.6,
     "clear": -4,
     "hold": -0.4
    },
    "att_central": {
     "short_pass": 1.4,
-    "long_pass": 1.55,
+    "long_pass": 1.8,
     "through_ball": 0.1,
-    "lofted_through": 2.15,
-    "switch": -1.25,
+    "lofted_through": 2.4,
+    "switch": -1,
     "cross": -3.875,
     "cutback": -4,
     "back_pass": -0.3,
     "carry": 0.6,
     "take_on": -0.2,
-    "shot": -1.2,
+    "shot": -0.7999999999999999,
     "clear": -4,
     "hold": -0.5
    },
    "box": {
     "short_pass": 0.6,
-    "long_pass": -1.25,
+    "long_pass": -1,
     "through_ball": -0.4,
-    "lofted_through": -1.25,
-    "switch": -1.25,
+    "lofted_through": -1,
+    "switch": -1,
     "cross": -3.875,
     "cutback": 0.4,
     "back_pass": -0.7,
     "carry": 0.45,
     "take_on": 0.35,
-    "shot": 0.3,
+    "shot": 0.7,
     "clear": -2,
     "hold": -0.8
    }
@@ -270,11 +270,11 @@
   "maxDistanceM": 32,
   "speed": 26,
   "onTargetRate": 0.38,
-  "aimNoise": 1.15,
+  "aimNoise": 1.35,
   "blockPerDefender": 0.23,
   "blockWidthM": 3.5,
   "blockPressure": 0.2,
-  "blockBehind": 0.8125,
+  "blockBehind": 0.9375,
   "save": {
    "b0": 2.175,
    "bWide": -1.6,
@@ -286,27 +286,27 @@
  "defending": {
   "pressRatePerS": 0.6,
   "pressRadiusM": 3,
-  "tackleRatePerS": 0.425,
+  "tackleRatePerS": 0.575,
   "tackleRadiusM": 1.6,
   "tackleBase": 0,
-  "foulPerTackle": 0.465,
+  "foulPerTackle": 0.405,
   "yellowPerFoul": 0.2,
   "redPerFoul": 0.004,
   "cautionPerMatch": 1.7,
   "bookedFoulFactor": 0.5,
   "bookedYellowFactor": 0.6,
-  "tackleLooseShare": 0.4,
+  "tackleLooseShare": 0.3,
   "interceptLooseShare": 0.3,
   "boxIntensity": 2,
   "boxFoulFactor": 0.2,
   "keeperRushM": 12,
   "crossBlock": 0.6,
   "crossBlockM": 4,
-  "crossBlockBehind": 0.975,
+  "crossBlockBehind": 1,
   "headClearShare": 0.85,
-  "headBehind": 0.56875,
+  "headBehind": 0.65625,
   "clearToTouch": 0.05,
-  "clearSliceBehind": 0.325
+  "clearSliceBehind": 0.375
  },
  "keeper": {
   "letRunShare": 0.85,
@@ -354,21 +354,339 @@
   "widthSlackM": 4
  },
  "movement": {
-  "shapeSpeedShare": 0.85
+  "shapeSpeedShare": 0.85,
+  "relaxed": 1,
+  "relaxCap": 0.6,
+  "relaxArriveS": 2,
+  "relaxMarks": 1
  },
  "shape": {
-  "width": 1.25,
+  "width": 1.4,
   "depth": 1,
-  "defLineM": 15,
-  "defDepth": 1,
-  "fwdDropM": 2.5
+  "defDepth": 1
+ },
+ "positioning": {
+  "rule": 1,
+  "roles": {
+   "GK": {
+    "in": {
+     "a": -31.6,
+     "b": 0.31,
+     "w0": 0,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0.18
+    },
+    "out": {
+     "a": -42,
+     "b": 0.25,
+     "w0": 0,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0.11
+    },
+    "gk": {
+     "a": -31.6,
+     "b": 0.31,
+     "w0": 0,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0.18
+    }
+   },
+   "CB": {
+    "in": {
+     "a": -8.6,
+     "b": 0.64,
+     "w0": 10.9,
+     "w1": -0.11,
+     "w2": 0.32,
+     "w3": 0.01,
+     "e": 0.39
+    },
+    "out": {
+     "a": -22.5,
+     "b": 0.46,
+     "w0": 5.3,
+     "w1": 0.04,
+     "w2": 0.37,
+     "w3": 0.02,
+     "e": 0.37
+    },
+    "gk": {
+     "a": -30.5,
+     "b": 0,
+     "w0": 15.5,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   },
+   "FB": {
+    "in": {
+     "a": 4.6,
+     "b": 0.59,
+     "w0": 23.3,
+     "w1": -0.12,
+     "w2": 0.24,
+     "w3": -0.12,
+     "e": 0
+    },
+    "out": {
+     "a": -19.5,
+     "b": 0.48,
+     "w0": 9.9,
+     "w1": 0.08,
+     "w2": 0.34,
+     "w3": 0.1,
+     "e": 0
+    },
+    "gk": {
+     "a": -17.5,
+     "b": 0,
+     "w0": 27,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   },
+   "WB": {
+    "in": {
+     "a": 8.7,
+     "b": 0.59,
+     "w0": 24.9,
+     "w1": -0.15,
+     "w2": 0.2,
+     "w3": -0.04,
+     "e": 0
+    },
+    "out": {
+     "a": -18,
+     "b": 0.51,
+     "w0": 17.6,
+     "w1": 0.09,
+     "w2": 0.29,
+     "w3": 0.01,
+     "e": 0
+    },
+    "gk": {
+     "a": -15.9,
+     "b": 0,
+     "w0": 27,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   },
+   "CM": {
+    "in": {
+     "a": 5.3,
+     "b": 0.61,
+     "w0": 3.5,
+     "w1": -0.03,
+     "w2": 0.45,
+     "w3": -0.01,
+     "e": 0.45
+    },
+    "out": {
+     "a": -12.7,
+     "b": 0.56,
+     "w0": 3.4,
+     "w1": 0.01,
+     "w2": 0.47,
+     "w3": -0.01,
+     "e": 0.5
+    },
+    "gk": {
+     "a": -15.5,
+     "b": 0,
+     "w0": 2.7,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   },
+   "AM": {
+    "in": {
+     "a": 13.2,
+     "b": 0.57,
+     "w0": 0,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0.38
+    },
+    "out": {
+     "a": -4.5,
+     "b": 0.62,
+     "w0": 0,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0.47
+    },
+    "gk": {
+     "a": -3.6,
+     "b": 0,
+     "w0": 0,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   },
+   "W": {
+    "in": {
+     "a": 15.4,
+     "b": 0.54,
+     "w0": 14.7,
+     "w1": -0.12,
+     "w2": 0.32,
+     "w3": 0.04,
+     "e": 0
+    },
+    "out": {
+     "a": -8.8,
+     "b": 0.59,
+     "w0": 13.2,
+     "w1": 0.06,
+     "w2": 0.34,
+     "w3": 0.02,
+     "e": 0
+    },
+    "gk": {
+     "a": -2.9,
+     "b": 0,
+     "w0": 12.4,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   },
+   "ST": {
+    "in": {
+     "a": 19.6,
+     "b": 0.53,
+     "w0": 5,
+     "w1": 0,
+     "w2": 0.35,
+     "w3": 0.05,
+     "e": 0.32
+    },
+    "out": {
+     "a": 2.7,
+     "b": 0.59,
+     "w0": 5,
+     "w1": 0.02,
+     "w2": 0.4,
+     "w3": 0.01,
+     "e": 0.4
+    },
+    "gk": {
+     "a": 4.3,
+     "b": 0,
+     "w0": 5,
+     "w1": 0,
+     "w2": 0,
+     "w3": 0,
+     "e": 0
+    }
+   }
+  },
+  "eightW0": 8.5,
+  "keeperLineM": 2,
+  "keeperNearInM": 22,
+  "keeperNearOutM": 30,
+  "commitS": 0,
+  "clearanceLoose": 0,
+  "styleLineM": 3,
+  "styleCompact": 0.35,
+  "lineCapM": 4,
+  "vsKeeperCapU": 22,
+  "tauS": {
+   "GK": 2.5,
+   "CB": 3,
+   "FB": 3.5,
+   "WB": 3.5,
+   "CM": 2.75,
+   "AM": 2.75,
+   "W": 3.25,
+   "ST": 2.75
+  },
+  "narrowTauS": 1,
+  "spreadDeadS": 2.5,
+  "spreadTauS": 4.5,
+  "ballLagS": 2,
+  "drift": {
+   "teamUSdM": 2.25,
+   "teamUTauS": 8,
+   "teamYSdM": 1.35,
+   "teamYTauS": 5,
+   "playerUSdM": 3,
+   "playerUTauS": 12,
+   "playerSSdM": {
+    "GK": 0,
+    "CB": 2.85,
+    "FB": 4.5,
+    "WB": 4.5,
+    "CM": 3.4,
+    "AM": 4.25,
+    "W": 4.5,
+    "ST": 4.35
+   },
+   "playerSTauS": {
+    "GK": 20,
+    "CB": 20,
+    "FB": 40,
+    "WB": 40,
+    "CM": 25,
+    "AM": 40,
+    "W": 40,
+    "ST": 40
+   },
+   "offsetUSdM": {
+    "GK": 0,
+    "CB": 2.4,
+    "FB": 4.8,
+    "WB": 4.8,
+    "CM": 5,
+    "AM": 5.9,
+    "W": 4.9,
+    "ST": 2.9
+   },
+   "offsetSSdM": {
+    "GK": 0,
+    "CB": 3,
+    "FB": 7,
+    "WB": 7,
+    "CM": 4,
+    "AM": 5,
+    "W": 4.9,
+    "ST": 3
+   },
+   "smoothS": 3
+  }
  },
  "fatigue": {
   "drainBase": 0.00004,
   "drainSpeed2": 0.000012,
   "staminaSlope": 0.8,
   "halfTimeRecovery": 0.1,
-  "executionK": 0.25
+  "executionK": 0.25,
+  "tiring": 1,
+  "hiSpeedMs": 5.56,
+  "loadWindowS": 300,
+  "loadFreeM": 45,
+  "loadDamp": 0.5,
+  "loadFloor": 0.5
  },
  "firstTouch": {
   "b0": -3.9,
@@ -417,9 +735,9 @@
  },
  "substitutions": {
   "windowMinutes": [
-   62,
-   72,
-   81
+   64,
+   75,
+   84
   ],
   "windowSdMin": 5,
   "perWindow": [
@@ -432,7 +750,16 @@
    0.8,
    0.5
   ],
-  "halfTimeChance": 0.2
+  "halfTimeChance": 0.2,
+  "roleWeights": {
+   "CB": 0.15,
+   "FB": 0.4,
+   "DM": 0.7,
+   "CM": 0.7,
+   "AM": 0.9,
+   "W": 1,
+   "ST": 0.9
+  }
  },
  "classifier": {
   "longPassM": 32,
@@ -449,68 +776,71 @@
  "calibration": {
   "method": "coordinate search on engine knobs, minimising weighted squared z-scores of match statistics (common random numbers)",
   "targets": "targets-2026-10-07",
-  "matches": 12,
+  "matches": 24,
   "rounds": 1,
-  "evals": 60,
-  "loss": 19.269,
+  "evals": 64,
+  "loss": 27.94,
   "knobs": {
    "decision_scale": 0.75,
-   "long_bias": 2.75,
+   "long_bias": 3,
    "cross_bias": 0.125,
-   "shot_bias": 0,
-   "aim_noise": 1.15,
+   "shot_bias": 0.4,
+   "aim_noise": 1.35,
    "xg_b0": -0.75,
    "exec_scale": 1.15,
-   "reach_margin": 0.725,
-   "tackle_rate": 0.425,
-   "foul_per_tackle": 0.465,
+   "reach_margin": 0.675,
+   "tackle_rate": 0.575,
+   "foul_per_tackle": 0.405,
    "yellow_per_foul": 0.2,
    "box_intensity": 2,
    "box_carry": 0.25,
-   "loose_share": 0.4,
+   "loose_share": 0.3,
    "restart_scale": 1.25,
-   "shape_width": 1.25,
+   "shape_width": 1.4,
    "shape_depth": 1,
    "shape_speed": 0.85,
-   "deflect_behind": 1.625,
+   "deflect_behind": 1.875,
    "save_b0": 2.175,
    "pass_pc_weight": 0.8,
    "pass_safety": 3,
    "pass_arrive": 8,
    "clear_to_touch": 0.05,
-   "def_line": 15,
    "def_depth": 1,
-   "fwd_drop": 2.5,
+   "pos_in_shift": 0,
+   "pos_out_shift": 0,
+   "team_drift": 0.25,
+   "player_drift": 0.5,
+   "relax_cap": 0.6,
    "marking_weight": 0.75,
    "support_dist": 14
   },
   "simulated": {
-   "passes": 969,
-   "completion": 0.6955,
-   "long_share": 0.1638,
-   "pass_len_median": 17.4377,
-   "shots": 24.3333,
-   "on_target_share": 0.3676,
-   "blocked_share": 0.146,
-   "save_rate": 0.6852,
-   "goals": 2.6667,
-   "penalties": 0.6667,
-   "corners": 8.5833,
-   "throw_ins": 40.0833,
-   "goal_kicks": 16.4167,
-   "free_kicks": 24.5,
-   "fouls": 19.4167,
-   "cards": 5.5833,
-   "in_play_share": 0.4937,
-   "distance_km_median": 11.1014,
-   "peak_speed_kmh_median": 27.7156,
-   "width_poss_m": 46.3746,
-   "width_def_m": 43.795,
-   "length_def_m": 35.2358,
-   "line_height_def_m": 35.9383,
-   "ball_pressure_m": 4.7443,
-   "support_15m": 1.9423,
-   "free_space_m": 6.5316
+   "passes": 1064.0833,
+   "completion": 0.7273,
+   "long_share": 0.1812,
+   "pass_len_median": 16.1337,
+   "shots": 22.4583,
+   "on_target_share": 0.3259,
+   "blocked_share": 0.1246,
+   "save_rate": 0.7582,
+   "goals": 1.7083,
+   "penalties": 0.2083,
+   "corners": 6.3333,
+   "throw_ins": 43.2083,
+   "goal_kicks": 16.3333,
+   "free_kicks": 23.3333,
+   "fouls": 16.2917,
+   "cards": 4.8333,
+   "in_play_share": 0.524,
+   "distance_km_median": 11.3766,
+   "peak_speed_kmh_median": 25.7187,
+   "width_poss_m": 49.7906,
+   "width_def_m": 39.6623,
+   "length_def_m": 28.6867,
+   "line_height_def_m": 30.8746,
+   "ball_pressure_m": 5.8747,
+   "support_15m": 2.474,
+   "free_space_m": 7.2779
   },
   "real": {
    "passes": 866,

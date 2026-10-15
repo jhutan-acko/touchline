@@ -101,13 +101,32 @@ Execution and decision flaws compound it:
 
 | Role | a in / out | b in / out |
 |---|---|---|
-| GK | −34.4 / −39.9 | 0.28 / 0.27 |
-| CB | −12.0 / −18.5 | 0.59 / 0.51 |
-| FB | −1.7 / −14.0 | 0.58 / 0.54 |
-| CM | 1.5 / −8.0 | 0.59 / 0.58 |
-| AM | 8.6 / −0.2 | 0.54 / 0.62 |
-| W | 10.3 / −2.9 | 0.54 / 0.62 |
-| ST | 16.0 / 7.2 | 0.50 / 0.59 |
+| GK | −31.6 / −42.0 | 0.31 / 0.25 |
+| CB | −8.6 / −22.5 | 0.64 / 0.46 |
+| FB | 4.6 / −19.5 | 0.59 / 0.48 |
+| WB | 8.7 / −18.0 | 0.59 / 0.51 |
+| CM | 5.3 / −12.7 | 0.61 / 0.56 |
+| AM | 13.2 / −4.5 | 0.57 / 0.62 |
+| W | 15.4 / −8.8 | 0.54 / 0.59 |
+| ST | 19.6 / 2.7 | 0.53 / 0.59 |
+
+**Re-fit (Task 7c, 2026-10-14).** The first table (GK −34.4 / −39.9, CB −12.0 / −18.5, FB −1.7 / −14.0, CM 1.5 / −8.0,
+AM 8.6 / −0.2, W 10.3 / −2.9, ST 16.0 / 7.2) regressed positions on the *current* ball over *all* frames of each
+possession phase. That double-counts the engine's own mechanics: the engine reads the ball 2 s ago and blends rows after
+every switch, and the all-frames fit had both already baked in, so the engine pulled every row toward the middle twice.
+The re-fit regresses on the ball 2 s earlier and uses only frames 8 s or more after the team's last row switch; τ was
+re-fitted in the engine's own blend form against the new rows (below). Closed-form validation on the real phase sequences
+(engine model, no sim; real +3.90 / −9.52 in / out of possession):
+
+- old table, engine model (lag + blend, old τ): +0.41 / −5.36;
+- new table, old τ: +1.71 / −7.86;
+- **new table, new τ: +3.38 / −9.60** (+3.13 / −9.71 with the forward-line and vs-keeper caps);
+- per-role mean depth error: old −2.4 to −5.7 in, +2.7 to +6.5 out; new −0.1 to −1.0 in, −0.3 to +0.8 out.
+
+The lateral w0 of the in and out rows were re-fitted too (with the ball settled shapes are wider). The `gk` rows take the
+re-fitted depth intercepts (CB −30.5, FB −17.5, WB −15.9, CM −15.5, AM −3.6, W −2.9, ST 4.3) but keep their old widths
+(w0 CB 15.5, FB 27, WB 27, W 12.4, CM 2.7): the blend-inversion widths are low-confidence (short holds and claims from
+`out`, where the spread ramp barely starts), and widths do not move the depth centroid.
 
 - **Depth:** `u = a[phase] + b[phase]·bu + slotOffset + style`.
 - **Lateral:** `s = w0 + w1·bu + w2·bs + w3·|by|`, with the coefficients per role and phase from `fit.json` (`lat_central`).
@@ -129,7 +148,10 @@ Execution and decision flaws compound it:
 **A2: phase-switch timing.**
 
 - Per player, `λ = 1 − exp(−max(0, t + 0.5) / τ_role)` from the possession change; the anchor blends the old phase's rule into the new one by λ.
-- τ by role: CB 2.5, CM 4, ST 4.5, AM 5, FB 7.5, W 8.5 s.
+- τ by role: CB 2.5, CM 4, ST 4.5, AM 5, FB 7.5, W 8.5 s. **Re-fitted (Task 7c):** CB 3, FB and WB 3.5, CM 2.75,
+  AM 2.75, W 3.25, ST 2.75 s (GK 2.5). The first τ came from a free-asymptote fit against the all-frames rows; against
+  the settled rows the real curve is a fast jump (about 0.4 within 0.5 s) and a slow tail, and a single exponential with
+  τ ≈ 3 s is its least-squares fit.
 - **Lateral asymmetry.** Narrowing after a loss: τ ≈ 1 s. Spreading after a win: a 2.5 s dead time, then τ ≈ 4.5 s.
 - **Ball lag.** Anchors read the ball 2 s ago.
 

@@ -1195,7 +1195,10 @@ const shapeTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, inPossession: boo
   return anchorFor(team.formation, pl.slot, pl.side, w.period, ball, team.style, inPossession, w.p.shape, anchorCtx(w, pl, blend))
 }
 
-/** For tests: the open-play shape target the seam gives `playerId` at state `s` (its tick, anchor state and positions). */
+/**
+ * For tests: the open-play shape target the seam gives `playerId` at state `s` (its tick, anchor state and positions).
+ * @internal
+ */
 export const shapeTargetAt = (s: MatchState, playerId: string): Vec2 => {
   const w = new Work(s)
   w.tick = s.tick
