@@ -38,7 +38,8 @@ describe("states and forks", () => {
 
   it("give a scripted match's accepted states, inside and after a retried window", () => {
     const script: Script = { name: "t", entries: [{ window: [10, 25], team: "home", effect: "goal", count: 6 }] }
-    const scfg = makeConfig(42, { script })
+    // Seed 43: the first from 42 on whose window needs a retry (42 reaches six goals at the first attempt with the P2 goal nudge).
+    const scfg = makeConfig(43, { script })
     const run = runScript(scfg, { retries: 1, statesAt: new Set([9000, 20_000]) })
     expect(run.windows[0]!.attempts).toBeGreaterThan(1)
     const ticksOf = (from: number) => run.steps.flatMap((r) => r.events).filter((e) => Math.max(e.frame_id, e.frame_id_end ?? e.frame_id) > from)
