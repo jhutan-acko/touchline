@@ -26,8 +26,9 @@ const offShare = (params: Params) => {
 
 describe("substitutions by role (F2)", () => {
   it("takes wingers and strikers off before centre backs when weighted by role", () => {
-    const flat = offShare(P)
+    const flat = offShare({ ...P, substitutions: { ...P.substitutions, roleWeights: { CB: 1, FB: 1, DM: 1, CM: 1, AM: 1, W: 1, ST: 1 } } })
     const real = offShare({ ...P, substitutions: { ...P.substitutions, roleWeights: REAL_WEIGHTS } })
+    expect(P.substitutions.roleWeights).toEqual(REAL_WEIGHTS)
     expect(real(["CB"])).toBeLessThan(flat(["CB"]))
     expect(real(["CB"])).toBeLessThan(0.1)
     expect(real(["W", "ST"])).toBeGreaterThan(flat(["W", "ST"]))

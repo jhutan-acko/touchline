@@ -231,8 +231,8 @@ export interface Params {
    * spot walks; relaxMarks 1 does the same for marking.
    */
   readonly movement: { readonly shapeSpeedShare: number; readonly relaxed: number; readonly relaxCap: number; readonly relaxArriveS: number; readonly relaxMarks: number }
-  /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball a line push upfield (m) and extra depth squeeze. */
-  readonly shape: { readonly width: number; readonly depth: number; readonly defLineM: number; readonly defDepth: number; /** metres forwards (ST/W/AM) drop back without the ball */ readonly fwdDropM: number }
+  /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball an extra depth squeeze. */
+  readonly shape: { readonly width: number; readonly depth: number; readonly defDepth: number }
   /**
    * Off-ball positioning (realism v2, P2). rule 0: the old template (shape.ts); 1: the per-role rule table fitted to real
    * tracking, blended between rows after a change of possession, read against the ball ballLagS ago, plus team-common and
@@ -243,14 +243,15 @@ export interface Params {
     readonly roles: Readonly<Record<PosGroup, Readonly<Record<ShapeRow, PosRow>>>>
     /** Lateral w0 for the 4-3-3's two side central midfielders (m); the real pivot row does not fit them. */
     readonly eightW0: number
-    /** While the ball is within keeperNearM of his goal, the keeper stands keeperLineM off his line, on the goal-ball line (m). */
+    /** While the ball is within keeperNearInM of his goal, the keeper stands keeperLineM off his line, on the goal-ball line (m). */
     readonly keeperLineM: number
-    /** Superseded by keeperNearInM / keeperNearOutM (no longer read). */
-    readonly keeperNearM: number
     /** The keeper's spot moves linearly from his line spot (ball within keeperNearInM of his goal) to his row (beyond keeperNearOutM), m. */
     readonly keeperNearInM: number
     readonly keeperNearOutM: number
-    /** A new side in possession must keep the ball this long (s) before the rows switch; restarts and keeper catches switch at once. 0: no debounce. */
+    /**
+     * A new side in possession must keep the ball this long (s) before the rows switch; restarts and keeper catches switch
+     * at once. It is rounded to whole ticks, so 0, or anything below dt/2 (0.05 s at 10 Hz), means no debounce.
+     */
     readonly commitS: number
     /** 1: a clearance in flight keeps the rows, like a loose ball (a deflection always does); 0: it counts for the clearing side. */
     readonly clearanceLoose: number
@@ -260,7 +261,10 @@ export interface Params {
     readonly styleCompact: number
     /** With the ball, forwards (ST, W, AM) keep this far below the opponents' last outfield defender (m). */
     readonly lineCapM: number
-    /** While the other team's keeper has the ball, no out-of-possession anchor is further upfield than this u (m). */
+    /**
+     * While the other team's keeper has the ball, out-of-possession row spots are capped at this u (m), eased in and out
+     * at the group's tau. The cap applies before drift, so the team and player drift can carry an anchor a little past it.
+     */
     readonly vsKeeperCapU: number
     /** Phase-switch time constant by group (s): lambda = 1 - exp(-max(0, t + 0.5) / tau). */
     readonly tauS: Readonly<Record<PosGroup, number>>
@@ -270,6 +274,11 @@ export interface Params {
     readonly spreadTauS: number
     /** Anchors read the ball this many seconds ago. */
     readonly ballLagS: number
+    /**
+     * Depth time constant (s) of every group's blend into the gk row (the own keeper has the ball; 0: the group's tauS).
+     * A keeper's catch gives the team time, so it pushes up faster than after an open-play change of possession (G4).
+     */
+    readonly gkTauS: number
     /** Drift (A3): stationary SDs (m) and time constants (s) of OU processes, and SDs of match offsets drawn once per player. */
     readonly drift: {
       readonly teamUSdM: number
@@ -287,6 +296,24 @@ export interface Params {
        * so the stated SD and time constant hold, so the drift moves smoothly instead of a Brownian-rough step each tick.
        */
       readonly smoothS: number
+      /**
+       * Share of time every drift process advances while the ball is dead (a restart being set up): 1 drifts as in open
+       * play, 0 freezes the drift until play restarts. The fitted drift is open-play motion; at full rate it ran 210 m/min
+       * through dead balls (real 65).
+       */
+      readonly deadRate: number
+      /**
+       * Share of their own depth drift (match offsets and slow drift, not the team's shift) that back-line players (CB,
+       * FB, WB) keep without the ball, by the blend's out share: a defending back line holds a flat line (real depth SD of
+       * the back four 2.8-4.6 m out of possession, 6.9-10 m with the ball). 1 keeps it all.
+       */
+      readonly backLineOutU: number
+      /**
+       * Share of their own lateral drift (match offsets and slow drift, not the team's shift) that outfielders keep without
+       * the ball, by the blend's out share: a defending block stays compact across the pitch (width out of possession
+       * 38.96 m at 1 against real 37.0). 1 keeps it all.
+       */
+      readonly outS: number
     }
   }
   /**
@@ -464,26 +491,25 @@ export const DEFAULT_PARAMS: Params = {
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
   support: { count: 2, distM: 12, speedShare: 0.8 },
-  marking: { weight: 0.5, radiusM: 10, goalSideM: 1.5, widthSlackM: 4 },
-  movement: { shapeSpeedShare: 0.7, relaxed: 0, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 0 },
-  shape: { width: 1, depth: 1, defLineM: 0, defDepth: 1, fwdDropM: 0 },
+  marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
+  movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
+  shape: { width: 1, depth: 1, defDepth: 1 },
   // Real fits (IDSSE, 7 matches; fit-report.md, offball-report.md, transitions-report.md, gk-report.md, 2026-10-13).
   // in / out rows: the spec's table (a, b) and fit-report section 4 (lateral); gk rows: the build-up shape (gk-report).
   positioning: {
-    rule: 0,
+    rule: 1,
     roles: {
-      GK: { in: pr(-34.4, 0.28, 0, 0, 0, 0, 0.18), out: pr(-39.9, 0.27, 0, 0, 0, 0, 0.12), gk: pr(-34.4, 0.28, 0, 0, 0, 0, 0.18) },
-      CB: { in: pr(-12.0, 0.59, 8.0, -0.06, 0.35, 0.05, 0.4), out: pr(-18.5, 0.51, 4.8, 0.04, 0.38, 0.05, 0.38), gk: pr(-30, 0, 15.5, 0, 0, 0, 0) },
-      FB: { in: pr(-1.7, 0.58, 17.1, -0.04, 0.28, 0.02, 0), out: pr(-14.0, 0.54, 10.0, 0.07, 0.34, 0.12, 0), gk: pr(-13, 0, 27, 0, 0, 0, 0) },
-      WB: { in: pr(2.8, 0.58, 20.6, -0.04, 0.28, 0.02, 0), out: pr(-10.9, 0.54, 16.3, 0.07, 0.34, 0.12, 0), gk: pr(-11.7, 0, 27, 0, 0, 0, 0) },
-      CM: { in: pr(1.5, 0.59, 2.7, -0.01, 0.45, 0.02, 0.47), out: pr(-8.0, 0.58, 2.7, 0.01, 0.48, 0.01, 0.48), gk: pr(-13.3, 0, 2.7, 0, 0, 0, 0) },
-      AM: { in: pr(8.6, 0.54, 0, 0, 0, 0, 0.4), out: pr(-0.2, 0.62, 0, 0, 0, 0, 0.44), gk: pr(-4.9, 0, 0, 0, 0, 0, 0) },
-      W: { in: pr(10.3, 0.54, 12.4, -0.08, 0.33, 0.09, 0), out: pr(-2.9, 0.62, 11.6, 0.03, 0.35, 0.06, 0), gk: pr(-3.2, 0, 12.4, 0, 0, 0, 0) },
-      ST: { in: pr(16.0, 0.5, 5, 0, 0.35, 0.04, 0.36), out: pr(7.2, 0.59, 5, 0, 0.38, 0, 0.41), gk: pr(3.5, 0, 5, 0, 0, 0, 0) }
+      GK: { in: pr(-31.6, 0.31, 0, 0, 0, 0, 0.18), out: pr(-42.0, 0.25, 0, 0, 0, 0, 0.11), gk: pr(-31.6, 0.31, 0, 0, 0, 0, 0.18) },
+      CB: { in: pr(-8.6, 0.64, 10.9, -0.11, 0.32, 0.01, 0.39), out: pr(-22.5, 0.46, 5.3, 0.04, 0.37, 0.02, 0.37), gk: pr(-30.5, 0, 15.5, 0, 0, 0, 0) },
+      FB: { in: pr(4.6, 0.59, 23.3, -0.12, 0.24, -0.12, 0), out: pr(-19.5, 0.48, 9.9, 0.08, 0.34, 0.1, 0), gk: pr(-13, 0, 27, 0, 0, 0, 0) },
+      WB: { in: pr(8.7, 0.59, 24.9, -0.15, 0.2, -0.04, 0), out: pr(-18.0, 0.51, 17.6, 0.09, 0.29, 0.01, 0), gk: pr(-15.9, 0, 27, 0, 0, 0, 0) },
+      CM: { in: pr(5.3, 0.61, 3.5, -0.03, 0.45, -0.01, 0.45), out: pr(-12.7, 0.56, 3.4, 0.01, 0.47, -0.01, 0.5), gk: pr(-15.5, 0, 2.7, 0, 0, 0, 0) },
+      AM: { in: pr(13.2, 0.57, 0, 0, 0, 0, 0.38), out: pr(-4.5, 0.62, 0, 0, 0, 0, 0.47), gk: pr(-3.6, 0, 0, 0, 0, 0, 0) },
+      W: { in: pr(15.4, 0.54, 14.7, -0.12, 0.32, 0.04, 0), out: pr(-8.8, 0.59, 13.2, 0.06, 0.34, 0.02, 0), gk: pr(-2.9, 0, 12.4, 0, 0, 0, 0) },
+      ST: { in: pr(19.6, 0.53, 5, 0, 0.35, 0.05, 0.32), out: pr(2.7, 0.59, 5, 0.02, 0.4, 0.01, 0.4), gk: pr(4.3, 0, 5, 0, 0, 0, 0) }
     },
     eightW0: 8.5,
     keeperLineM: 2,
-    keeperNearM: 25,
     keeperNearInM: 22,
     keeperNearOutM: 30,
     commitS: 0,
@@ -492,11 +518,12 @@ export const DEFAULT_PARAMS: Params = {
     styleCompact: 0.35,
     lineCapM: 4,
     vsKeeperCapU: 22,
-    tauS: { GK: 2.5, CB: 2.5, FB: 7.5, WB: 7.5, CM: 4, AM: 5, W: 8.5, ST: 4.5 },
+    tauS: { GK: 2.5, CB: 3, FB: 3.5, WB: 3.5, CM: 2.75, AM: 2.75, W: 3.25, ST: 2.75 },
     narrowTauS: 1,
     spreadDeadS: 2.5,
     spreadTauS: 4.5,
     ballLagS: 2,
+    gkTauS: 1.5,
     drift: {
       teamUSdM: 9,
       teamUTauS: 8,
@@ -508,20 +535,23 @@ export const DEFAULT_PARAMS: Params = {
       playerSTauS: { GK: 20, CB: 20, FB: 40, WB: 40, CM: 25, AM: 40, W: 40, ST: 40 },
       offsetUSdM: { GK: 0, CB: 2.4, FB: 4.8, WB: 4.8, CM: 5.0, AM: 5.9, W: 4.9, ST: 2.9 },
       offsetSSdM: { GK: 0, CB: 3.0, FB: 7.0, WB: 7.0, CM: 4.0, AM: 5.0, W: 4.9, ST: 3.0 },
-      smoothS: 1
+      smoothS: 3,
+      deadRate: 0.25,
+      backLineOutU: 0.25,
+      outS: 0.5
     }
   },
-  fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 0, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
+  fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 1, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   script: {
-    goalShotLogit: 1.75, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
+    goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
     momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
-  substitutions: { windowMinutes: [62, 72, 81], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 1, FB: 1, DM: 1, CM: 1, AM: 1, W: 1, ST: 1 } },
+  substitutions: { windowMinutes: [64, 75, 84], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 0.15, FB: 0.4, DM: 0.7, CM: 0.7, AM: 0.9, W: 1, ST: 0.9 } },
   classifier: {
     longPassM: 32,
     switchLateralM: 25,
@@ -586,7 +616,7 @@ const PROBABILITIES = new Set([
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
   "keeper.letRunShare", "keeper.comeShare", "keeper.catchBase", "keeper.catchHandling", "keeper.fumbleShare",
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
-  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight"
+  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */

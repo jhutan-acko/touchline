@@ -72,7 +72,7 @@ export interface Blend {
 /** A blend that has arrived: the row alone. */
 export const settled = (row: ShapeRow): Blend => ({ from: row, to: row, lamU: 1, lamY: 1 })
 
-/** The spots a team blends between: the rows, and "out" capped at vsKeeperCapU (outK). */
+/** The spots a team blends between: the rows, and "out" capped at vsKeeperCapU (outK; drift is added after, so it can carry an anchor past the cap). */
 export type MixKey = keyof RowMix
 const KEYS: ReadonlyArray<MixKey> = ["in", "out", "gk", "outK"]
 const ZERO: RowMix = { in: 0, out: 0, gk: 0, outK: 0 }
@@ -97,7 +97,8 @@ export const blendFor = (team: TeamShapeState, group: PosGroup, tick: number, dt
   const to = targetKey(team)
   if (team.prev === team.row && !team.start) return to === team.row ? settled(team.row) : { ...settled(team.row), mix: { u: only(to), y: only(to) } }
   const t = (tick - team.since) * dt
-  const lamU = 1 - Math.exp(-Math.max(0, t + 0.5) / pos.tauS[group])
+  const tau = team.row === "gk" && pos.gkTauS > 0 ? pos.gkTauS : pos.tauS[group]
+  const lamU = 1 - Math.exp(-Math.max(0, t + 0.5) / tau)
   const lamY =
     team.row === "out"
       ? 1 - Math.exp(-Math.max(0, t) / pos.narrowTauS)

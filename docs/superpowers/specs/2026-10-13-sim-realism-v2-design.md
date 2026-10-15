@@ -101,13 +101,34 @@ Execution and decision flaws compound it:
 
 | Role | a in / out | b in / out |
 |---|---|---|
-| GK | −34.4 / −39.9 | 0.28 / 0.27 |
-| CB | −12.0 / −18.5 | 0.59 / 0.51 |
-| FB | −1.7 / −14.0 | 0.58 / 0.54 |
-| CM | 1.5 / −8.0 | 0.59 / 0.58 |
-| AM | 8.6 / −0.2 | 0.54 / 0.62 |
-| W | 10.3 / −2.9 | 0.54 / 0.62 |
-| ST | 16.0 / 7.2 | 0.50 / 0.59 |
+| GK | −31.6 / −42.0 | 0.31 / 0.25 |
+| CB | −8.6 / −22.5 | 0.64 / 0.46 |
+| FB | 4.6 / −19.5 | 0.59 / 0.48 |
+| WB | 8.7 / −18.0 | 0.59 / 0.51 |
+| CM | 5.3 / −12.7 | 0.61 / 0.56 |
+| AM | 13.2 / −4.5 | 0.57 / 0.62 |
+| W | 15.4 / −8.8 | 0.54 / 0.59 |
+| ST | 19.6 / 2.7 | 0.53 / 0.59 |
+
+**Re-fit (Task 7c, 2026-10-14).** The first table (GK −34.4 / −39.9, CB −12.0 / −18.5, FB −1.7 / −14.0, CM 1.5 / −8.0,
+AM 8.6 / −0.2, W 10.3 / −2.9, ST 16.0 / 7.2) regressed positions on the *current* ball over *all* frames of each
+possession phase. That double-counts the engine's own mechanics: the engine reads the ball 2 s ago and blends rows after
+every switch, and the all-frames fit had both already baked in, so the engine pulled every row toward the middle twice.
+The re-fit regresses on the ball 2 s earlier and uses only frames 8 s or more after the team's last row switch; τ was
+re-fitted in the engine's own blend form against the new rows (below). Closed-form validation on the real phase sequences
+(engine model, no sim; real +3.90 / −9.52 in / out of possession):
+
+- old table, engine model (lag + blend, old τ): +0.41 / −5.36;
+- new table, old τ: +1.71 / −7.86;
+- **new table, new τ: +3.38 / −9.60** (+3.13 / −9.71 with the forward-line and vs-keeper caps);
+- per-role mean depth error: old −2.4 to −5.7 in, +2.7 to +6.5 out; new −0.1 to −1.0 in, −0.3 to +0.8 out.
+
+The lateral w0 of the in and out rows were re-fitted too (with the ball settled shapes are wider). The `gk` rows take the
+re-fitted depth intercepts (CB −30.5, FB −17.5, WB −15.9, CM −15.5, AM −3.6, W −2.9, ST 4.3) but keep their old widths
+(w0 CB 15.5, FB 27, WB 27, W 12.4, CM 2.7): the blend-inversion widths are low-confidence (short holds and claims from
+`out`, where the spread ramp barely starts), and widths do not move the depth centroid.
+Task 8b moved the FB `gk` depth from the re-fitted −17.5 to the G4 value −13: at −17.5 the full-backs sat on the
+defensive-third counting threshold and the deep count stayed at 7 (real 3).
 
 - **Depth:** `u = a[phase] + b[phase]·bu + slotOffset + style`.
 - **Lateral:** `s = w0 + w1·bu + w2·bs + w3·|by|`, with the coefficients per role and phase from `fit.json` (`lat_central`).
@@ -129,7 +150,10 @@ Execution and decision flaws compound it:
 **A2: phase-switch timing.**
 
 - Per player, `λ = 1 − exp(−max(0, t + 0.5) / τ_role)` from the possession change; the anchor blends the old phase's rule into the new one by λ.
-- τ by role: CB 2.5, CM 4, ST 4.5, AM 5, FB 7.5, W 8.5 s.
+- τ by role: CB 2.5, CM 4, ST 4.5, AM 5, FB 7.5, W 8.5 s. **Re-fitted (Task 7c):** CB 3, FB and WB 3.5, CM 2.75,
+  AM 2.75, W 3.25, ST 2.75 s (GK 2.5). The first τ came from a free-asymptote fit against the all-frames rows; against
+  the settled rows the real curve is a fast jump (about 0.4 within 0.5 s) and a slow tail, and a single exponential with
+  τ ≈ 3 s is its least-squares fit.
 - **Lateral asymmetry.** Narrowing after a loss: τ ≈ 1 s. Spreading after a win: a 2.5 s dead time, then τ ≈ 4.5 s.
 - **Ball lag.** Anchors read the ball 2 s ago.
 
@@ -470,3 +494,153 @@ penalties come from `pnpm realism:deep` (64 matches, seeds 2000-2063).
 (with the agent service running), plus `demo-7`, `m-1`, `eval-ci` and any run folders among those present on 2026-10-14
 (`m-2`, `m-2-25fps`, `m-3-noisy`, `m-7`, `halt-check`, `ab-pilot`, `manager-ab`, `realism`; `library-old` can be deleted). Folders written
 before P1 have their second half played left to right; `readRun`, the advisor and the API library now refuse them.
+
+## Results: P2 (2026-10-15)
+
+**Switched on** in `DEFAULT_PARAMS`:
+- `positioning.rule` 1 (the re-fitted rule table and τ above, with blends, the 2 s ball lag and drift);
+- `movement.relaxed` 1;
+- `fatigue.tiring` 1;
+- `substitutions.windowMinutes` [64, 75, 84] and `roleWeights` CB 0.15, FB 0.4, DM/CM 0.7, AM/ST 0.9, W 1.
+
+`shape.defLineM` and `shape.fwdDropM` are retired, and so are their knobs (`def_line`, `fwd_drop`). New knobs:
+`pos_in_shift`, `pos_out_shift`, `team_drift`, `relax_cap` and, as a deviation, `player_drift`.
+
+**Sources.**
+- C1, C2 and C4 come from `docs/realism/realism-report.md` (16 matches, seeds 2000–2015).
+- C3, the physical bands, territory, centroids and discipline come from `docs/realism/realism-deep-report.md` (64
+  matches, seeds 2000–2063).
+- The G2, keeper-distribution and substitution checks were run on 16 matches, seeds 2000–2015.
+
+### Deviations from the plan
+
+1. **Drift scaled down: `team_drift` 0.25 and `player_drift` 1.**
+   - At the fitted SDs, the smoothed drift moves anchors at an RMS speed of about sd/√(smoothS·(τ − smoothS)): team u
+     3.4 m/s and team y 2.7 m/s, plus 1–2 m/s per player.
+   - Players chased those anchors: 19.7 km per outfielder, 210 m/min with the ball dead, 623 accelerations per 90.
+   - The real residual SDs include motion the engine already produces through pressing, marking and support, so at full
+     size they double-count it.
+   - The `player_drift` knob was added so the tuner could scale the player processes as well as the team ones.
+2. **`positioning.drift.smoothS` 1 → 3** (capped at τ/3 per process). It was untuned before.
+3. **`movement.relaxMarks` 1 (Ruling 13).** Live running without drift was 172 m/min against 130–150. I switched it on
+   before calibrating, not after.
+4. **Task 8b engine fixes.** Each one's "off" value reproduces the old arithmetic.
+   - **`positioning.drift.deadRate` 0.25.** Drift advances at a quarter rate while a restart is set up. Dead-ball running
+     falls from 83 to 49–52 m/min.
+   - **`backLineOutU` 0.25.** CB/FB/WB keep a quarter of their own depth drift without the ball. That makes a flat back
+     line: depth SD by third 3.0 / 3.8 / 4.1 against real 2.8 / 3.3 / 4.6.
+   - **`outS` 0.5.** Every outfielder keeps half his own lateral drift without the ball (a compact block).
+   - **`positioning.gkTauS` 1.5 s** for the blend into the gk row.
+   - **FB `gk` a −13**, the G4 value. The re-fit's −17.5 sat exactly on the deep-count threshold.
+   - **`marking.radiusM` 10 → 15.** About half the non-carrying attackers had no marker.
+5. **The re-fitted `gk` rows keep their old widths (w0).** The blend-inversion widths are low-confidence.
+6. **`positioning.test.ts`.** The plan's real-target bounds are restored, unwidened, on DEFAULT_PARAMS, seed 7. The two
+   that fail are in `it.fails`, marked NOT MET (user ruling):
+   - relIn > −3 (measured −3.63);
+   - deep count while the keeper holds ≤ 6 (measured 7).
+
+### Calibration
+
+- **Task 8, runs 1–5** (12 or 24 matches per evaluation):
+  - from the P1 knobs with drift ×0.25, the tuner loss went 49.19 → 34.43 (held-out 40.5);
+  - from shape_width 1.4 and player drift ×0.5, it went 34.22 → 28.22;
+  - two more runs (2 rounds; then 24 matches) ended at 28.22 and 27.94, with **held-out 30.95**. That failed the gate,
+    and the work stopped for a decision.
+- **After the Task 8b fixes:**
+  - a parallel tuner, 24 matches, 1 round: tuner 26.89, held-out 28.06;
+  - that passed the loss but had 10 statistics within 1 SD against the gate's 11;
+  - one more run (24 matches, 2 rounds): **tuner 26.78, held-out 26.87**, 11 within 1 SD and 19 within 2 SD.
+- **Net knob change against the P1 parameters:**
+  - long_bias 2.75 → 2.5, shot_bias 0 → 0.8, aim_noise 1.15 → 1.35, xg_b0 −0.75 → −1;
+  - reach_margin 0.725 → 0.675, tackle_rate 0.425 → 0.575, foul_per_tackle 0.465 → 0.405, yellow_per_foul 0.2 → 0.35;
+  - loose_share 0.4 → 0.3, shape_width 1.25 → 1.4, deflect_behind 1.625 → 1.875, save_b0 2.175 → 2.05;
+  - team_drift 0.25, player_drift 1;
+  - def_line (15) and fwd_drop (2.5) are retired.
+  - pos_in_shift, pos_out_shift and relax_cap stayed at their identity values (0, 0, 0.6).
+
+### Results
+
+- **Gate: MET.** Loss 26.87 against `GATE_LOSS` 30, maxDrift 0 against the refreshed baseline, 11 within 1 SD and 19
+  within 2 SD. Physics: 2 of 13 inside (max_speed and, new, metres above 25 km/h). It was 21.23 at P1.
+- **C1: NOT MET.**
+  - Of the 19, 9 are within 1 SD (needs 16) and 18 within 2 SD (needs 19).
+  - Outside 2 SD: passes, z +2.08 (1054 per match, short: median length −1.98).
+- **C2: NOT MET.** Free kicks +0.05 and shots on target −0.63 are within 1 SD; fouls −1.64 and goals −1.27 are not.
+  Goals are 1.12 per match on 16 matches, against 2.71.
+- **C3: NOT MET, improved.** Team shot-share SD on 64 matches is **0.223** (was 0.383; needs ≤ 0.18; real 0.090).
+  - What remains is `pressIntensity`, which drives the rest of the dominance (`dominance-report.md`).
+  - Team pressing is P4 (A5).
+- **C4: MET** (all seven |z| < 3; P1 had width out of possession at +3.04):
+
+  | metric | z |
+  |---|---|
+  | width in possession | +0.61 |
+  | width out of possession | +0.42 |
+  | defending length | −1.97 |
+  | line height | −1.98 |
+  | ball pressure | +1.22 |
+  | support within 15 m | +2.52 |
+  | free space | +1.85 |
+
+- **Physical bands** (64 matches, per 90, against real):
+
+  | band | sim | real | status |
+  |---|---|---|---|
+  | walking (km) | 1.93 | 3.50 | NOT MET |
+  | high-speed + sprint (km) | 1.01 | 0.69 | NOT MET; was 3.35 |
+  | accelerations over 2.5 m/s² | 289 | 50 | NOT MET; was 712 |
+  | live running (m/min) | 156 | 130–150 | NOT MET, just above |
+  | dead-ball running (m/min) | 50 | 65 | |
+  | sprints | 4.9 | 8.4 | |
+  | distance (km) | 10.06 | 10.88 | z −1.51 |
+
+- **Territory and centroids** (64 matches):
+  - territory SD 4.5 m, against real 1.9: NOT MET (was 11.7);
+  - centroid minus ball with the ball −3.0 m, against +3.9: NOT MET;
+  - without the ball −4.6 m, against −9.5: NOT MET.
+- **G2, keeper-distribution and substitution checks** (16 matches):
+  - **G2 at-feet pressure: NOT MET (overshoots).** An opponent is within 5 m at 1.5 % of open-play releases from the
+    keeper's feet (3 of 200; real 12.6 %; P1 43 %). The vsKeeper cap and the build-up shape keep the strikers away.
+  - **Keeper distribution: MET.** 4.8 % of shots follow the opponents' keeper distribution within 20 s (P1 9.0 %; real
+    7.6 %).
+  - **Substitutions: MET.** Mean minute 70.4. Share of starters taken off by role: W 0.85, AM 0.75, ST 0.71, CM 0.63,
+    DM 0.47, FB 0.05, CB 0 (real W 79 %, CM 39 %, CB 6 %).
+- **Keeper off his line** (DEFAULT_PARAMS, seeds 7 / 9 / 11): medians 2.76 / 3.04 / 2.85 m, inside 1.2–3.5 (real 2.2):
+  MET. It was 4.0 on the old template.
+- **Deep count while the keeper holds:** median 5 per match, mean 5.67 (Task 8b, 48 matches; real 3): NOT MET. At
+  release the median is 5 for holds in the hands and 3 at the feet. About 1.3 players of the gap is the tracking lag
+  below.
+- **Discipline** (64 matches): 0.50 players sent off per match (real 0.29, target about 0.2–0.3): NOT MET. Penalties 0.28
+  (real 0.43). The re-tune raised `yellow_per_foul` to 0.35.
+
+- **Scenario nudge: `script.goalShotLogit` 1.75 → 2.**
+  - At 1.75, `late_comeback` reached its target unforced in 8 of seeds 1–10 and 9 of 11–20, against the 90 % this
+    design asks for.
+  - At 2 it is 9 and 10, and the other built-in scenarios are unchanged (all 9–10 of 10).
+  - Unscripted matches, and so the gate, are unaffected.
+
+### Gaps outside P2 (found by Task 8b)
+
+- **Ball upfield (P3, decision side).** While a team has the ball, the sim's mean ball u is +2.4, against −5.2 in real
+  matches; by thirds the sim is 18 / 58 / 24 % against real 35 / 43 / 22 %.
+  - Because centroid − ball = ā + (b − 1)·bu with b ≈ 0.6, this accounts for about 3.5 m of each centroid gap, and for
+    about 85 % of the line-height deficit.
+  - The lag and blend match the closed form (−6.0 / +4.8 against −5.6 / +5.6).
+- **Dead-ball running (P5, set pieces).** With drift slowed during restarts, live 147, dead 65 and 10.9 km cannot all
+  be met. The missing dead-ball motion is set-piece movement.
+- **Tracking double lag (P2, left unfixed by choice).**
+  - Relaxed motion adds about 2 s of first-order lag on top of a lag and blend fitted to real positions: −1.9 m in
+    possession, +2.3 m out of it.
+  - Leading the target by `relaxArriveS` closes it, but raises live running to 170–176 m/min and bunching. It is left for
+    a later phase, together with a lower relax cap.
+- **Defending length at the extremes.** The sim is 4.5–8 m short of real per third when the ball is deep in a team's own
+  third or it presses high. A linear table cannot produce that; it needs a per-third depth refit.
+
+### Rulings
+
+The plan's rulings 1–17 ("Rulings on the spec", plan 8b) hold as written, with these notes:
+- Ruling 4: offsets are the real per-player ones.
+- Ruling 11: team drift is scaled by `team_drift` 0.25.
+- Ruling 13: `relaxMarks` is on (deviation 3).
+
+`pnpm library` was not rebuilt. It needs the agent service and the LLM, and is on the merge checklist (as for P1).

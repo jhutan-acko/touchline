@@ -42,27 +42,12 @@ describe("team shape", () => {
       expect(kickoffAnchor("4-3-3", slot, "away", "first_half", STYLES.high_press).x).toBeGreaterThan(0)
     }
   })
-  it("moves a team's shape without the ball by defLineM and defDepth, and leaves it alone with the ball", () => {
+  it("squeezes a team's lines by defDepth without the ball, and leaves it alone with the ball", () => {
     const style = STYLES.possession
     const ball = { x: 0, y: 0 }
-    const spread = (defLineM: number, defDepth: number) => ({ width: 1, depth: 1, defLineM, defDepth })
-    // Centre back (slot 2): 10 m further upfield without the ball, mirrored for the away side.
-    expect(anchorFor("4-3-3", 2, "home", "first_half", ball, style, false, spread(10, 1)).x - anchorFor("4-3-3", 2, "home", "first_half", ball, style, false).x).toBeCloseTo(10, 9)
-    expect(anchorFor("4-3-3", 2, "away", "first_half", ball, style, false, spread(10, 1)).x - anchorFor("4-3-3", 2, "away", "first_half", ball, style, false).x).toBeCloseTo(-10, 9)
+    const spread = (defDepth: number) => ({ width: 1, depth: 1, defDepth })
     // Striker (slot 9, x = 6): distance from the team centre (x = -18) halves without the ball: 24 m -> 12 m.
-    expect(anchorFor("4-3-3", 9, "home", "first_half", ball, style, false, spread(0, 0.5)).x - anchorFor("4-3-3", 9, "home", "first_half", ball, style, false).x).toBeCloseTo(-12, 9)
-    // With the ball nothing changes.
-    expect(anchorFor("4-3-3", 2, "home", "first_half", ball, style, true, spread(10, 0.5))).toEqual(anchorFor("4-3-3", 2, "home", "first_half", ball, style, true))
-  })
-  it("drops forwards (ST, W, AM) back by fwdDropM without the ball only", () => {
-    const style = STYLES.possession
-    const ball = { x: 0, y: 0 }
-    const drop = { width: 1, depth: 1, defLineM: 0, defDepth: 1, fwdDropM: 10 }
-    // 4-3-3: slot 9 is the striker, slot 8 a winger, slot 2 a centre back.
-    expect(anchorFor("4-3-3", 9, "home", "first_half", ball, style, false, drop).x - anchorFor("4-3-3", 9, "home", "first_half", ball, style, false).x).toBeCloseTo(-10, 9)
-    expect(anchorFor("4-3-3", 8, "home", "first_half", ball, style, false, drop).x - anchorFor("4-3-3", 8, "home", "first_half", ball, style, false).x).toBeCloseTo(-10, 9)
-    expect(anchorFor("4-3-3", 9, "away", "first_half", ball, style, false, drop).x - anchorFor("4-3-3", 9, "away", "first_half", ball, style, false).x).toBeCloseTo(10, 9)
-    expect(anchorFor("4-3-3", 2, "home", "first_half", ball, style, false, drop)).toEqual(anchorFor("4-3-3", 2, "home", "first_half", ball, style, false))
-    expect(anchorFor("4-3-3", 9, "home", "first_half", ball, style, true, drop)).toEqual(anchorFor("4-3-3", 9, "home", "first_half", ball, style, true))
+    expect(anchorFor("4-3-3", 9, "home", "first_half", ball, style, false, spread(0.5)).x - anchorFor("4-3-3", 9, "home", "first_half", ball, style, false).x).toBeCloseTo(-12, 9)
+    expect(anchorFor("4-3-3", 2, "home", "first_half", ball, style, true, spread(0.5))).toEqual(anchorFor("4-3-3", 2, "home", "first_half", ball, style, true))
   })
 })

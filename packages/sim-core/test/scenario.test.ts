@@ -79,10 +79,11 @@ describe("nudges raise the scripted outcome's rate", () => {
     expect(reds).toBeGreaterThanOrEqual(4)
   })
   it("keeper heroics and howlers move the team keeper's save rate up and down", () => {
-    // Twelve seeds: with a well-calibrated keeper few shots reach the target, so six give too few to compare.
+    // Twenty-four seeds: with a well-calibrated keeper few shots reach the target, so six (and, with the P2 parameters,
+    // twelve: 4 goals let in against 3) give too few to compare.
     const rate = (script?: Script) => {
       let on = 0, saved = 0
-      for (const seed of [...SEEDS, 7, 8, 9, 10, 11, 12]) for (const e of play(cfgFor(seed, script)).filter((x) => x.type === "shot" && x.team_id !== HOME)) {
+      for (const seed of Array.from({ length: 24 }, (_, i) => i + 1)) for (const e of play(cfgFor(seed, script)).filter((x) => x.type === "shot" && x.team_id !== HOME)) {
         if (e.outcome === "goal" || e.outcome === "saved") on++
         if (e.outcome === "saved") saved++
       }
@@ -93,7 +94,7 @@ describe("nudges raise the scripted outcome's rate", () => {
     const base = 1 - rate()
     expect(1 - rate(one("keeper_heroics"))).toBeLessThan(base * 0.6)
     expect(1 - rate(one("keeper_howler"))).toBeGreaterThan(base * 1.5)
-  }, 300_000) // 36 simulated matches: past the default 120 s on a busy machine
+  }, 600_000) // 72 simulated matches: past the default 120 s on a busy machine
   it("defensive error: the team's defenders mis-hit far more passes in their own half", () => {
     const cfg = cfgFor(1)
     const defenders = new Set([...cfg.home.starters, ...(cfg.home.bench ?? [])].filter((p) => ["CB", "FB", "DM"].includes(p.role)).map((p) => p.id))

@@ -38,7 +38,8 @@ describe("states and forks", () => {
 
   it("give a scripted match's accepted states, inside and after a retried window", () => {
     const script: Script = { name: "t", entries: [{ window: [10, 25], team: "home", effect: "goal", count: 6 }] }
-    const scfg = makeConfig(42, { script })
+    // Seed 43: the first from 42 on whose window needs a retry (42 reaches six goals at the first attempt with the P2 goal nudge).
+    const scfg = makeConfig(43, { script })
     const run = runScript(scfg, { retries: 1, statesAt: new Set([9000, 20_000]) })
     expect(run.windows[0]!.attempts).toBeGreaterThan(1)
     const ticksOf = (from: number) => run.steps.flatMap((r) => r.events).filter((e) => Math.max(e.frame_id, e.frame_id_end ?? e.frame_id) > from)
@@ -49,7 +50,8 @@ describe("states and forks", () => {
   it("drop forced outcomes whose window has ended, so a state taken inside a forced window plays on like the main run", () => {
     // A goal forced for the home side in minutes 0-2 that never came: from a state inside the window, it must lapse at minute 2.
     const script: Script = { name: "t", entries: [{ window: [0, 2], team: "home", effect: "goal", count: 9 }] }
-    // Seed 1: no goal in the first two minutes (a goal would use the entry up before its window ends).
+    // Seed 1: no goal in the first two minutes (a goal would use the entry up before its window ends). Re-picked for Task 8b
+    // (scan of seeds 1-12: 1, 2, 3, 6, 10 and 11 qualify).
     let s: MatchState = { ...initMatch(makeConfig(1, { script })), forced: [script.entries[0]!] }
     const minute = (st: MatchState) => (st.period === "first_half" ? 0 : 45) + (st.periodTick * st.config.dt) / 60
     while (minute(s) < 2) s = step(s).state
@@ -59,7 +61,8 @@ describe("states and forks", () => {
   })
 
   it("fork with fresh random streams: forks differ from each other but each is reproducible", () => {
-    const s = match.states.get(20_000)!
+    // Tick 20 500: play is live in the next 300 ticks (an empty stretch would make the forks trivially equal).
+    const s = match.states.get(20_500)!
     const a = playAhead(forkState(s, 0), 300).events
     expect(playAhead(forkState(s, 0), 300).events).toEqual(a)
     expect(playAhead(forkState(s, 1), 300).events).not.toEqual(a)
