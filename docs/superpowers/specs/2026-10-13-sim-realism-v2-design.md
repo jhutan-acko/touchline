@@ -127,6 +127,8 @@ The lateral w0 of the in and out rows were re-fitted too (with the ball settled 
 re-fitted depth intercepts (CB −30.5, FB −17.5, WB −15.9, CM −15.5, AM −3.6, W −2.9, ST 4.3) but keep their old widths
 (w0 CB 15.5, FB 27, WB 27, W 12.4, CM 2.7): the blend-inversion widths are low-confidence (short holds and claims from
 `out`, where the spread ramp barely starts), and widths do not move the depth centroid.
+Task 8b moved the FB `gk` depth from the re-fitted −17.5 to the G4 value −13: at −17.5 the full-backs sat on the
+defensive-third counting threshold and the deep count stayed at 7 (real 3).
 
 - **Depth:** `u = a[phase] + b[phase]·bu + slotOffset + style`.
 - **Lateral:** `s = w0 + w1·bu + w2·bs + w3·|by|`, with the coefficients per role and phase from `fit.json` (`lat_central`).

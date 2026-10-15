@@ -84,6 +84,35 @@ describe("drift (A3)", () => {
     expect(right.y).toBeCloseTo(2 - (1 + 0.25 * 2 + 0.25), 9)
     expect(driftFor(s, "home", "nobody", 1, 1, "in", "in", 0)).toEqual({ u: 1, y: 2 })
   })
+  it("driftFor scales the player's own depth drift by uScale and his own lateral drift by sScale, never the team's shift", () => {
+    const s: AnchorState = {
+      ...empty(),
+      teams: { ...empty().teams, home: { row: "out", prev: "in", since: 0, drift: { u: 1, y: 2 } } },
+      players: { p: { offIn: { u: 4, s: 3 }, offOut: { u: -2, s: 1 }, slow: { u: 0.5, s: 0.25 } } }
+    }
+    const full = driftFor(s, "home", "p", 0.5, 0.25, "in", "out", 1)
+    const damped = driftFor(s, "home", "p", 0.5, 0.25, "in", "out", 1, 0.25, 0.5)
+    expect(damped.u).toBeCloseTo(1 + 0.25 * (full.u - 1), 9)
+    expect(damped.y).toBeCloseTo(2 + 0.5 * (full.y - 2), 9)
+    expect(driftFor(s, "home", "p", 0.5, 0.25, "in", "out", 1, 0, 0)).toEqual({ u: 1, y: 2 })
+    // Scales of 1 give exactly the unscaled sums (the same arithmetic, so runs without damping stay bit-identical).
+    expect(driftFor(s, "home", "p", 0.5, 0.25, "in", "out", -1, 1, 1)).toEqual(driftFor(s, "home", "p", 0.5, 0.25, "in", "out", -1))
+  })
+
+  it("a frozen step (dt 0) keeps the drift where it is and still draws two normals", () => {
+    const rng = new Rng(seedRng(21))
+    const ref = new Rng(seedRng(21))
+    expect(smoothOuStep(1.5, -2, 9, 8, 3, 0, rng)).toEqual({ x: 1.5, z: -2 })
+    ref.normal()
+    ref.normal()
+    expect(rng.state).toEqual(ref.state)
+    let st = advanceDrift(empty(), [{ id: "a", group: "W" }], 0.1, d, new Rng(seedRng(22)))
+    for (let i = 0; i < 50; i++) st = advanceDrift(st, [{ id: "a", group: "W" }], 0.1, d, new Rng(seedRng(23 + i)))
+    const frozen = advanceDrift(st, [{ id: "a", group: "W" }], 0, d, new Rng(seedRng(99)))
+    expect(frozen.teams).toEqual(st.teams)
+    expect(frozen.players).toEqual(st.players)
+  })
+
   // ---- Task 7d: smoothed drift (a raw OU through a first-order low-pass of smoothS)
   const acf = (xs: number[], lag: number) => {
     const m = xs.reduce((a, b) => a + b, 0) / xs.length

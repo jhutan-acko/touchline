@@ -97,6 +97,19 @@ describe("realism v2 P2 params", () => {
     expect(DEFAULT_PARAMS.positioning.roles.CB.gk).toEqual({ a: -30.5, b: 0, w0: 15.5, w1: 0, w2: 0, w3: 0, e: 0 })
     expect(CONCERNS).toContain("drift")
   })
+  it("Task 8b engine defaults: dead-ball drift rate, flat back line, compact block, gk-row timing, build-up full-backs, marking radius", () => {
+    const pp = DEFAULT_PARAMS.positioning
+    expect(pp.drift.deadRate).toBe(0.25)
+    expect(pp.drift.backLineOutU).toBe(0.25)
+    expect(pp.drift.outS).toBe(0.5)
+    expect(pp.gkTauS).toBe(1.5)
+    expect(pp.roles.FB.gk.a).toBe(-13)
+    expect(DEFAULT_PARAMS.marking.radiusM).toBe(15)
+    expect(() => paramsFromJson({ provenance: cc, positioning: { drift: { deadRate: 1.5 } } })).toThrow(/between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, positioning: { drift: { backLineOutU: -0.5 } } })).toThrow(/between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, positioning: { drift: { outS: 2 } } })).toThrow(/between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, positioning: { gkTauS: -1 } })).toThrow(ParamsError)
+  })
   it("accept negative rule-table coefficients from a file, and reject a negative time constant or a share above 1", () => {
     const p = paramsFromJson({ provenance: cc, positioning: { roles: { CB: { out: { a: -20 } } } } })
     expect(p.positioning.roles.CB.out.a).toBe(-20)

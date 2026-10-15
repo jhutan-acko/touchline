@@ -97,7 +97,8 @@ export const blendFor = (team: TeamShapeState, group: PosGroup, tick: number, dt
   const to = targetKey(team)
   if (team.prev === team.row && !team.start) return to === team.row ? settled(team.row) : { ...settled(team.row), mix: { u: only(to), y: only(to) } }
   const t = (tick - team.since) * dt
-  const lamU = 1 - Math.exp(-Math.max(0, t + 0.5) / pos.tauS[group])
+  const tau = team.row === "gk" && pos.gkTauS > 0 ? pos.gkTauS : pos.tauS[group]
+  const lamU = 1 - Math.exp(-Math.max(0, t + 0.5) / tau)
   const lamY =
     team.row === "out"
       ? 1 - Math.exp(-Math.max(0, t) / pos.narrowTauS)

@@ -274,6 +274,11 @@ export interface Params {
     readonly spreadTauS: number
     /** Anchors read the ball this many seconds ago. */
     readonly ballLagS: number
+    /**
+     * Depth time constant (s) of every group's blend into the gk row (the own keeper has the ball; 0: the group's tauS).
+     * A keeper's catch gives the team time, so it pushes up faster than after an open-play change of possession (G4).
+     */
+    readonly gkTauS: number
     /** Drift (A3): stationary SDs (m) and time constants (s) of OU processes, and SDs of match offsets drawn once per player. */
     readonly drift: {
       readonly teamUSdM: number
@@ -291,6 +296,24 @@ export interface Params {
        * so the stated SD and time constant hold, so the drift moves smoothly instead of a Brownian-rough step each tick.
        */
       readonly smoothS: number
+      /**
+       * Share of time every drift process advances while the ball is dead (a restart being set up): 1 drifts as in open
+       * play, 0 freezes the drift until play restarts. The fitted drift is open-play motion; at full rate it ran 210 m/min
+       * through dead balls (real 65).
+       */
+      readonly deadRate: number
+      /**
+       * Share of their own depth drift (match offsets and slow drift, not the team's shift) that back-line players (CB,
+       * FB, WB) keep without the ball, by the blend's out share: a defending back line holds a flat line (real depth SD of
+       * the back four 2.8-4.6 m out of possession, 6.9-10 m with the ball). 1 keeps it all.
+       */
+      readonly backLineOutU: number
+      /**
+       * Share of their own lateral drift (match offsets and slow drift, not the team's shift) that outfielders keep without
+       * the ball, by the blend's out share: a defending block stays compact across the pitch (width out of possession
+       * 38.96 m at 1 against real 37.0). 1 keeps it all.
+       */
+      readonly outS: number
     }
   }
   /**
@@ -468,7 +491,7 @@ export const DEFAULT_PARAMS: Params = {
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
   support: { count: 2, distM: 12, speedShare: 0.8 },
-  marking: { weight: 0.5, radiusM: 10, goalSideM: 1.5, widthSlackM: 4 },
+  marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
   shape: { width: 1, depth: 1, defDepth: 1 },
   // Real fits (IDSSE, 7 matches; fit-report.md, offball-report.md, transitions-report.md, gk-report.md, 2026-10-13).
@@ -478,7 +501,7 @@ export const DEFAULT_PARAMS: Params = {
     roles: {
       GK: { in: pr(-31.6, 0.31, 0, 0, 0, 0, 0.18), out: pr(-42.0, 0.25, 0, 0, 0, 0, 0.11), gk: pr(-31.6, 0.31, 0, 0, 0, 0, 0.18) },
       CB: { in: pr(-8.6, 0.64, 10.9, -0.11, 0.32, 0.01, 0.39), out: pr(-22.5, 0.46, 5.3, 0.04, 0.37, 0.02, 0.37), gk: pr(-30.5, 0, 15.5, 0, 0, 0, 0) },
-      FB: { in: pr(4.6, 0.59, 23.3, -0.12, 0.24, -0.12, 0), out: pr(-19.5, 0.48, 9.9, 0.08, 0.34, 0.1, 0), gk: pr(-17.5, 0, 27, 0, 0, 0, 0) },
+      FB: { in: pr(4.6, 0.59, 23.3, -0.12, 0.24, -0.12, 0), out: pr(-19.5, 0.48, 9.9, 0.08, 0.34, 0.1, 0), gk: pr(-13, 0, 27, 0, 0, 0, 0) },
       WB: { in: pr(8.7, 0.59, 24.9, -0.15, 0.2, -0.04, 0), out: pr(-18.0, 0.51, 17.6, 0.09, 0.29, 0.01, 0), gk: pr(-15.9, 0, 27, 0, 0, 0, 0) },
       CM: { in: pr(5.3, 0.61, 3.5, -0.03, 0.45, -0.01, 0.45), out: pr(-12.7, 0.56, 3.4, 0.01, 0.47, -0.01, 0.5), gk: pr(-15.5, 0, 2.7, 0, 0, 0, 0) },
       AM: { in: pr(13.2, 0.57, 0, 0, 0, 0, 0.38), out: pr(-4.5, 0.62, 0, 0, 0, 0, 0.47), gk: pr(-3.6, 0, 0, 0, 0, 0, 0) },
@@ -500,6 +523,7 @@ export const DEFAULT_PARAMS: Params = {
     spreadDeadS: 2.5,
     spreadTauS: 4.5,
     ballLagS: 2,
+    gkTauS: 1.5,
     drift: {
       teamUSdM: 9,
       teamUTauS: 8,
@@ -511,7 +535,10 @@ export const DEFAULT_PARAMS: Params = {
       playerSTauS: { GK: 20, CB: 20, FB: 40, WB: 40, CM: 25, AM: 40, W: 40, ST: 40 },
       offsetUSdM: { GK: 0, CB: 2.4, FB: 4.8, WB: 4.8, CM: 5.0, AM: 5.9, W: 4.9, ST: 2.9 },
       offsetSSdM: { GK: 0, CB: 3.0, FB: 7.0, WB: 7.0, CM: 4.0, AM: 5.0, W: 4.9, ST: 3.0 },
-      smoothS: 3
+      smoothS: 3,
+      deadRate: 0.25,
+      backLineOutU: 0.25,
+      outS: 0.5
     }
   },
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 1, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
@@ -589,7 +616,7 @@ const PROBABILITIES = new Set([
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
   "keeper.letRunShare", "keeper.comeShare", "keeper.catchBase", "keeper.catchHandling", "keeper.fumbleShare",
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
-  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight"
+  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
