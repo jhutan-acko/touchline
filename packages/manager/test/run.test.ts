@@ -64,7 +64,9 @@ describe("the rule-based manager", () => {
   })
 })
 
-const cfg = leagueConfig(11)
+// Seed 13: the first from 11 on (12 is the mismatching log below) where the home side substitutes before a later decision
+// (P2: on seed 11 its only substitution came at its last decision, minute 75).
+const cfg = leagueConfig(13)
 const seen: DecideInput[] = []
 /** The rules manager, keeping every input it was given. */
 const spy: Manager = { kind: "rules", decide: (input) => (seen.push(input), rulesManager.decide(input)) }
