@@ -9,6 +9,8 @@ import type { OptionRecord, PlayerState, RestartKind, TeamStyle } from "./types.
 // ---- P3 imports, cross seam (plan 8c Task 5 inserts below this line)
 
 // ---- P3 imports, through-ball seam (plan 8c Task 6 inserts below this line)
+import { add, clampToPitch, norm, scale, sub } from "./geometry.js"
+import type { Intent } from "./types.js"
 
 // ---- P3 imports, keeper-hands seam (plan 8c Task 7 inserts below this line)
 
@@ -291,12 +293,35 @@ const crossTargets = (_ctx: CandidateContext): CrossOption[] => []
 
 export interface ThroughOption { readonly target: Vec2; readonly height: PassHeight }
 
-/** Through-ball targets for teammate `tm`: the old rule, an 8 m lead for anyone near the last defender or on a run. */
+/** Off-ball runs that ask for a ball into space (D4). P5 (A6) adds overlap runs here. */
+export const isRunIntent = (intent: Intent): boolean => intent.kind === "run_in_behind"
+
+/**
+ * Through-ball targets for teammate `tm`. Old rule: an 8 m lead straight upfield for anyone near the last defender or on a
+ * run. D4 (through.rule): only a runner, and the ball goes where he will be when it arrives, at most leadMaxM along his run.
+ */
 const throughTargets = (ctx: CandidateContext, tm: PlayerState): ThroughOption[] => {
-  const ahead = attackX(ctx.side, tm.pos.x, ctx.period) > ctx.lastDef - 4 || tm.intent.kind === "run_in_behind"
-  if (!ahead || tm.role === "GK") return []
-  const target = { x: tm.pos.x + ctx.dir * ctx.p.pass.throughLeadM, y: tm.pos.y }
-  return Math.abs(target.x) < PITCH.halfL - 2 ? [{ target, height: dist(ctx.input.owner.pos, target) < 30 ? "ground" : "high" }] : []
+  const owner = ctx.input.owner
+  const heightTo = (target: Vec2): PassHeight => (dist(owner.pos, target) < 30 ? "ground" : "high")
+  if (ctx.p.through.rule <= 0) {
+    const ahead = attackX(ctx.side, tm.pos.x, ctx.period) > ctx.lastDef - 4 || tm.intent.kind === "run_in_behind"
+    if (!ahead || tm.role === "GK") return []
+    const target = { x: tm.pos.x + ctx.dir * ctx.p.pass.throughLeadM, y: tm.pos.y }
+    return Math.abs(target.x) < PITCH.halfL - 2 ? [{ target, height: heightTo(target) }] : []
+  }
+  if (tm.role === "GK" || tm.intent.kind !== "run_in_behind" || !isRunIntent(tm.intent)) return []
+  const t = ctx.p.through
+  const goal = tm.intent.target
+  const along = norm(sub(goal, tm.pos))
+  const room = dist(tm.pos, goal)
+  let lead = tm.pos
+  let flight = dist(owner.pos, tm.pos) / t.ballSpeed
+  for (let i = 0; i < 2; i++) {
+    lead = add(tm.pos, scale(along, Math.min(room, t.runSpeed * flight, t.leadMaxM)))
+    flight = dist(owner.pos, lead) / t.ballSpeed
+  }
+  const target = clampToPitch(lead, 2)
+  return [{ target, height: heightTo(target) }]
 }
 
 // ================================================================ end of P3 through-ball seam
