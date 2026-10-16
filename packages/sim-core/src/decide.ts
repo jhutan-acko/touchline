@@ -50,6 +50,8 @@ export interface DecisionInput {
   readonly restart: RestartKind | null
   /** Additive logit bias from scenario scripts. */
   readonly scriptBias: Partial<Record<Action, number>>
+  /** Current tick; lets decide tell a live off-ball run (tick < intentUntil) from an expired one (D4). */
+  readonly tick?: number
   /** Seconds the player has had the ball (0 when not given). */
   readonly onBallS?: number
   /** True when the owner is a keeper whose hold in his hands has just ended (open play; P3 G5). */
@@ -310,6 +312,8 @@ const throughTargets = (ctx: CandidateContext, tm: PlayerState): ThroughOption[]
     return Math.abs(target.x) < PITCH.halfL - 2 ? [{ target, height: heightTo(target) }] : []
   }
   if (tm.role === "GK" || tm.intent.kind !== "run_in_behind" || !isRunIntent(tm.intent)) return []
+  // step.ts never clears an expired intent, so a run counts only while tick < intentUntil
+  if (ctx.input.tick === undefined || ctx.input.tick >= tm.intentUntil) return []
   const t = ctx.p.through
   const goal = tm.intent.target
   const along = norm(sub(goal, tm.pos))

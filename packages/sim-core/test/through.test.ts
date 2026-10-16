@@ -12,14 +12,20 @@ const away = players.filter((p) => p.side === "away")
 const off: Params = { ...P, through: { ...P.through, rule: 0 } }
 const on: Params = { ...P, through: { ...P.through, rule: 1 } }
 
-/** Home CM on the ball at the centre; the striker runs in behind from (15, 5) to (30, 5); a winger stands near the line at (20, -20). */
-const through = (p: Params, period: Period, d: number) => {
-  const owner = at(home[5]!, 0, 0)
-  const st = { ...at(home[9]!, d * 15, 5), intent: { kind: "run_in_behind" as const, target: { x: d * 30, y: 5 } } }
-  const w = at(home[10]!, d * 20, -20)
-  const teammates = home.map((x) => (x.id === owner.id ? owner : x.id === st.id ? st : x.id === w.id ? w : at(x, d * (-30 + x.slot), 30)))
-  const opponents = away.map((x) => (x.role === "GK" ? at(x, d * 51, 0) : x.role === "CB" ? at(x, d * 22, x.slot === 2 ? 8 : -8) : at(x, d * (-5 - x.slot), 30)))
-  const cands = buildCandidates({ period, owner, teammates, opponents, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, p, 0)
+/**
+ * The owner's CM on the ball at the centre; the striker runs in behind from (15, 5) to (30, 5) in the attack direction d;
+ * a winger stands near the line at (20, -20). `side` picks who attacks (home: +x in the first half, away: -x).
+ * `intentUntil`/`tick` set whether the run is live.
+ */
+const through = (p: Params, period: Period, d: number, side: "home" | "away" = "home", live = true) => {
+  const mine = side === "home" ? home : away
+  const theirs = side === "home" ? away : home
+  const owner = at(mine[5]!, 0, 0)
+  const st = { ...at(mine[9]!, d * 15, 5), intent: { kind: "run_in_behind" as const, target: { x: d * 30, y: 5 } }, intentUntil: live ? 1000 : 400 }
+  const w = at(mine[10]!, d * 20, -20)
+  const teammates = mine.map((x) => (x.id === owner.id ? owner : x.id === st.id ? st : x.id === w.id ? w : at(x, d * (-30 + x.slot), 30)))
+  const opponents = theirs.map((x) => (x.role === "GK" ? at(x, d * 51, 0) : x.role === "CB" ? at(x, d * 22, x.slot === 2 ? 8 : -8) : at(x, d * (-5 - x.slot), 30)))
+  const cands = buildCandidates({ period, owner, teammates, opponents, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {}, tick: 500 }, p, 0)
   return { st: cands.filter((c) => c.receiverId === st.id && (c.kind === "through" || c.kind === "lofted_through")), w: cands.filter((c) => c.receiverId === w.id && (c.kind === "through" || c.kind === "lofted_through")) }
 }
 
@@ -40,5 +46,18 @@ describe("D4: through balls into space", () => {
   it("mirrors in the second half", () => {
     const now = through(on, "second_half", -1)
     expect(now.st[0]!.target.x).toBeCloseTo(-26.7, 1)
+  })
+  it("mirrors for the away side, which attacks -x in the first half", () => {
+    const now = through(on, "first_half", -1, "away")
+    expect(now.w).toEqual([])
+    expect(now.st).toHaveLength(1)
+    expect(now.st[0]!.target.x).toBeCloseTo(-26.7, 1)
+    expect(now.st[0]!.target.y).toBeCloseTo(5, 6)
+    expect(now.st[0]!.kind).toBe("through")
+    expect(through(off, "first_half", -1, "away").st.map((c) => c.target)).toEqual([{ x: -23, y: 5 }])
+  })
+  it("an expired run_in_behind (tick >= intentUntil) gets no through target with the rule on, but the old rule is unchanged", () => {
+    expect(through(on, "first_half", 1, "home", false).st).toEqual([])
+    expect(through(off, "first_half", 1, "home", false).st.map((c) => c.target)).toEqual([{ x: 23, y: 5 }])
   })
 })
