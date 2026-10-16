@@ -51,6 +51,13 @@ export type PosGroup = "GK" | "CB" | "FB" | "WB" | "CM" | "AM" | "W" | "ST"
  */
 export interface PosRow { readonly a: number; readonly b: number; readonly w0: number; readonly w1: number; readonly w2: number; readonly w3: number; readonly e: number }
 
+/** The pass actions: every action that plays the ball to a teammate. */
+export type PassAction = Exclude<Action, "carry" | "take_on" | "shot" | "clear" | "hold">
+/** Pass-choice coefficients (or features), per unit of: distance/10, forward gain/10, |lateral|/10, lane blocked, min(open,10)/5, line-breaking, keeper. */
+export interface ChoiceCoefs { readonly dist: number; readonly fwd: number; readonly lat: number; readonly lane: number; readonly open: number; readonly lineBreak: number; readonly keeper: number }
+/** A cross target (D3): team-frame u, s metres toward the crosser's own touchline, height, and the least origin u it is offered from (0 = any). */
+export interface CrossZone { readonly u: number; readonly s: number; readonly height: "high" | "ground"; readonly minOriginU: number }
+
 export interface Params {
   readonly provenance: Provenance
   readonly kinematics: {
@@ -63,6 +70,13 @@ export interface Params {
     readonly controlHeightM: number
     readonly headerHeightM: number
   }
+  /**
+   * X1 (realism v2 P3). On a pass's first tick an opponent's contact point is taken at least alongM along the path; he
+   * takes the ball outright only if it is within reach and he stands within coneDeg of the pass direction from the passer,
+   * otherwise the reachable disc (with reactionS) decides. The nearest outfield opponent within bootM of the passer blocks
+   * an open-play pass at the boot with chance bootBlock (boot RNG stream). rule 0: the old first-tick rule, no boot blocks.
+   */
+  readonly firstTick: { readonly rule: number; readonly alongM: number; readonly coneDeg: number; readonly bootM: number; readonly bootBlock: number }
   readonly ball: {
     readonly gravity: number
     readonly substeps: number
@@ -106,6 +120,8 @@ export interface Params {
     readonly restartDelayS: Readonly<Record<"kickoff" | "throw_in" | "corner" | "goal_kick" | "free_kick" | "penalty", number>>
     readonly addedTimeMinS: readonly [number, number]
   }
+  /** D2 (P3): time on the ball after winning or receiving it (release.ts). rule 0: the flat timing.decisionMinS..MaxS draw. */
+  readonly release: { readonly rule: number; readonly pressedM: number; readonly pressedS: readonly [number, number]; readonly tailShare: number; readonly tailMeanS: number }
   readonly actions: {
     readonly logits: Readonly<Record<ActionZone, Readonly<Record<Action, number>>>>
     readonly styleWeight: number
@@ -129,6 +145,9 @@ export interface Params {
      * choose the kind of pass by how safe its best option is, not only by habit and pressure.
      */
     readonly safetyWeight: number
+    /** X2: a high ball's execution error grows by longErrorPerM per metre beyond longErrorFromM (multiplier 1 + ...; 0 = off). */
+    readonly longErrorPerM: number
+    readonly longErrorFromM: number
   }
   readonly execution: {
     readonly dirSigma: number
@@ -156,6 +175,23 @@ export interface Params {
     readonly blockBehind: number
     /** Save model for shots on target (see saveChance): intercept and the effects of placement, distance and reflexes. */
     readonly save: { readonly b0: number; readonly bWide: number; readonly bEdge: number; readonly bDistance: number; readonly bReflexes: number }
+  }
+  /**
+   * D1 (P3): pass choice as the real conditional logit (carrier-report C3). An option's utility is
+   * sum_k (base_k + press_k (pressure - pressCentre)) feature_k, plus leadLane when the lane to the aimed point is blocked.
+   * A pass kind's logit is the zone's short_pass logit + kindShift[kind] + inclusive (T log sum exp(U / T) - ivCentre), and
+   * the receiver is drawn by softmax(U / T), T = temperature (1.4 - vision) / 0.8. rule 0: the old value and choice.
+   */
+  readonly choice: {
+    readonly rule: number
+    readonly base: ChoiceCoefs
+    readonly press: ChoiceCoefs
+    readonly pressCentre: number
+    readonly leadLane: number
+    readonly inclusive: number
+    readonly ivCentre: number
+    readonly temperature: number
+    readonly kindShift: Readonly<Record<PassAction, number>>
   }
   readonly defending: {
     readonly pressRatePerS: number
@@ -194,6 +230,12 @@ export interface Params {
     readonly clearSliceBehind: number
   }
   /**
+   * D3 (P3): a wide carrier in the final third also aims crosses at zones, each offered if an attacker can be there when
+   * the ball arrives (flight at flightSpeed, run at runSpeed, plus arriveSlackS) and worth attackerValue per such attacker.
+   * rule 0: crosses only to teammates' positions.
+   */
+  readonly cross: { readonly rule: number; readonly zones: ReadonlyArray<CrossZone>; readonly flightSpeed: number; readonly runSpeed: number; readonly arriveSlackS: number; readonly attackerValue: number }
+  /**
    * Keepers coming for high balls: reach (m) and depth from the goal line (m), how often they come, catch vs punch vs fumble;
    * and the share of balls running out over their own goal line they let go for a goal kick instead of collecting.
    */
@@ -212,6 +254,11 @@ export interface Params {
     /** Multiplier on the press rate against a keeper with the ball at his feet. */
     readonly feetPressFactor: number
   }
+  /**
+   * G5 (P3): in open play a keeper with the ball in his hands throws (4..throwMaxM, error x throwErrorScale) or punts to a
+   * forward (puntMinM..puntMaxM, high, error x puntErrorScale), punting with chance sigmoid(puntLogit). rule 0: from his feet.
+   */
+  readonly distribution: { readonly rule: number; readonly throwMaxM: number; readonly throwErrorScale: number; readonly puntMinM: number; readonly puntMaxM: number; readonly puntErrorScale: number; readonly puntLogit: number }
   readonly takeOn: { readonly b0: number; readonly bSkill: number; readonly bPressure: number }
   /**
    * Carries: speed and duration; opponents ahead within avoidM bend the heading away (0 = off); a holding carrier with an
@@ -220,6 +267,8 @@ export interface Params {
   /** On the ball: a carry's speed and length; shielding within shieldM of an opponent; otherwise walking the ball into space at holdSpeed (keepers to the edge of their box). */
   readonly carry: { readonly speed: number; readonly durationS: readonly [number, number]; readonly avoidM: number; readonly shieldM: number; readonly shieldSpeed: number; readonly holdSpeed: number }
   readonly runs: { readonly runInBehindRatePerS: number }
+  /** D4 (P3): a teammate on a run gets the ball into the space where he will be when it arrives (at most leadMaxM along his run); nobody else gets a through target. rule 0: the old 8 m lead for anyone near the last defender. */
+  readonly through: { readonly rule: number; readonly ballSpeed: number; readonly runSpeed: number; readonly leadMaxM: number }
   /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
   readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
   /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
@@ -402,6 +451,8 @@ export const DEFAULT_PARAMS: Params = {
     version: "prior-1"
   },
   kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
+  // P3 X1 (plan 8c Task 3 may change the values, not rule).
+  firstTick: { rule: 0, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.25 },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
     ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },
@@ -422,6 +473,8 @@ export const DEFAULT_PARAMS: Params = {
     restartDelayS: { kickoff: 45, throw_in: 18, corner: 37, goal_kick: 30, free_kick: 25, penalty: 60 },
     addedTimeMinS: [60, 300]
   },
+  // P3 D2 (plan 8c Task 4 may change the values, not rule).
+  release: { rule: 0, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.25, tailMeanS: 1.5 },
   actions: {
     logits: {
       def_wide: row({ short_pass: 1.6, long_pass: 0.4, switch: -0.6, back_pass: -0.1, carry: 0.5, take_on: -1.2, clear: -0.4, hold: -0.6 }),
@@ -443,7 +496,9 @@ export const DEFAULT_PARAMS: Params = {
     throughLeadM: 8,
     choiceTemperature: 0.35,
     pitchControlWeight: 0,
-    safetyWeight: 0
+    safetyWeight: 0,
+    // P3 X2 (plan 8c Task 8 may change this line).
+    longErrorPerM: 0, longErrorFromM: 30
   },
   execution: { dirSigma: 0.035, distSigma: 0.07, pressureK: 1.6, weakFootK: 1.45, mishitBase: 0.006, mishitK: 0.11 },
   shot: {
@@ -460,6 +515,19 @@ export const DEFAULT_PARAMS: Params = {
     blockBehind: 0.5,
     // A prior shaped like public post-shot xG findings (corners and close range beat keepers); the intercept is tuned to the IDSSE save rate.
     save: { b0: 1.3, bWide: -1.6, bEdge: -0.7, bDistance: 0.6, bReflexes: 2.0 }
+  },
+  // P3 D1 (plan 8c Task 9 may change the values, not rule). Real pooled fit (carrier-report C3, all passes, IDSSE 7 matches)
+  // and the change per unit of pressure about the real mean pressure at release (0.366).
+  choice: {
+    rule: 0,
+    base: { dist: -1.33, fwd: 0.56, lat: 0.18, lane: -0.55, open: 1.27, lineBreak: 0.04, keeper: 0.95 },
+    press: { dist: 0, fwd: 0.22, lat: -0.46, lane: 0, open: -0.58, lineBreak: -0.58, keeper: 0.98 },
+    pressCentre: 0.366,
+    leadLane: 0,
+    inclusive: 1,
+    ivCentre: 0,
+    temperature: 1,
+    kindShift: { short_pass: 0, long_pass: 0, through_ball: 0, lofted_through: 0, switch: 0, cross: 0, cutback: 0, back_pass: 0 }
   },
   defending: {
     pressRatePerS: 0.6,
@@ -486,10 +554,28 @@ export const DEFAULT_PARAMS: Params = {
     clearToTouch: 0.2,
     clearSliceBehind: 0.2
   },
+  // P3 D3 (plan 8c Task 5 may change the values, not rule). Zones in the team frame; s toward the crosser's touchline.
+  cross: {
+    rule: 0,
+    zones: [
+      { u: 47.5, s: 3, height: "high", minOriginU: 0 },
+      { u: 41.5, s: 0, height: "high", minOriginU: 0 },
+      { u: 47, s: -4, height: "high", minOriginU: 0 },
+      { u: 42, s: 6, height: "ground", minOriginU: 44 }
+    ],
+    flightSpeed: 18,
+    runSpeed: 7,
+    arriveSlackS: 0.3,
+    attackerValue: 0.3
+  },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06, handsRule: 1, handsHoldS: [5, 10], feetPressFactor: 0.25 },
+  // P3 G5 (plan 8c Task 7 may change the values, not rule). Real: 3.4 throws and 1.6 punts per team-match (gk-report).
+  distribution: { rule: 0, throwMaxM: 35, throwErrorScale: 0.5, puntMinM: 35, puntMaxM: 70, puntErrorScale: 1.6, puntLogit: -0.75 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
+  // P3 D4 (plan 8c Task 6 may change the values, not rule).
+  through: { rule: 0, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
   support: { count: 2, distM: 12, speedShare: 0.8 },
   marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
@@ -606,7 +692,7 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
 /** Model coefficients and logits, which may take any sign. */
-const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./]
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones/, /^distribution\.puntLogit$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
@@ -616,7 +702,8 @@ const PROBABILITIES = new Set([
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
   "keeper.letRunShare", "keeper.comeShare", "keeper.catchBase", "keeper.catchHandling", "keeper.fumbleShare",
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
-  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS"
+  "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS",
+  "firstTick.bootBlock", "release.tailShare"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */

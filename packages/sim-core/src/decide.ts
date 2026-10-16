@@ -4,6 +4,13 @@ import { ACTIONS, type Action, type Params } from "./params.js"
 import { pitchControlAt, type PcPlayer } from "./pitchcontrol.js"
 import type { Rng } from "./rng.js"
 import type { OptionRecord, PlayerState, RestartKind, TeamStyle } from "./types.js"
+// ---- P3 imports, choice seam (plan 8c Task 9 inserts below this line)
+
+// ---- P3 imports, cross seam (plan 8c Task 5 inserts below this line)
+
+// ---- P3 imports, through-ball seam (plan 8c Task 6 inserts below this line)
+
+// ---- P3 imports, keeper-hands seam (plan 8c Task 7 inserts below this line)
 
 export const KIND_TO_ACTION: Readonly<Record<Exclude<PassKind, "set_piece">, Action>> = {
   short: "short_pass",
@@ -25,6 +32,8 @@ export interface Candidate {
   readonly xpass: number
   readonly value: number
   readonly lane: number
+  /** How a keeper plays it from his hands (P3 G5); absent for every other pass. */
+  readonly method?: "throw" | "punt"
 }
 
 export interface DecisionInput {
@@ -41,6 +50,8 @@ export interface DecisionInput {
   readonly scriptBias: Partial<Record<Action, number>>
   /** Seconds the player has had the ball (0 when not given). */
   readonly onBallS?: number
+  /** True when the owner is a keeper whose hold in his hands has just ended (open play; P3 G5). */
+  readonly keeperHands?: boolean
 }
 
 export interface Decision {
@@ -132,53 +143,170 @@ export const nearestOpponent = (pos: Vec2, opponents: ReadonlyArray<PlayerState>
   return best
 }
 
-export const buildCandidates = (input: DecisionInput, p: Params, pressure: number): Candidate[] => {
-  const { owner, teammates, opponents } = input
-  const side = owner.side
-  const { period } = input
-  const d = dirOf(side, period)
-  const lastDef = lastDefenderAttackX(side, period, opponents)
-  const out: Candidate[] = []
-  const ownerThreat = threat(side, period, owner.pos)
-  // With a pitch-control weight, a passer blends the lane-based xPass with who would win a ball played there.
-  const w = p.pass.pitchControlWeight
+// ================================================================ P3 candidate plumbing (plan 8c Task 1; shared, no task edits it)
+
+/** What every option builder needs: the decision input, the passer's frame and the pitch-control snapshot. */
+export interface CandidateContext {
+  readonly input: DecisionInput
+  readonly p: Params
+  /** 0..1 from the passer's nearest opponent (1 within 1 m, 0 beyond 5 m). */
+  readonly pressure: number
+  readonly side: Side
+  readonly period: Period
+  /** +1 when the passer's side attacks +x this period. */
+  readonly dir: number
+  /** Attack-normalised x of the opponents' last outfield defender. */
+  readonly lastDef: number
+  readonly ownerThreat: number
+  readonly pc: { readonly att: PcPlayer[]; readonly def: PcPlayer[] } | null
+}
+
+export interface PushOptions {
+  /** Where the choice features are measured (P3 D1); default the target. */
+  readonly featureAt?: Vec2
+  /** Added to the option's value (P3 D3: attackers expected at a cross zone). */
+  readonly bonus?: number
+  /** A keeper's throw or punt from his hands (P3 G5). */
+  readonly method?: "throw" | "punt"
+}
+
+export const candidateContext = (input: DecisionInput, p: Params, pressure: number): CandidateContext => {
+  const side = input.owner.side
+  const period = input.period
   const toPc = (pl: PlayerState): PcPlayer => ({ x: pl.pos.x, y: pl.pos.y, vx: pl.vel.x, vy: pl.vel.y, gk: pl.role === "GK" })
-  const pc = w > 0 ? { att: teammates.filter((t) => t.id !== owner.id && !t.sentOff).map(toPc), def: opponents.filter((o) => !o.sentOff).map(toPc) } : null
-  const push = (receiver: PlayerState, target: Vec2, height: PassHeight) => {
-    const kind = classifyPass({ side, period, from: owner.pos, to: target, height, lastDefenderAttackX: lastDef }, p.classifier)
-    if (kind === "set_piece") return
-    const distance = dist(owner.pos, target)
-    const lane = defendersInLane(owner.pos, target, opponents)
-    const lanes = xpassOf(p, distance, lane, pressure, height)
-    const xp = pc ? (1 - w) * lanes + w * pitchControlAt(target, pc.att, pc.def, owner.pos).att : lanes
-    const value = xp * (0.3 + threat(side, period, target)) - (1 - xp) * 0.3 * (1 - ownerThreat)
-    out.push({ action: KIND_TO_ACTION[kind], kind, receiverId: receiver.id, target, height, xpass: xp, value, lane })
+  return {
+    input,
+    p,
+    pressure,
+    side,
+    period,
+    dir: dirOf(side, period),
+    lastDef: lastDefenderAttackX(side, period, input.opponents),
+    ownerThreat: threat(side, period, input.owner.pos),
+    // With a pitch-control weight, a passer blends the lane-based xPass with who would win a ball played there.
+    pc: p.pass.pitchControlWeight > 0 ? { att: input.teammates.filter((t) => t.id !== input.owner.id && !t.sentOff).map(toPc), def: input.opponents.filter((o) => !o.sentOff).map(toPc) } : null
   }
+}
+
+/** Classify, price and record one option: the one path every option builder uses. */
+export const pushCandidate = (ctx: CandidateContext, out: Candidate[], receiver: PlayerState, target: Vec2, height: PassHeight, o: PushOptions = {}): void => {
+  const { input, p, side, period } = ctx
+  const owner = input.owner
+  const kind = classifyPass({ side, period, from: owner.pos, to: target, height, lastDefenderAttackX: ctx.lastDef }, p.classifier)
+  if (kind === "set_piece") return
+  const distance = dist(owner.pos, target)
+  const lane = defendersInLane(owner.pos, target, input.opponents)
+  const lanes = xpassOf(p, distance, lane, ctx.pressure, height)
+  const w = p.pass.pitchControlWeight
+  const xp = ctx.pc ? (1 - w) * lanes + w * pitchControlAt(target, ctx.pc.att, ctx.pc.def, owner.pos).att : lanes
+  const value = choiceValue(ctx, receiver, target, o.featureAt ?? target, lane, xp) + (o.bonus ?? 0)
+  out.push({ action: KIND_TO_ACTION[kind], kind, receiverId: receiver.id, target, height, xpass: xp, value, lane, ...(o.method ? { method: o.method } : {}) })
+}
+
+/** Where a pass to `tm` is aimed: his position 0.5 s ahead at his current velocity. */
+export const leadOf = (tm: PlayerState): Vec2 => ({ x: tm.pos.x + tm.vel.x * 0.5, y: tm.pos.y + tm.vel.y * 0.5 })
+
+export const buildCandidatesIn = (ctx: CandidateContext): Candidate[] => {
+  const { owner, teammates } = ctx.input
+  const out: Candidate[] = []
   for (const tm of teammates) {
     if (tm.id === owner.id || tm.sentOff) continue
-    const lead = { x: tm.pos.x + tm.vel.x * 0.5, y: tm.pos.y + tm.vel.y * 0.5 }
+    const lead = leadOf(tm)
     const distance = dist(owner.pos, lead)
     if (distance < 4 || distance > 65) continue
-    const inBox = attackX(side, lead.x, period) > PITCH.halfL - PITCH.boxDepth && Math.abs(lead.y) < PITCH.boxHalfWidth
+    const inBox = attackX(ctx.side, lead.x, ctx.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(lead.y) < PITCH.boxHalfWidth
     const wideOwner = Math.abs(owner.pos.y) > PITCH.boxHalfWidth
     const height: PassHeight = wideOwner && inBox ? "high" : distance < 30 ? "ground" : "high"
     // Nobody lofts the ball back at their own keeper: a high ball dropping in front of the goal ends in the net
     // when it is overhit or the keeper miscontrols it. Back passes to the keeper go along the ground, from close.
     if (tm.role === "GK" && height === "high") continue
-    push(tm, lead, height)
-    const ahead = attackX(side, tm.pos.x, period) > lastDef - 4 || tm.intent.kind === "run_in_behind"
-    if (ahead && tm.role !== "GK") {
-      const target = { x: tm.pos.x + d * p.pass.throughLeadM, y: tm.pos.y }
-      if (Math.abs(target.x) < PITCH.halfL - 2) push(tm, target, dist(owner.pos, target) < 30 ? "ground" : "high")
-    }
+    pushCandidate(ctx, out, tm, lead, height, { featureAt: tm.pos })
+    for (const t of throughTargets(ctx, tm)) pushCandidate(ctx, out, tm, t.target, t.height)
   }
+  for (const c of crossTargets(ctx)) pushCandidate(ctx, out, c.receiver, c.target, c.height, { bonus: c.bonus })
   return out
 }
 
-const softmaxPick = (logits: ReadonlyArray<number>, rng: Rng): number => {
+export const buildCandidates = (input: DecisionInput, p: Params, pressure: number): Candidate[] => buildCandidatesIn(candidateContext(input, p, pressure))
+
+/**
+ * The decision record's options and the chosen option's rank among `all`. `options` is the best OPTIONS_RECORDED of
+ * `all` by value (or `recorded` when given), with the chosen option appended when it is not already there; with no
+ * chosen option, just those options and a null rank.
+ */
+export const recordOf = (
+  all: ReadonlyArray<Candidate>,
+  chosen: Candidate | null,
+  recorded?: ReadonlyArray<OptionRecord>
+): { options: ReadonlyArray<OptionRecord>; chosenRank: number | null } => {
+  const options = recorded ?? [...all].sort((a, b) => b.value - a.value).slice(0, OPTIONS_RECORDED).map(toOption)
+  if (chosen === null) return { options, chosenRank: null }
+  // The chosen option is always recorded, even when it ranks below the top OPTIONS_RECORDED.
+  const option = toOption(chosen)
+  const same = (o: OptionRecord) => o.receiver_id === option.receiver_id && o.target_x === option.target_x && o.target_y === option.target_y
+  return { options: options.some(same) ? options : [...options, option], chosenRank: 1 + all.filter((c) => c.value > chosen.value).length }
+}
+
+export const softmaxPick = (logits: ReadonlyArray<number>, rng: Rng): number => {
   const m = Math.max(...logits)
   return rng.weighted(logits.map((l) => (Number.isFinite(l) ? Math.exp(l - m) : 0)))
 }
+
+// ================================================================ P3 choice seam (plan 8c Task 9 owns this block)
+
+/** An option's value: the old expected-threat value until Task 9. `featureAt` is where D1 measures the choice features. */
+const choiceValue = (ctx: CandidateContext, _receiver: PlayerState, target: Vec2, _featureAt: Vec2, _lane: number, xp: number): number =>
+  xp * (0.3 + threat(ctx.side, ctx.period, target)) - (1 - xp) * 0.3 * (1 - ctx.ownerThreat)
+
+/** Extra logit for pass kind `a` from its options: the old safety lean (0 while pass.safetyWeight is 0). */
+const kindTerm = (ctx: CandidateContext, candidates: ReadonlyArray<Candidate>, a: Action, _base: Readonly<Record<Action, number>>): number => {
+  const sw = ctx.p.pass.safetyWeight
+  if (sw <= 0) return 0
+  let best = -Infinity
+  for (const c of candidates) if (c.action === a && c.xpass > best) best = c.xpass
+  return Number.isFinite(best) ? sw * (best - SAFETY_PIVOT) : 0
+}
+
+/** Index of the chosen option among `options` (all of the chosen kind). */
+const receiverPick = (ctx: CandidateContext, options: ReadonlyArray<Candidate>, rng: Rng): number => {
+  const temp = ctx.p.pass.choiceTemperature * (1.4 - ctx.input.owner.attrs.vision)
+  return softmaxPick(options.map((c) => c.value / Math.max(0.05, temp)), rng)
+}
+
+/** The decision record's quality of the chosen option against the best one, 0..1. */
+const optionQuality = (_ctx: CandidateContext, chosen: Candidate, best: number): number => (best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1)
+
+// ================================================================ end of P3 choice seam
+
+// ================================================================ P3 cross seam (plan 8c Task 5 owns this block)
+
+export interface CrossOption { readonly receiver: PlayerState; readonly target: Vec2; readonly height: PassHeight; readonly bonus: number }
+
+/** Crosses aimed at zones rather than teammates (D3). None until Task 5. */
+const crossTargets = (_ctx: CandidateContext): CrossOption[] => []
+
+// ================================================================ end of P3 cross seam
+
+// ================================================================ P3 through-ball seam (plan 8c Task 6 owns this block)
+
+export interface ThroughOption { readonly target: Vec2; readonly height: PassHeight }
+
+/** Through-ball targets for teammate `tm`: the old rule, an 8 m lead for anyone near the last defender or on a run. */
+const throughTargets = (ctx: CandidateContext, tm: PlayerState): ThroughOption[] => {
+  const ahead = attackX(ctx.side, tm.pos.x, ctx.period) > ctx.lastDef - 4 || tm.intent.kind === "run_in_behind"
+  if (!ahead || tm.role === "GK") return []
+  const target = { x: tm.pos.x + ctx.dir * ctx.p.pass.throughLeadM, y: tm.pos.y }
+  return Math.abs(target.x) < PITCH.halfL - 2 ? [{ target, height: dist(ctx.input.owner.pos, target) < 30 ? "ground" : "high" }] : []
+}
+
+// ================================================================ end of P3 through-ball seam
+
+// ================================================================ P3 keeper-hands seam (plan 8c Task 7 owns this block)
+
+/** A keeper's throw or punt from his hands (G5); null keeps the normal decision. Nothing until Task 7. */
+const keeperHandsDecision = (_ctx: CandidateContext, _rng: Rng): Decision | null => null
+
+// ================================================================ end of P3 keeper-hands seam
 
 const NON_PASS: ReadonlyArray<Action> = ["shot", "carry", "hold", "take_on", "clear"]
 
@@ -199,8 +327,11 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const opp = nearestOpponent(owner.pos, input.opponents)
   const oppDist = opp ? dist(owner.pos, opp.pos) : 50
   const pressure = Math.max(0, Math.min(1, 1 - (oppDist - 1) / 4))
+  const ctx = candidateContext(input, p, pressure)
+  const hands = keeperHandsDecision(ctx, rng)
+  if (hands) return hands
   const zone = actionZone(side, period, owner.pos)
-  const candidates = buildCandidates(input, p, pressure)
+  const candidates = buildCandidatesIn(ctx)
   const goalDist = dist(owner.pos, goalOf(side, period))
   const cone = input.opponents.filter((o) => {
     const g = goalOf(side, period)
@@ -252,12 +383,8 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (lateTrailing && (a === "shot" || a === "cross" || a === "long_pass")) l += 0.4
     if (lateLeading && (a === "hold" || a === "back_pass")) l += 0.4
     l += input.scriptBias[a] ?? 0
-    // Passers lean towards the kinds of pass that have a safe option now (and away from those that have none).
-    if (p.pass.safetyWeight > 0 && !NON_PASS.includes(a)) {
-      let best = -Infinity
-      for (const c of candidates) if (c.action === a && c.xpass > best) best = c.xpass
-      if (Number.isFinite(best)) l += p.pass.safetyWeight * (best - SAFETY_PIVOT)
-    }
+    // Passers weigh each kind of pass by its options (old engine: the lean towards kinds that have a safe option now).
+    if (!NON_PASS.includes(a)) l += kindTerm(ctx, candidates, a, base)
     return l
   })
   const finite = logits.filter((l) => Number.isFinite(l))
@@ -267,7 +394,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   ACTIONS.forEach((a, i) => {
     if (Number.isFinite(logits[i]!)) actionProbs[a] = r3(Math.exp(logits[i]! - lmax) / z)
   })
-  const options = [...candidates].sort((a, b) => b.value - a.value).slice(0, OPTIONS_RECORDED).map(toOption)
+  const { options } = recordOf(candidates, null)
   const record = { actionProbs, options, chosenRank: null as number | null, fallback: false }
 
   let idx = softmaxPick(logits, rng)
@@ -284,16 +411,11 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     passOptions = [bestAny]
     fallback = true
   }
-  const temp = p.pass.choiceTemperature * (1.4 - owner.attrs.vision)
-  const pick = softmaxPick(passOptions.map((c) => c.value / Math.max(0.05, temp)), rng)
+  const pick = receiverPick(ctx, passOptions, rng)
   const chosen = passOptions[Math.max(0, pick)]!
   const best = Math.max(...candidates.map((c) => c.value))
-  const quality = best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1
-  const chosenRank = 1 + candidates.filter((c) => c.value > chosen.value).length
-  // The chosen option is always recorded, even when it ranks below the top OPTIONS_RECORDED.
-  const chosenOption = toOption(chosen)
-  const same = (o: OptionRecord) => o.receiver_id === chosenOption.receiver_id && o.target_x === chosenOption.target_x && o.target_y === chosenOption.target_y
-  const recorded = options.some(same) ? options : [...options, chosenOption]
+  const quality = optionQuality(ctx, chosen, best)
+  const { options: recorded, chosenRank } = recordOf(candidates, chosen, options)
   return { action: chosen.action, candidate: chosen, decisionQuality: quality, xg: null, pressure, ...record, options: recorded, chosenRank, fallback }
 }
 
@@ -303,21 +425,22 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
  * them. Returned unchanged when no such pass is available (the receiver too close, too far or sent off).
  */
 export const overridePass = (d: Decision, input: DecisionInput, o: { readonly receiverId: string; readonly kind?: string }, p: Params): Decision => {
-  const candidates = buildCandidates(input, p, d.pressure)
+  const ctx = candidateContext(input, p, d.pressure)
+  const candidates = buildCandidatesIn(ctx)
   const matching = candidates.filter((c) => c.receiverId === o.receiverId && (o.kind === undefined || c.kind === o.kind))
   if (matching.length === 0) return d
   const chosen = matching.reduce((a, b) => (b.value > a.value ? b : a))
   const best = Math.max(...candidates.map((c) => c.value))
-  const option = toOption(chosen)
-  const same = (r: OptionRecord) => r.receiver_id === option.receiver_id && r.target_x === option.target_x && r.target_y === option.target_y
+  // The record keeps the options the player weighed (d.options), with the forced pass added.
+  const { options, chosenRank } = recordOf(candidates, chosen, d.options)
   return {
     ...d,
     action: chosen.action,
     candidate: chosen,
-    decisionQuality: best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1,
+    decisionQuality: optionQuality(ctx, chosen, best),
     xg: null,
-    chosenRank: 1 + candidates.filter((c) => c.value > chosen.value).length,
-    options: d.options.some(same) ? d.options : [...d.options, option],
+    chosenRank,
+    options,
     fallback: false,
     forced: true
   }

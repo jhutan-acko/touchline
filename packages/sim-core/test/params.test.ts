@@ -118,3 +118,24 @@ describe("realism v2 P2 params", () => {
     expect(() => paramsFromJson({ provenance: cc, movement: { relaxCap: 1.5 } })).toThrow(/between 0 and 1/)
   })
 })
+
+describe("realism v2 P3 params", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("ship switched off, with the real choice coefficients, four cross zones and two new RNG streams", () => {
+    for (const rule of [DEFAULT_PARAMS.firstTick.rule, DEFAULT_PARAMS.choice.rule, DEFAULT_PARAMS.release.rule, DEFAULT_PARAMS.cross.rule, DEFAULT_PARAMS.through.rule, DEFAULT_PARAMS.distribution.rule]) expect(rule).toBe(0)
+    expect(DEFAULT_PARAMS.pass.longErrorPerM).toBe(0)
+    expect(DEFAULT_PARAMS.choice.base).toEqual({ dist: -1.33, fwd: 0.56, lat: 0.18, lane: -0.55, open: 1.27, lineBreak: 0.04, keeper: 0.95 })
+    expect(DEFAULT_PARAMS.choice.press).toEqual({ dist: 0, fwd: 0.22, lat: -0.46, lane: 0, open: -0.58, lineBreak: -0.58, keeper: 0.98 })
+    expect(DEFAULT_PARAMS.cross.zones.map((z) => [z.u, z.s, z.height])).toEqual([[47.5, 3, "high"], [41.5, 0, "high"], [47, -4, "high"], [42, 6, "ground"]])
+    expect(CONCERNS).toContain("boot")
+    expect(CONCERNS).toContain("release")
+  })
+  it("accept negative choice shifts and zone offsets from a file, and reject a boot-block share above 1 or a negative tail", () => {
+    const p = paramsFromJson({ provenance: cc, choice: { kindShift: { switch: -1.25 } } })
+    expect(p.choice.kindShift.switch).toBe(-1.25)
+    expect(p.choice.kindShift.long_pass).toBe(0)
+    expect(paramsFromJson({ provenance: cc }).cross.zones[2]!.s).toBe(-4)
+    expect(() => paramsFromJson({ provenance: cc, firstTick: { bootBlock: 1.5 } })).toThrow(/between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, release: { tailMeanS: -1 } })).toThrow(ParamsError)
+  })
+})

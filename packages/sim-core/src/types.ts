@@ -280,7 +280,7 @@ export interface Frame {
   readonly possession_side: Side | null
 }
 
-export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift"] as const
+export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift", "boot", "release"] as const
 export type Concern = (typeof CONCERNS)[number]
 
 /** One team's substitutions: planned windows (match minutes) still to come, changes made, windows used, bench players used. */

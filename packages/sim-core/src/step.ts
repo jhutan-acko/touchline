@@ -62,6 +62,12 @@ import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, 
 import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
+// ---- P3 imports, boot-block seam (plan 8c Task 3 inserts below this line)
+
+// ---- P3 imports, release seam (plan 8c Task 4 inserts below this line)
+
+// ---- P3 imports, keeper-distribution seam (plan 8c Task 7 inserts below this line)
+
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -479,7 +485,7 @@ const changePossession = (w: Work, to: PlayerState, reasonEvent: PendingEvent | 
   w.possession = ownedBy(w, to, w.lastTouch)
   w.lastTouch = { playerId: to.id, side: to.side }
   w.pressedBy = []
-  w.setPlayer({ ...w.player(to.id), intent: { kind: "hold" }, intentUntil: w.tick + w.decisionDelayTicks() })
+  w.setPlayer({ ...w.player(to.id), intent: { kind: "hold" }, intentUntil: w.tick + releaseDelayTicks(w, w.player(to.id)) })
 }
 
 /** Book a player (yellow, or second yellow and off) and emit the card. */
@@ -592,6 +598,31 @@ const footPart = (pl: PlayerState, weakFoot: boolean): string => `${weakFoot ? o
 const technique = (a: Action, pl: PlayerState): number =>
   a === "cross" ? pl.attrs.crossing : a === "long_pass" || a === "switch" || a === "lofted_through" || a === "clear" ? pl.attrs.longPassing : pl.attrs.shortPassing
 
+// ================================================================ P3 boot-block seam (plan 8c Task 3 owns this block)
+
+/** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. null until Task 3. */
+const bootBlock = (_w: Work, _owner: PlayerState, _d: Decision, _target: Vec2): { blocker: PlayerState; loose: BallState } | null => null
+
+// ================================================================ end of P3 boot-block seam
+
+// ================================================================ P3 release seam (plan 8c Task 4 owns this block)
+
+/** Ticks a player takes before his first decision after winning or receiving the ball: the flat draw until Task 4. */
+const releaseDelayTicks = (w: Work, _pl: PlayerState): number => w.decisionDelayTicks()
+
+// ================================================================ end of P3 release seam
+
+// ================================================================ P3 keeper-distribution seam (plan 8c Task 7 owns this block)
+
+/** keeper_distribution's method attribute: the old label (any short pass is a "throw") until Task 7. */
+const keeperMethod = (_w: Work, d: Decision): string => (d.action === "short_pass" ? "throw" : "kick")
+
+/** How a pass is struck: the technique and body-part attributes and the execution-error multiplier. */
+const kickStyle = (_w: Work, _d: Decision, restart: RestartKind | null): { technique: "throw" | "foot"; hands: boolean; errorScale: number } =>
+  restart === "throw_in" ? { technique: "throw", hands: true, errorScale: 1 } : { technique: "foot", hands: false, errorScale: 1 }
+
+// ================================================================ end of P3 keeper-distribution seam
+
 const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null): void => {
   const p = w.p
   const side = owner.side
@@ -612,10 +643,11 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   // Scenario scripts: a defensive error raises (or forces) mis-hits by the team's defenders in their own half.
   const errorProne = (owner.role === "CB" || owner.role === "FB" || owner.role === "DM") && attackX(side, owner.pos.x, w.period) < 0
   const forceMishit = errorProne && !restart && w.takeForced(side, "defensive_error")
+  const style = kickStyle(w, d, restart)
   const exe = executeKick(
     {
       from: owner.pos, to: target, height, technique: technique(d.action, owner), composure: owner.attrs.composure, pressure: d.pressure, weakFoot,
-      fatigue: 1 - owner.energy, mishitScale: errorProne ? w.mods(side).mishit : 1, forceMishit
+      fatigue: 1 - owner.energy, mishitScale: errorProne ? w.mods(side).mishit : 1, forceMishit, errorScale: style.errorScale
     },
     p,
     w.rng.execution
@@ -637,8 +669,11 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   // or a defender heads it away. Each is drawn only when it is possible.
   const defSide = other(side)
   const keeper = opps.find((o) => o.role === "GK") ?? null
-  const blocker = d.candidate?.kind === "cross" && restart === null ? crossBlocker(owner, opps, p) : null
-  const blocked = blocker !== null && w.rng.duel.chance(p.defending.crossBlock)
+  const crossBlock = d.candidate?.kind === "cross" && restart === null ? crossBlocker(owner, opps, p) : null
+  // A defender at the boot may block any other open-play pass (X1); always null while firstTick.rule is 0.
+  const boot = d.candidate?.kind !== "cross" && !isClear && restart === null ? bootBlock(w, owner, d, target) : null
+  const blocker = crossBlock ?? boot?.blocker ?? null
+  const blocked = boot !== null || (crossBlock !== null && w.rng.duel.chance(p.defending.crossBlock))
   const contact = res.ball.pos
   const keeperComes =
     !blocked && height !== "ground" && keeper !== null && (res.result === "reached" || res.result === "stopped") && winner?.id !== keeper.id &&
@@ -651,8 +686,8 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     kind,
     restart,
     height,
-    technique: restart === "throw_in" ? "throw" : "foot",
-    body_part: restart === "throw_in" ? "hands" : footPart(owner, weakFoot),
+    technique: style.technique,
+    body_part: style.hands ? "hands" : footPart(owner, weakFoot),
     intended_receiver_id: intended,
     intended_end_x: round2(target.x),
     intended_end_y: round2(target.y),
@@ -678,8 +713,9 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   let deflectTo: Vec3 | null = null
   if (blocked) {
     outcome = "blocked"
-    extra.push(at(w.pending("block", blocker, blocker!.pos, { blocked: "cross" })))
-    if (w.rng.duel.chance(p.defending.crossBlockBehind)) deflectTo = behindPoint(defSide, w.period, blocker!.pos, w.rng.duel)
+    extra.push(at(w.pending("block", blocker, blocker!.pos, { blocked: boot ? "pass" : "cross" })))
+    if (boot) looseAfter = boot.loose
+    else if (w.rng.duel.chance(p.defending.crossBlockBehind)) deflectTo = behindPoint(defSide, w.period, blocker!.pos, w.rng.duel)
     else looseAfter = deflectLoose(defSide, w.period, blocker!.pos, w.rng.duel, [3, 8], [0.5, 3])
   } else if (keeperComes) {
     outcome = "intercepted"
@@ -859,6 +895,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     const minTicks = Math.round(w.p.keeper.handsHoldS[0] / w.dt)
     if (w.tick - poss.since < (atSpot ? Math.min(holdTicks, minTicks) : holdTicks)) return
   }
+  const keeperHands = poss.inHands === true
   // Under the new rule a keeper's hold is over once he decides: from here he plays it from his feet.
   w.possession = w.p.keeper.handsRule > 0 ? { ...poss, restart: null, inHands: false } : { ...poss, restart: null }
   finishCarry(w, owner)
@@ -874,7 +911,8 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     minute: w.minute(),
     restart,
     scriptBias: scriptBias(w, side),
-    onBallS: (w.tick - poss.since) * w.dt
+    onBallS: (w.tick - poss.since) * w.dt,
+    keeperHands
   }
   let decision = decide(input, w.p, w.rng.decision)
   if (w.override?.playerId === owner.id) {
@@ -913,7 +951,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     default:
       // A keeper's distribution is always followed by the keeper's pass (a clearance is not a distribution).
       if (owner.role === "GK" && !restart && decision.action !== "clear")
-        w.emit(w.pending("keeper_distribution", owner, owner.pos, { method: decision.action === "short_pass" ? "throw" : "kick" }))
+        w.emit(w.pending("keeper_distribution", owner, owner.pos, { method: keeperMethod(w, decision) }))
       releaseKick(w, owner, decision, restart)
   }
 }
@@ -996,7 +1034,7 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     if (w.lastTouch?.side !== winner.side) w.emit(w.pending("possession_change", winner, winner.pos, { reason: f.outcome }))
     w.lastTouch = { playerId: winner.id, side: winner.side }
     w.pressedBy = []
-    w.setPlayer({ ...winner, intent: { kind: "hold" }, intentUntil: w.tick + w.decisionDelayTicks() })
+    w.setPlayer({ ...winner, intent: { kind: "hold" }, intentUntil: w.tick + releaseDelayTicks(w, winner) })
     return
   }
   w.possession = { kind: "loose" }
