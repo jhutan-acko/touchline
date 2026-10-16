@@ -1,4 +1,15 @@
 import { CliError } from "@touchline/sim"
+import { DEFAULT_PARAMS } from "@touchline/sim-core"
+
+/** Throws unless every key of `path` exists in the default parameters (paramsFromJson would silently ignore a typo). */
+const checkPath = (path: string): void => {
+  let node: unknown = DEFAULT_PARAMS
+  for (const k of path.split(".")) {
+    if (typeof node !== "object" || node === null || Array.isArray(node) || !Object.hasOwn(node, k))
+      throw new CliError(`--set: unknown parameter "${path}" (no "${k}" there)`)
+    node = (node as Record<string, unknown>)[k]
+  }
+}
 
 /** Parse "a.b=1,c=x" into [path, value] pairs; numeric values become numbers. */
 export const parseSets = (spec: string): Array<readonly [string, number | string]> =>
@@ -18,6 +29,7 @@ export const parseSets = (spec: string): Array<readonly [string, number | string
 export const applySets = (json: unknown, sets: ReadonlyArray<readonly [string, number | string]>): Record<string, unknown> => {
   const out = structuredClone(json) as Record<string, unknown>
   for (const [path, value] of sets) {
+    checkPath(path)
     const keys = path.split(".")
     let o = out
     for (const k of keys.slice(0, -1)) {

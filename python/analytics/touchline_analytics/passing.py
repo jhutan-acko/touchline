@@ -17,8 +17,8 @@ period and period frame id. Open play = the pass has no restart. Keys and real v
   goal line to the pass end.
 - through-ball shots: open-play shots whose team's last completed pass within 6 s was a through or lofted through ball.
 - keeper: passes by keepers per team-match; open-play keeper completion; keeper_distribution methods per team-match.
-- release timing: a controlled reception, then the receiver's next open-play pass, with no possession change or other-team
-  event between, same period, under 15 s; pressure = the receiver's nearest opponent at the reception.
+- release timing: a controlled reception, then the receiver's next open-play pass, with no event that ends possession
+  (ENDS_POSSESSION; opponent pressure events do not) between, same period, under 15 s; pressure = the receiver's nearest opponent at the reception.
 - ball thirds: live frames with a team in possession, ball u in that team's attacking direction; thirds at +-17.5 m.
 """
 
@@ -30,6 +30,11 @@ from pathlib import Path
 
 import numpy as np
 
+# Events that end the receiver's spell on the ball. Not here: pressure, duels, runs, substitutions and the like, which
+# happen while he still holds it (the sim emits an opponent pressure event whenever a receiver is pressed).
+ENDS_POSSESSION = frozenset({
+    "possession_change", "interception", "tackle", "ball_recovery", "clearance", "block", "ball_out", "foul", "offside",
+    "goal", "shot", "keeper_save", "keeper_claim", "keeper_punch", "set_piece", "period_end", "match_end"})
 LANE_W, OPEN_M, MIN_D, MAX_D, THIRD, LONG_M = 2.0, 3.0, 4.0, 65.0, 17.5, 32.0
 FEAT = ["dist/10", "fwd du/10", "|dv|/10", "lane blocked", "open (min(d,10)/5)", "line-breaking", "GK"]
 
@@ -216,9 +221,7 @@ def match_passing(run: Path, roles: dict[str, str]) -> dict:
         if e["type"] != "reception" or e["attrs"].get("first_touch") != "controlled":
             continue
         for g in events[i + 1:]:
-            if g["period"] != e["period"] or g["frame_id"] - e["frame_id"] > 15 * fps or g["type"] == "possession_change":
-                break
-            if g["team_id"] is not None and g["team_id"] != e["team_id"]:
+            if g["period"] != e["period"] or g["frame_id"] - e["frame_id"] > 15 * fps or g["type"] in ENDS_POSSESSION:
                 break
             if g["type"] == "pass":
                 pos = snaps.get((e["period"], e["period_frame_id"]))
@@ -265,6 +268,7 @@ def summarize(ms: list[dict]) -> dict:
         "through_shot_share": tot("through_shots") / max(1, tot("shots")),
         "keeper_passes_per_team": tot("gk_passes") / (2 * n),
         "keeper_open_completion": _rate([x["gk_open"] for x in ms]),
+        # The engine emits only "throw" and "kick" until Task 7 (G5, plan ruling 13) adds "punt": reads 0 before then.
         "punts_per_team": methods.get("punt", 0) / (2 * n),
         "throws_per_team": methods.get("throw", 0) / (2 * n),
         "release_median_lt2_s": med(lt2),
@@ -276,6 +280,11 @@ def summarize(ms: list[dict]) -> dict:
     }
 
 
+def _cell(text: str) -> str:
+    """Escape pipes so a label or feature name does not split a Markdown table cell."""
+    return text.replace("|", "\\|")
+
+
 def passing_section(ms: list[dict], t: dict) -> list[str]:
     s = summarize(ms)
     lines = ["## Passing (realism v2, P3)", "", "| Measure | Real | Simulated | Band | Status |", "|---|---|---|---|---|"]
@@ -285,7 +294,7 @@ def passing_section(ms: list[dict], t: dict) -> list[str]:
         real = "—" if r.get("real") is None else fmt.format(r["real"])
         band = "—" if r.get("lo") is None else f"{fmt.format(r['lo'])}–{fmt.format(r['hi'])}"
         status = "—" if r.get("lo") is None or not math.isfinite(v) else ("MET" if r["lo"] <= v <= r["hi"] else "NOT MET")
-        lines.append(f"| {r['label']} | {real} | {fmt.format(v) if math.isfinite(v) else 'n/a'} | {band} | {status} |")
+        lines.append(f"| {_cell(r['label'])} | {real} | {fmt.format(v) if math.isfinite(v) else 'n/a'} | {band} | {status} |")
     groups = [g for x in ms for g in x["groups"]]
     lines += ["", "### Pass-choice model refit", "",
               "Conditional logit over the passer's teammates 4–65 m away at release, intended receiver chosen (carrier-report C3). "
@@ -297,10 +306,11 @@ def passing_section(ms: list[dict], t: dict) -> list[str]:
     for i, name in enumerate(t["choice"]["features"]):
         rb, rs = t["choice"]["b"][i], t["choice"]["se"][i]
         lo, hi = rb - 1.645 * rs, rb + 1.645 * rs
-        lines.append(f"| {name} | {rb:+.2f} ({lo:+.2f} to {hi:+.2f}) | {b[i]:+.2f} ± {se[i]:.2f} | {'MET' if lo <= b[i] <= hi else 'NOT MET'} |")
+        lines.append(f"| {_cell(name)} | {rb:+.2f} ({lo:+.2f} to {hi:+.2f}) | {b[i]:+.2f} ± {se[i]:.2f} | {'MET' if lo <= b[i] <= hi else 'NOT MET'} |")
     return lines + [""]
 
 
 def passing_report(run_dirs: list[Path], targets: dict, note: str, roles: dict[str, str]) -> str:
     ms = [match_passing(d, roles) for d in run_dirs]
-    return "\n".join(["# Touchline passing diagnostics", "", f"{len(ms)} synthetic matches ({note}).", ""] + passing_section(ms, targets["passing"]))
+    return "\n".join(["# Touchline passing diagnostics", "", f"{len(ms)} synthetic matches ({note}).", "",
+                       "Note: punts read 0 until Task 7 (G5) makes the engine emit method punt; until then keeper kicks are recorded as kick.", ""] + passing_section(ms, targets["passing"]))

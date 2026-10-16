@@ -17,4 +17,10 @@ describe("--set overrides", () => {
     expect(p.positioning.drift.deadRate).toBe(0)
     expect(p.positioning.drift.outS).toBe(DEFAULT_PARAMS.positioning.drift.outS)
   })
+  it("reject paths that do not exist in the parameters", () => {
+    expect(() => applySets({}, parseSets("movment.relaxCap=0.5"))).toThrow(/unknown parameter "movment.relaxCap"/)
+    expect(() => applySets({}, parseSets("movement.relaxCapp=0.5"))).toThrow(/unknown parameter/)
+    expect(() => applySets({}, parseSets("movement.relaxCap.x=0.5"))).toThrow(/unknown parameter/)
+    expect(() => applySets({}, parseSets("__proto__.x=1"))).toThrow(/unknown parameter/)
+  })
 })

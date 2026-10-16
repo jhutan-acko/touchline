@@ -33,12 +33,12 @@ def test_clogit_recovers_known_coefficients():
     assert np.all(np.abs(fit - b) < 4 * se)
 
 
-def _run(tmp_path):
+def _run(tmp_path, away_extra=(), extra_events=()):
     d = tmp_path / "m"
     d.mkdir()
     (d / "meta.json").write_text(json.dumps({"teams": {"home": {"id": "H"}, "away": {"id": "A"}}, "meta": {"tracking": {"fps": 10}}}))
     home = [("h1", -30, 0), ("h2", -48, 0), ("h3", 20, 25), ("h4", -20, 30)]
-    away = [("a1", -29.5, 0), ("a2", 50, 0)]
+    away = [("a1", -29.5, 0), ("a2", 50, 0), *away_extra]
     frames = [json.dumps({"frame_id": i, "period": "first_half",
                           "teams": {"home": {"id": "H", "players": [{"id": p, "x": x, "y": y, "vel": 0} for p, x, y in home]},
                                     "away": {"id": "A", "players": [{"id": p, "x": x, "y": y, "vel": 0} for p, x, y in away]}},
@@ -64,6 +64,7 @@ def _run(tmp_path):
         # A cross 20 s after the kickoff, ending 7.5 m from the goal line.
         ev("pass", 200, "h3", x=20, y=25, x_end=45, y_end=2, frame_id_end=210, outcome="intercepted", restart=None, kind="cross", intended_receiver_id="h1"),
         ev("keeper_distribution", 250, "h2", method="punt"),
+        *extra_events,
     ]
     (d / "domain.jsonl").write_text("\n".join(events) + "\n")
     return d
@@ -89,3 +90,24 @@ def test_passing_section_marks_met_and_not_met(tmp_path):
     md = "\n".join(passing_section([match_passing(_run(tmp_path), ROLES)], t))
     assert "| Switches | 0.061 | 0.200 | 0.040–0.080 | NOT MET |" in md
     assert "| Back to the keeper | 0.062 | 0.200 | 0.045–0.300 | MET |" in md
+
+
+def test_pressure_event_between_reception_and_pass_keeps_the_release_pressed(tmp_path):
+    # An opponent 1 m from h4 and a pressure event by him between h4's reception (frame 40) and pass (frame 45).
+    press = json.dumps({"type": "pressure", "frame_id": 42, "period_frame_id": 42, "period": "first_half", "team_id": "A", "player_id": "a3",
+                        "x": None, "y": None, "x_end": None, "y_end": None, "frame_id_end": None, "outcome": None, "attrs": {}})
+    d = _run(tmp_path, away_extra=[("a3", -20, 31)])
+    lines = (d / "domain.jsonl").read_text().splitlines()
+    i = next(k for k, line in enumerate(lines) if json.loads(line)["frame_id"] == 45)
+    (d / "domain.jsonl").write_text("\n".join(lines[:i] + [press] + lines[i:]) + "\n")
+    m = match_passing(d, {**ROLES, "a3": "CB"})
+    assert m["release"] == [(0.5, 1.0)]
+    s = summarize([m])
+    assert math.isclose(s["release_median_lt2_s"], 0.5) and s["release_under1_lt2"] == 1.0
+
+
+def test_pipes_in_labels_are_escaped(tmp_path):
+    t = {"rows": {"switch_share": {"label": "Switches (|dy| > 25 m)", "real": 0.061, "lo": 0.04, "hi": 0.08, "fmt": "{:.3f}"}},
+         "choice": {"features": ["|dv|/10"], "b": [0.0], "se": [1.0]}}
+    md = "\n".join(passing_section([match_passing(_run(tmp_path), ROLES)], t))
+    assert "| Switches (\\|dy\\| > 25 m) |" in md
