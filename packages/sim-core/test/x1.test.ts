@@ -94,3 +94,36 @@ describe("X1 in a match", () => {
     expect(x1.blocks).toBeGreaterThan(0)
   }, 120_000)
 })
+
+describe("X1: what never boot-blocks (F17)", () => {
+  it("crosses, clearances and restarts are never blocked at the boot, even when every chance is taken", () => {
+    // Every open-play pass with an outfield opponent within 2 m is blocked; only the call site's exclusions stop it.
+    const always: Params = { ...on, firstTick: { ...on.firstTick, bootM: 2, bootBlock: 1 } }
+    let s = initMatch(makeConfig(7, { params: always }))
+    const events: DomainEvent[] = []
+    let exposed = 0
+    while (!isFinished(s)) {
+      const before = s
+      const r = step(s)
+      s = r.state
+      for (const e of r.events) {
+        const excluded = e.type === "clearance" || (e.type === "pass" && (e.attrs.restart !== null || e.attrs.kind === "cross"))
+        if (!excluded || e.player_id === null) continue
+        const me = before.players.find((x) => x.id === e.player_id)!
+        if (before.players.some((o) => o.side !== me.side && !o.sentOff && o.role !== "GK" && Math.hypot(o.pos.x - me.pos.x, o.pos.y - me.pos.y) <= 2)) exposed++
+      }
+      events.push(...r.events)
+    }
+    const bootBlocks = events.filter((e) => e.type === "block" && e.attrs.blocked === "pass").length
+    const blocked = events.filter((e) => (e.type === "pass" || e.type === "clearance") && e.outcome === "blocked")
+    // Clearances and restarts are never blocked at all (cross blocks need an open-play cross).
+    expect(blocked.filter((e) => e.type === "clearance")).toEqual([])
+    expect(blocked.filter((e) => e.type === "pass" && e.attrs.restart !== null)).toEqual([])
+    // Every boot block is of an open-play pass that is not a cross: blocked crosses are cross blocks only.
+    expect(blocked.filter((e) => e.attrs.kind !== "cross").length).toBe(bootBlocks)
+    expect(blocked.filter((e) => e.attrs.kind === "cross").length).toBe(events.filter((e) => e.type === "block" && e.attrs.blocked === "cross").length)
+    // Not vacuous (F11): boot blocks happened, and excluded kicks were struck with an opponent at the boot.
+    expect(bootBlocks).toBeGreaterThan(0)
+    expect(exposed).toBeGreaterThan(0)
+  }, 120_000)
+})

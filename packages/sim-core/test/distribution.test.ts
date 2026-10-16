@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { decide, type DecisionInput } from "../src/decide.js"
+import { candidateContext, choiceShares, decide, keeperHandsCandidates, overridePass, type DecisionInput } from "../src/decide.js"
 import { executeKick, type KickIntent } from "../src/execute.js"
 import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
@@ -68,6 +68,50 @@ describe("G5: from the keeper's hands", () => {
     }
     // A punt to the striker 48 m upfield is not a short pass, so more than one action is recorded across draws.
     expect(seen.size).toBeGreaterThan(1)
+  })
+})
+
+describe("G5 with D1 (Task 10)", () => {
+  // D1 on, at a temperature far from the old receiver pick's, so recorded shares at the wrong temperature would show.
+  const both: Params = { ...on, choice: { ...P.choice, rule: 1, temperature: 0.4 } }
+  it("records the D1 shares the receiver is drawn from (choiceShares), and the draws follow them", () => {
+    const pools = keeperHandsCandidates(candidateContext(input({}), both, 0))!
+    const pPunt = 1 / (1 + Math.exp(-both.distribution.puntLogit))
+    const expected: Record<string, number> = {}
+    const ctx = candidateContext(input({}), both, 0)
+    const add = (opts: ReadonlyArray<(typeof pools.throws)[number]>, pm: number) =>
+      choiceShares(opts, ctx).forEach((sh, i) => (expected[opts[i]!.action] = (expected[opts[i]!.action] ?? 0) + pm * sh))
+    add(pools.throws, 1 - pPunt)
+    add(pools.punts, pPunt)
+    const r = new Rng(seedRng(13))
+    const n = 3000
+    const freq: Record<string, number> = {}
+    let recorded: Readonly<Record<string, number>> = {}
+    for (let i = 0; i < n; i++) {
+      const d = decide(input({}), both, r)
+      recorded = d.actionProbs
+      freq[d.action] = (freq[d.action] ?? 0) + 1 / n
+    }
+    for (const a of Object.keys(expected)) {
+      expect(recorded[a]!, a).toBeCloseTo(expected[a]!, 2)
+      expect(Math.abs((freq[a] ?? 0) - recorded[a]!), a).toBeLessThan(0.03)
+    }
+  })
+  it("a what-if pass from the keeper's hands is a throw or a punt, as his own decision would be", () => {
+    const r = new Rng(seedRng(9))
+    const d = decide(input({}), both, r)
+    const cb = teammates.find((t) => t.slot === 2)!
+    const st = teammates.find((t) => t.role === "ST")!
+    const toCb = overridePass(d, input({}), { receiverId: cb.id }, both)
+    expect(toCb.forced).toBe(true)
+    expect(toCb.candidate!.method).toBe("throw")
+    expect(toCb.candidate!.receiverId).toBe(cb.id)
+    expect(toCb.action in toCb.actionProbs).toBe(true)
+    const toSt = overridePass(d, input({}), { receiverId: st.id }, both)
+    expect(toSt.candidate!.method).toBe("punt")
+    expect(toSt.candidate!.height).toBe("high")
+    // From his feet the same override is an ordinary pass.
+    expect(overridePass(d, input({ keeperHands: false }), { receiverId: cb.id }, both).candidate!.method).toBeUndefined()
   })
 })
 

@@ -458,9 +458,13 @@ const throughTargets = (ctx: CandidateContext, tm: PlayerState): ThroughOption[]
 
 // ================================================================ P3 keeper-hands seam (plan 8c Task 7 owns this block)
 
-/** Softmax shares of a pool's options, at the temperature the old receiver pick uses (sums to 1; empty for an empty pool). */
+/**
+ * Softmax shares of a pool's options at the temperature receiverPick draws with: D1's choiceShares under choice.rule,
+ * else the old receiver-pick temperature (sums to 1; empty for an empty pool). So the recorded probabilities match the draw.
+ */
 const poolShares = (ctx: CandidateContext, pool: ReadonlyArray<Candidate>): number[] => {
   if (pool.length === 0) return []
+  if (ctx.p.choice.rule > 0) return choiceShares(pool, ctx)
   const temp = Math.max(0.05, ctx.p.pass.choiceTemperature * (1.4 - ctx.input.owner.attrs.vision))
   const m = Math.max(...pool.map((c) => c.value / temp))
   const w = pool.map((c) => Math.exp(c.value / temp - m))
@@ -650,7 +654,9 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
  */
 export const overridePass = (d: Decision, input: DecisionInput, o: { readonly receiverId: string; readonly kind?: string }, p: Params): Decision => {
   const ctx = candidateContext(input, p, d.pressure)
-  const candidates = buildCandidatesIn(ctx)
+  // A keeper with the ball in his hands throws or punts (G5): force one of those, as his own decision would.
+  const hands = keeperHandsCandidates(ctx)
+  const candidates = hands ? [...hands.throws, ...hands.punts] : buildCandidatesIn(ctx)
   const matching = candidates.filter((c) => c.receiverId === o.receiverId && (o.kind === undefined || c.kind === o.kind))
   if (matching.length === 0) return d
   const chosen = matching.reduce((a, b) => (b.value > a.value ? b : a))
