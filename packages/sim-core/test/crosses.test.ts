@@ -15,10 +15,16 @@ const off: Params = { ...P, cross: { ...P.cross, rule: 0 } }
 const on: Params = { ...P, cross: { ...P.cross, rule: 1, arriveSlackS: 0.3, attackerValue: 0.3 } }
 
 /** Home (4-3-3) winger on the ball at (ox, oy), the striker at (sx, sy), everyone else far away; d = +1 first half, -1 second. */
-const crosses = (p: Params, period: Period, d: number, o: [number, number], st: [number, number]): Candidate[] => {
+const crosses = (p: Params, period: Period, d: number, o: [number, number], st: [number, number], extra: ReadonlyArray<[number, number]> = []): Candidate[] => {
   const owner = at(home[8]!, d * o[0], o[1])
   const striker = at(home[9]!, d * st[0], st[1])
-  const teammates = home.map((x) => (x.id === owner.id ? owner : x.id === striker.id ? striker : at(x, d * (-30 + x.slot), -30)))
+  const helpers = new Map(extra.map((e, i) => [home[10 - i]!.id, e] as const))
+  const teammates = home.map((x) => {
+    if (x.id === owner.id) return owner
+    if (x.id === striker.id) return striker
+    const h = helpers.get(x.id)
+    return h ? at(x, d * h[0], h[1]) : at(x, d * (-30 + x.slot), -30)
+  })
   const opponents = away.map((x) => (x.role === "GK" ? at(x, d * 51, 0) : at(x, d * (5 + x.slot), 30)))
   return buildCandidates({ period, owner, teammates, opponents, style: STYLES.direct, scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, p, 0).filter((c) => c.kind === "cross")
 }
@@ -55,5 +61,41 @@ describe("D3: crosses to zones", () => {
     expect(deep.some((x) => x.height === "ground" && Math.abs(x.target.x - 42) < 1e-6 && Math.abs(x.target.y - 6) < 1e-6)).toBe(true)
     const early = added("first_half", 1, [38, 28], [40, 8])
     expect(early.some((x) => x.height === "ground")).toBe(false)
+  })
+  it("zone geometry follows the attack direction in u and the crosser's touchline in y, independently", () => {
+    // [period, d (attack direction), sign of the crosser's y]: all four combinations, so dir and sign are never equal by coincidence.
+    const cases: ReadonlyArray<[Period, number, number]> = [["first_half", 1, 1], ["first_half", 1, -1], ["second_half", -1, 1], ["second_half", -1, -1]]
+    for (const [period, d, sgn] of cases) {
+      const c = crosses(on, period, d, [46, sgn * 26], [44, 0])
+      const find = (u: number, y: number) => c.filter((x) => Math.abs(x.target.x - d * u) < 1e-6 && Math.abs(x.target.y - y) < 1e-6)
+      // Present: near post and cut-back on the crosser's side, far post on the far side, the spot on the centre line.
+      expect(find(47.5, sgn * 3), `near post ${period} ${sgn}`).toHaveLength(1)
+      expect(find(41.5, 0), `spot ${period} ${sgn}`).toHaveLength(1)
+      expect(find(47, -sgn * 4), `far post ${period} ${sgn}`).toHaveLength(1)
+      const cut = find(42, sgn * 6)
+      expect(cut, `cut-back ${period} ${sgn}`).toHaveLength(1)
+      expect(cut[0]!.height).toBe("ground")
+      // Absent: the mirror image in y, and the mirror image in u (a zone on the wrong end of the pitch).
+      expect(find(47.5, -sgn * 3), `near post wrong side ${period} ${sgn}`).toHaveLength(0)
+      expect(find(47, sgn * 4), `far post wrong side ${period} ${sgn}`).toHaveLength(0)
+      expect(find(42, -sgn * 6), `cut-back wrong side ${period} ${sgn}`).toHaveLength(0)
+      for (const zone of [find(47.5, sgn * 3)[0]!, find(41.5, 0)[0]!, find(47, -sgn * 4)[0]!, cut[0]!]) expect(Math.sign(zone.target.x)).toBe(d)
+    }
+  })
+  it("each attacker who can arrive adds exactly cross.attackerValue to a zone's value", () => {
+    // Same zone, same receiver (the nearest attacker), pitch control out of the xpass so only the bonus differs.
+    const withValue = (v: number): Params => ({ ...on, pass: { ...on.pass, pitchControlWeight: 0 }, cross: { ...on.cross, attackerValue: v } })
+    const spot = (cs: Candidate[]) => cs.filter((x) => Math.abs(x.target.x - 41.5) < 1e-6 && Math.abs(x.target.y) < 1e-6 && x.height === "high")
+    const one = spot(crosses(withValue(0.3), "first_half", 1, [38, 28], [33, 5]))
+    const two = spot(crosses(withValue(0.3), "first_half", 1, [38, 28], [33, 5], [[34, 10]]))
+    expect(one).toHaveLength(1)
+    expect(two).toHaveLength(1)
+    expect(two[0]!.receiverId).toBe(one[0]!.receiverId)
+    expect(two[0]!.value - one[0]!.value).toBeCloseTo(0.3 * (2 - 1), 9)
+    // The increment scales with the parameter: 0.6 per attacker doubles it.
+    const two6 = spot(crosses(withValue(0.6), "first_half", 1, [38, 28], [33, 5], [[34, 10]]))
+    const one6 = spot(crosses(withValue(0.6), "first_half", 1, [38, 28], [33, 5]))
+    expect(two6[0]!.value - one6[0]!.value).toBeCloseTo(0.6, 9)
+    expect(one6[0]!.value - one[0]!.value).toBeCloseTo(0.3, 9)
   })
 })
