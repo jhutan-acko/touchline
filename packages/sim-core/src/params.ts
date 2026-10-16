@@ -474,7 +474,7 @@ export const DEFAULT_PARAMS: Params = {
     addedTimeMinS: [60, 300]
   },
   // P3 D2 (plan 8c Task 4 may change the values, not rule).
-  release: { rule: 0, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.25, tailMeanS: 1.5 },
+  release: { rule: 0, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
   actions: {
     logits: {
       def_wide: row({ short_pass: 1.6, long_pass: 0.4, switch: -0.6, back_pass: -0.1, carry: 0.5, take_on: -1.2, clear: -0.4, hold: -0.6 }),

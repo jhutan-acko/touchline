@@ -65,6 +65,7 @@ import { FORMATIONS } from "./shape.js"
 // ---- P3 imports, boot-block seam (plan 8c Task 3 inserts below this line)
 
 // ---- P3 imports, release seam (plan 8c Task 4 inserts below this line)
+import { releaseDelayS } from "./release.js"
 
 // ---- P3 imports, keeper-distribution seam (plan 8c Task 7 inserts below this line)
 
@@ -607,8 +608,12 @@ const bootBlock = (_w: Work, _owner: PlayerState, _d: Decision, _target: Vec2): 
 
 // ================================================================ P3 release seam (plan 8c Task 4 owns this block)
 
-/** Ticks a player takes before his first decision after winning or receiving the ball: the flat draw until Task 4. */
-const releaseDelayTicks = (w: Work, _pl: PlayerState): number => w.decisionDelayTicks()
+/** Ticks a player takes before his first decision after winning or receiving the ball (D2; release stream). */
+const releaseDelayTicks = (w: Work, pl: PlayerState): number => {
+  if (w.p.release.rule <= 0) return w.decisionDelayTicks()
+  const opp = nearestOpponent(pl.pos, w.active(other(pl.side)))
+  return Math.max(1, Math.round(releaseDelayS(opp ? dist(opp.pos, pl.pos) : 50, w.p, w.rng.release) / w.dt))
+}
 
 // ================================================================ end of P3 release seam
 
