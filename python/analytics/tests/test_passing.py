@@ -111,3 +111,25 @@ def test_pipes_in_labels_are_escaped(tmp_path):
          "choice": {"features": ["|dv|/10"], "b": [0.0], "se": [1.0]}}
     md = "\n".join(passing_section([match_passing(_run(tmp_path), ROLES)], t))
     assert "| Switches (\\|dy\\| > 25 m) |" in md
+
+
+def _mk(base, sub):
+    base = base / sub
+    base.mkdir()
+    return base
+
+
+def test_failed_tackle_between_reception_and_pass_keeps_the_release_pressed(tmp_path):
+    def tackle(outcome, frame):
+        return json.dumps({"type": "tackle", "frame_id": frame, "period_frame_id": frame, "period": "first_half", "team_id": "A", "player_id": "a3",
+                           "x": None, "y": None, "x_end": None, "y_end": None, "frame_id_end": None, "outcome": None, "attrs": {"outcome": outcome, "opponent_id": "h4"}})
+
+    def run(outcome, sub):
+        d = _run(_mk(tmp_path, sub), away_extra=[("a3", -20, 31)])
+        lines = (d / "domain.jsonl").read_text().splitlines()
+        i = next(k for k, line in enumerate(lines) if json.loads(line)["frame_id"] == 45)
+        (d / "domain.jsonl").write_text("\n".join(lines[:i] + [tackle(outcome, 42)] + lines[i:]) + "\n")
+        return match_passing(d, {**ROLES, "a3": "CB"})["release"]
+
+    assert run("lost", "lost") == [(0.5, 1.0)]
+    assert run("won", "won") == []

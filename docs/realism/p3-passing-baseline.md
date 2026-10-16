@@ -27,9 +27,9 @@ Note: punts read 0 until Task 7 (G5) makes the engine emit method punt; until th
 | Punts per team-match | 1.60 | 0.00 | 1.00–2.20 | NOT MET |
 | Keeper throws per team-match | 3.40 | 3.69 | 2.40–4.40 | MET |
 | Time to release, received under 2 m pressure, median (s) | 0.40 | 1.20 | 0.20–0.70 | NOT MET |
-| Released within 1 s, received under 2 m pressure | 0.630 | 0.209 | 0.500–0.750 | NOT MET |
+| Released within 1 s, received under 2 m pressure | 0.630 | 0.216 | 0.500–0.750 | NOT MET |
 | Time to release, median (s) | 1.40 | 1.20 | 1.20–1.60 | MET |
-| On the ball over 3 s | 0.160 | 0.020 | 0.120–0.200 | NOT MET |
+| On the ball over 3 s | 0.160 | 0.022 | 0.120–0.200 | NOT MET |
 | Ball in the possessing team's own third | 0.350 | 0.161 | 0.300–0.400 | NOT MET |
 | Ball u in possession, mean (m) | -5.2 | 2.7 | -8.0–-2.0 | NOT MET |
 

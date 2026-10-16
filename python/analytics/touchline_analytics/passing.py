@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 
 # Events that end the receiver's spell on the ball. Not here: pressure, duels, runs, substitutions and the like, which
-# happen while he still holds it (the sim emits an opponent pressure event whenever a receiver is pressed).
+# happen while he still holds it; a tackle with outcome "lost" (step.ts) leaves the ball with the carrier, so it does not end it either (the sim emits an opponent pressure event whenever a receiver is pressed).
 ENDS_POSSESSION = frozenset({
     "possession_change", "interception", "tackle", "ball_recovery", "clearance", "block", "ball_out", "foul", "offside",
     "goal", "shot", "keeper_save", "keeper_claim", "keeper_punch", "set_piece", "period_end", "match_end"})
@@ -221,7 +221,7 @@ def match_passing(run: Path, roles: dict[str, str]) -> dict:
         if e["type"] != "reception" or e["attrs"].get("first_touch") != "controlled":
             continue
         for g in events[i + 1:]:
-            if g["period"] != e["period"] or g["frame_id"] - e["frame_id"] > 15 * fps or g["type"] in ENDS_POSSESSION:
+            if g["period"] != e["period"] or g["frame_id"] - e["frame_id"] > 15 * fps or g["type"] in ENDS_POSSESSION and not (g["type"] == "tackle" and g["attrs"].get("outcome") == "lost"):
                 break
             if g["type"] == "pass":
                 pos = snaps.get((e["period"], e["period_frame_id"]))
