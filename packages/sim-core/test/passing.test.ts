@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest"
 import { buildCandidates, decide, DEFAULT_PARAMS, initMatch, isFinished, Rng, seedRng, step, type DomainEvent, type Params, type PlayerState } from "../src/index.js"
 import { kickoffPlayersFor, makeConfig, STYLES } from "../src/testing.js"
 
+// These cases test the old engine's pass knobs (pitch-control weight, safety lean), which D1 retires from the choice
+// (plan 8c rulings 9 and 10): pinned to choice.rule 0 (ruling F6), since Task 10 switched D1 on in the defaults.
+const OLD: Params = { ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 } }
 const withPass = (p: Params, pass: Partial<Params["pass"]>): Params => ({ ...p, pass: { ...p.pass, ...pass } })
 
 /** The home centre-back on the ball at (-20, 0), two midfielders 15 m ahead, one with a defender closing in on him. */
@@ -23,17 +26,17 @@ describe("pitch-control-aware passing", () => {
   it("rates a pass to a receiver the defenders would reach first lower once passers weigh pitch control", () => {
     const { owner, marked, free, teammates, opponents } = scene()
     const xp = (p: Params, id: string) => buildCandidates({ period: "first_half", owner, teammates, opponents, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, p, 0).find((c) => c.receiverId === id && c.kind === "short")!.xpass
-    const lanes = DEFAULT_PARAMS
+    const lanes = OLD
     expect(xp(lanes, marked.id)).toBeCloseTo(xp(lanes, free.id), 2)
-    const aware = withPass(DEFAULT_PARAMS, { pitchControlWeight: 0.6 })
+    const aware = withPass(OLD, { pitchControlWeight: 0.6 })
     expect(xp(aware, marked.id)).toBeLessThan(xp(aware, free.id) - 0.1)
   })
 
   it("makes the kinds of pass with a safe option likelier when passers weigh safety", () => {
     const { owner, teammates, opponents } = scene()
     const probs = (p: Params) => decide({ period: "first_half", owner, teammates, opponents, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {} }, p, new Rng(seedRng(1))).actionProbs
-    const plain = probs(DEFAULT_PARAMS)
-    const safe = probs(withPass(DEFAULT_PARAMS, { safetyWeight: 4 }))
+    const plain = probs(OLD)
+    const safe = probs(withPass(OLD, { safetyWeight: 4 }))
     expect(safe.short_pass!).toBeGreaterThan(plain.short_pass!)
     expect(safe.long_pass ?? 0).toBeLessThanOrEqual(plain.long_pass ?? 0)
   })
@@ -53,8 +56,8 @@ describe("pitch-control-aware passing", () => {
       return ok / n
     }
     // On the hand-set priors (passes struck to arrive at 7 m/s, often intercepted), so recalibration does not move it.
-    const before = completion(DEFAULT_PARAMS)
-    const after = completion(withPass(DEFAULT_PARAMS, { pitchControlWeight: 0.5, safetyWeight: 3 }))
+    const before = completion(OLD)
+    const after = completion(withPass(OLD, { pitchControlWeight: 0.5, safetyWeight: 3 }))
     // About 1.7 points since carriers stopped standing on the ball (2026-10-10; over 2 before), on 4 seeds and on 8. Seeds moved from 31-34 when teams started switching ends at half-time
     // (the gain is +1.1, +3.1, +2.4 points on seeds 31-34, 35-38, 39-42; +2.2 on all 12).
     expect(after - before).toBeGreaterThan(0.015)

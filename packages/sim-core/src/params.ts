@@ -454,7 +454,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   // P3 X1 (plan 8c Task 3 may change the values, not rule).
-  firstTick: { rule: 0, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
+  firstTick: { rule: 1, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
     ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },
@@ -476,7 +476,7 @@ export const DEFAULT_PARAMS: Params = {
     addedTimeMinS: [60, 300]
   },
   // P3 D2 (plan 8c Task 4 may change the values, not rule).
-  release: { rule: 0, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
+  release: { rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
   actions: {
     logits: {
       def_wide: row({ short_pass: 1.6, long_pass: 0.4, switch: -0.6, back_pass: -0.1, carry: 0.5, take_on: -1.2, clear: -0.4, hold: -0.6 }),
@@ -521,7 +521,7 @@ export const DEFAULT_PARAMS: Params = {
   // P3 D1 (plan 8c Task 9 may change the values, not rule). Real pooled fit (carrier-report C3, all passes, IDSSE 7 matches)
   // and the change per unit of pressure about the real mean pressure at release (0.366).
   choice: {
-    rule: 0,
+    rule: 1,
     base: { dist: -1.33, fwd: 0.56, lat: 0.18, lane: -0.55, open: 1.27, lineBreak: 0.04, keeper: 0.95 },
     press: { dist: 0, fwd: 0.22, lat: -0.46, lane: 0, open: -0.58, lineBreak: -0.58, keeper: 0.98 },
     pressCentre: 0.366,
@@ -530,9 +530,11 @@ export const DEFAULT_PARAMS: Params = {
     // Task 9 (X1 on, seeds 2000-2015): ivCentre 1 keeps passes per match at the X1-only level (1047 vs 1048); switch 0
     // already gives a switch share of 0.052 (real 0.061). No long shift: +0.5 moved the 32 m+ share only 0.049 -> 0.054
     // (real 0.143), and +3 reaches 0.105 at the cost of the refit (distance -0.75) and the ball's depth (own third 0.200).
+    // Task 10 (all P3 on, 16 matches): through_ball 0 / -0.5 / -1 / -1.5 gave shots after a through ball 0.119 / 0.141 /
+    // 0.077 / 0.043 (real 0.025, band to 0.05) with own third 0.244 / 0.226 / 0.238 / 0.230 and passes 872-882: -1.5.
     ivCentre: 1,
     temperature: 1,
-    kindShift: { short_pass: 0, long_pass: 0, through_ball: 0, lofted_through: 0, switch: 0, cross: 0, cutback: 0, back_pass: 0 }
+    kindShift: { short_pass: 0, long_pass: 0, through_ball: -1.5, lofted_through: 0, switch: 0, cross: 0, cutback: 0, back_pass: 0 }
   },
   defending: {
     pressRatePerS: 0.6,
@@ -561,7 +563,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   // P3 D3 (plan 8c Task 5 may change the values, not rule). Zones in the team frame; s toward the crosser's touchline.
   cross: {
-    rule: 0,
+    rule: 1,
     zones: [
       { u: 47.5, s: 3, height: "high", minOriginU: 0 },
       { u: 41.5, s: 0, height: "high", minOriginU: 0 },
@@ -575,12 +577,12 @@ export const DEFAULT_PARAMS: Params = {
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06, handsRule: 1, handsHoldS: [5, 10], feetPressFactor: 0.25 },
   // P3 G5 (plan 8c Task 7 may change the values, not rule). Real: 3.4 throws and 1.6 punts per team-match (gk-report).
-  distribution: { rule: 0, throwMaxM: 35, throwErrorScale: 0.5, puntMinM: 35, puntMaxM: 70, puntErrorScale: 1.6, puntLogit: -0.25 },
+  distribution: { rule: 1, throwMaxM: 35, throwErrorScale: 0.5, puntMinM: 35, puntMaxM: 70, puntErrorScale: 1.6, puntLogit: -0.25 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
   // P3 D4 (plan 8c Task 6 may change the values, not rule).
-  through: { rule: 0, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
+  through: { rule: 1, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
   support: { count: 2, distM: 12, speedShare: 0.8 },
   marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
