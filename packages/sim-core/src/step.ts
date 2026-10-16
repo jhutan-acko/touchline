@@ -63,6 +63,7 @@ import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
 // ---- P3 imports, boot-block seam (plan 8c Task 3 inserts below this line)
+import { bootBlocker } from "./deflect.js"
 
 // ---- P3 imports, release seam (plan 8c Task 4 inserts below this line)
 
@@ -600,8 +601,13 @@ const technique = (a: Action, pl: PlayerState): number =>
 
 // ================================================================ P3 boot-block seam (plan 8c Task 3 owns this block)
 
-/** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. null until Task 3. */
-const bootBlock = (_w: Work, _owner: PlayerState, _d: Decision, _target: Vec2): { blocker: PlayerState; loose: BallState } | null => null
+/** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. Draws from the boot stream. */
+const bootBlock = (w: Work, owner: PlayerState, _d: Decision, _target: Vec2): { blocker: PlayerState; loose: BallState } | null => {
+  if (w.p.firstTick.rule <= 0) return null
+  const b = bootBlocker(owner, w.active(other(owner.side)), w.p)
+  if (!b || !w.rng.boot.chance(w.p.firstTick.bootBlock)) return null
+  return { blocker: b, loose: deflectLoose(b.side, w.period, b.pos, w.rng.boot, [2, 6], [0, 1]) }
+}
 
 // ================================================================ end of P3 boot-block seam
 

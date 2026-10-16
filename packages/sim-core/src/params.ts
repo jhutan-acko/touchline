@@ -71,10 +71,11 @@ export interface Params {
     readonly headerHeightM: number
   }
   /**
-   * X1 (realism v2 P3). On a pass's first tick an opponent's contact point is taken at least alongM along the path; he
-   * takes the ball outright only if it is within reach and he stands within coneDeg of the pass direction from the passer,
-   * otherwise the reachable disc (with reactionS) decides. The nearest outfield opponent within bootM of the passer blocks
-   * an open-play pass at the boot with chance bootBlock (boot RNG stream). rule 0: the old first-tick rule, no boot blocks.
+   * X1 (realism v2 P3). On a pass's first tick an opponent's contact point is taken at least alongM along the path, and
+   * only an opponent standing within coneDeg of the pass direction from the passer can play it then: outright if the
+   * contact is within reach, otherwise by the reachable disc (with reactionS). An opponent beside or behind the passer
+   * cannot play the first tick. The nearest outfield opponent within bootM of the passer blocks an open-play pass at the
+   * boot with chance bootBlock (boot RNG stream). rule 0: the old first-tick rule, no boot blocks.
    */
   readonly firstTick: { readonly rule: number; readonly alongM: number; readonly coneDeg: number; readonly bootM: number; readonly bootBlock: number }
   readonly ball: {
@@ -452,7 +453,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   // P3 X1 (plan 8c Task 3 may change the values, not rule).
-  firstTick: { rule: 0, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.25 },
+  firstTick: { rule: 0, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
     ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },

@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest"
+import { launchVelocity } from "../src/ball.js"
+import { bootBlocker } from "../src/deflect.js"
+import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
+import { resolveFlight } from "../src/resolve.js"
+import { Rng, seedRng } from "../src/rng.js"
+import { initMatch, isFinished, step } from "../src/step.js"
+import type { DomainEvent, PlayerState } from "../src/types.js"
+import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
+
+const base = kickoffPlayersFor(makeConfig(1))
+const at = (p: PlayerState, x: number, y: number): PlayerState => ({ ...p, pos: { x, y }, vel: { x: 0, y: 0 } })
+// Explicit switched-off and switched-on engines (ruling F4): never rely on DEFAULT_PARAMS being off.
+const off: Params = { ...P, firstTick: { ...P.firstTick, rule: 0 } }
+const on: Params = { ...P, firstTick: { ...P.firstTick, rule: 1 } }
+const passer = at(base[2]!, 0, 0)
+const receiver = at(base[5]!, 15, 0)
+const winner = (def: PlayerState, p: Params, dt = 0.1) => {
+  const ball = { pos: { x: 0, y: 0, z: 0 }, vel: launchVelocity(passer.pos, receiver.pos, "ground", p) }
+  return resolveFlight(ball, passer.id, receiver.id, [passer, receiver, def], p, dt, new Rng(seedRng(1))).winnerId
+}
+
+describe("X1: the first tick", () => {
+  it("a pass played directly away from an adjacent defender is not cut out (the old rule cut it out)", () => {
+    const behind = at(base[13]!, -0.8, 0)
+    expect(winner(behind, off)).toBe(behind.id)
+    expect(winner(behind, on)).toBe(receiver.id)
+  })
+  it("a pass played through an adjacent defender is", () => {
+    const front = at(base[13]!, 1.0, 0.2)
+    expect(winner(front, on)).toBe(front.id)
+  })
+  it("holds at 25 Hz too (dt 0.04)", () => {
+    expect(winner(at(base[13]!, -0.8, 0), on, 0.04)).toBe(receiver.id)
+    expect(winner(at(base[13]!, 1.0, 0.2), on, 0.04)).toBe(base[13]!.id)
+  })
+  it("a teammate at the boot keeps the old rule", () => {
+    const mate = at(base[4]!, -0.8, 0)
+    expect(winner(mate, on)).toBe(mate.id)
+  })
+})
+
+describe("X1: boot blocks", () => {
+  it("the nearest outfield opponent within bootM of the passer can block; keepers and players further away cannot", () => {
+    const near = at(base[13]!, 0.6, 0.3), far = at(base[14]!, 1.5, 0), gk = at(base[11]!, 0.2, 0.2)
+    expect(bootBlocker(passer, [far, near, gk], on)?.id).toBe(near.id)
+    expect(bootBlocker(passer, [far, gk], on)).toBeNull()
+  })
+})
+
+const bootDeaths = (p: Params, seed: number) => {
+  let s = initMatch(makeConfig(seed, { params: p }))
+  const events: DomainEvent[] = []
+  while (!isFinished(s)) {
+    const r = step(s)
+    s = r.state
+    events.push(...r.events)
+  }
+  const open = events.filter((e) => e.type === "pass" && !e.attrs.restart)
+  const dead = open.filter((e) => e.outcome === "intercepted" && e.frame_id_end! - e.frame_id <= 1 && Math.hypot(e.x_end! - e.x!, e.y_end! - e.y!) < 1)
+  return { share: dead.length / open.length, blocks: events.filter((e) => e.type === "block" && e.attrs.blocked === "pass").length }
+}
+
+describe("X1 in a match", () => {
+  it("passes stop dying at the passer's boot, and some are blocked there instead", () => {
+    const before = bootDeaths(off, 7)
+    const x1 = bootDeaths(on, 7)
+    expect(x1.share).toBeLessThan(before.share / 2)
+    expect(before.blocks).toBe(0)
+    expect(x1.blocks).toBeGreaterThan(0)
+  }, 120_000)
+})

@@ -79,3 +79,18 @@ export const crossBlocker = (crosser: PlayerState, opponents: ReadonlyArray<Play
   }
   return best
 }
+
+/** X1: the nearest outfield opponent within firstTick.bootM of the passer, who may block the pass at the boot. */
+export const bootBlocker = (passer: PlayerState, opponents: ReadonlyArray<PlayerState>, p: Params): PlayerState | null => {
+  let best: PlayerState | null = null
+  let bd = Infinity
+  for (const o of opponents) {
+    if (o.sentOff || o.role === "GK") continue
+    const d = dist(o.pos, passer.pos)
+    if (d <= p.firstTick.bootM && d < bd) {
+      best = o
+      bd = d
+    }
+  }
+  return best
+}
