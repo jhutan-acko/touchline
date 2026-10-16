@@ -60,7 +60,12 @@ describe("decide", () => {
       expect(total).toBeGreaterThan(0.99)
       expect(total).toBeLessThan(1.01)
       expect(d.options.length).toBeGreaterThan(0)
-      expect(d.options.length).toBeLessThanOrEqual(5)
+      // The best 5, plus the chosen option appended when it ranks below them (recordOf: the chosen option is always
+      // recorded). Under D1's softmax pick a chosen option outside the top 5 happens on this seed; before it never did.
+      if (d.chosenRank !== null && d.chosenRank > 5) {
+        expect(d.options.length).toBe(6)
+        expect(d.options[5]!.receiver_id).toBe(d.candidate!.receiverId)
+      } else expect(d.options.length).toBeLessThanOrEqual(5)
       for (let k = 1; k < d.options.length; k++) expect(d.options[k - 1]!.value).toBeGreaterThanOrEqual(d.options[k]!.value)
       // option values are rounded to 3 decimals
       if (d.candidate) expect(d.candidate.value).toBeLessThanOrEqual(d.options[0]!.value + 0.0006)
