@@ -36,6 +36,34 @@ describe("D1: features as fitted (same fixture as test_passing.py)", () => {
   })
 })
 
+describe("D1: every option is priced at its receiver's current position", () => {
+  it("a through ball and a plain pass to the same receiver share the feature vector; their values differ only by the lane to the aim", () => {
+    const lead = { ...on, choice: { ...on.choice, leadLane: -0.3 } }
+    const probe = candidateContext(input({}), lead, 0)
+    const d = probe.dir
+    const owner = at(home[5]!, 0, 0), runner = at(home[9]!, 20 * d, 5)
+    // An outfielder sets the last line at u 19 (so the runner is ahead of it); their keeper stands in the lane to the
+    // through target (8 m beyond the runner) but not in the lane to the runner himself.
+    const opp = [at(away[0]!, 25 * d, 4.5), at(away[4]!, 19 * d, -30)]
+    const inp = input({ owner, teammates: [owner, runner], opponents: opp })
+    const ctx = candidateContext(inp, lead, 0)
+    const cands = buildCandidates(inp, lead, 0).filter((c) => c.receiverId === runner.id)
+    const plain = cands.find((c) => c.target.x === runner.pos.x && c.target.y === runner.pos.y)!
+    const through = cands.find((c) => c !== plain)!
+    expect(plain).toBeDefined()
+    expect(through).toBeDefined()
+    expect(Math.abs(through.target.x)).toBeGreaterThan(Math.abs(runner.pos.x) + 1)
+    expect(plain.lane).toBe(0)
+    expect(through.lane).toBeGreaterThan(0)
+    const x = choiceFeatures(ctx, runner, runner.pos)
+    expect(plain.value).toBeCloseTo(choiceUtility(ctx, runner, runner.pos, 0), 12)
+    expect(through.value).toBeCloseTo(choiceUtility(ctx, runner, runner.pos, through.lane), 12)
+    expect(through.value - plain.value).toBeCloseTo(lead.choice.leadLane, 12)
+    // Not measured at the aim point: there the features (forward gain, distance) would differ.
+    expect(choiceFeatures(ctx, runner, through.target)).not.toEqual(x)
+  })
+})
+
 describe("D1: the two-step choice is the fitted logit", () => {
   it("with equal kind shifts and temperature 1, P(kind) is the sum of the flat softmax over that kind's options", () => {
     const keeper = at(home[0]!, -47, 0)

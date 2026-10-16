@@ -329,10 +329,14 @@ export const choiceShares = (options: ReadonlyArray<Candidate>, ctx: CandidateCo
   return w.map((x) => x / z)
 }
 
-/** An option's value: the D1 utility (features at `featureAt`, the lane to the aimed point), or the old expected-threat value. */
-const choiceValue = (ctx: CandidateContext, receiver: PlayerState, target: Vec2, featureAt: Vec2, lane: number, xp: number): number => {
+/**
+ * An option's value: the D1 utility, or the old expected-threat value. As fitted, D1 measures the features at the
+ * receiver's current position for every option (lead passes, through balls, crosses, throws, punts); the aimed point
+ * only enters through the lane to it (`lane`, choice.leadLane). Every option has a receiver, so `featureAt` is not used.
+ */
+const choiceValue = (ctx: CandidateContext, receiver: PlayerState, target: Vec2, _featureAt: Vec2, lane: number, xp: number): number => {
   if (ctx.p.choice.rule <= 0) return xp * (0.3 + threat(ctx.side, ctx.period, target)) - (1 - xp) * 0.3 * (1 - ctx.ownerThreat)
-  return choiceUtility(ctx, receiver, featureAt, lane)
+  return choiceUtility(ctx, receiver, receiver.pos, lane)
 }
 
 /**
