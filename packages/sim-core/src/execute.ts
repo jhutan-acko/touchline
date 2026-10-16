@@ -21,6 +21,8 @@ export interface KickIntent {
   /** Multiplies the mis-hit chance (scenario scripts); `forceMishit` makes this kick a mis-hit. */
   readonly mishitScale?: number
   readonly forceMishit?: boolean
+  /** Multiplies the direction and distance error (keeper throws below 1, punts above; P3 G5). Undefined means 1. */
+  readonly errorScale?: number
 }
 
 export interface Executed {
@@ -43,7 +45,7 @@ export const executeKick = (k: KickIntent, p: Params, rng: Rng): Executed => {
   const dy = k.to.y - k.from.y
   const intendedLen = Math.max(0.5, Math.hypot(dx, dy))
   const ang0 = Math.atan2(dy, dx)
-  const skill = (1.35 - 0.7 * k.technique) * (1 + p.fatigue.executionK * (k.fatigue ?? 0))
+  const skill = (1.35 - 0.7 * k.technique) * (1 + p.fatigue.executionK * (k.fatigue ?? 0)) * (k.errorScale ?? 1)
   const foot = k.weakFoot ? e.weakFootK : 1
   const pressureScale = 1 + e.pressureK * k.pressure
   const pMishit = Math.min(0.35, e.mishitBase + e.mishitK * Math.pow(k.pressure, 1.6) * (1.2 - k.composure) * (k.weakFoot ? 1.6 : 1))
