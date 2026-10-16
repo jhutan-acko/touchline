@@ -5,6 +5,7 @@ import { pitchControlAt, type PcPlayer } from "./pitchcontrol.js"
 import type { Rng } from "./rng.js"
 import type { OptionRecord, PlayerState, RestartKind, TeamStyle } from "./types.js"
 // ---- P3 imports, choice seam (plan 8c Task 9 inserts below this line)
+import type { ChoiceCoefs, PassAction } from "./params.js"
 
 // ---- P3 imports, cross seam (plan 8c Task 5 inserts below this line)
 
@@ -258,27 +259,119 @@ export const softmaxPick = (logits: ReadonlyArray<number>, rng: Rng): number => 
 
 // ================================================================ P3 choice seam (plan 8c Task 9 owns this block)
 
-/** An option's value: the old expected-threat value until Task 9. `featureAt` is where D1 measures the choice features. */
-const choiceValue = (ctx: CandidateContext, _receiver: PlayerState, target: Vec2, _featureAt: Vec2, _lane: number, xp: number): number =>
-  xp * (0.3 + threat(ctx.side, ctx.period, target)) - (1 - xp) * 0.3 * (1 - ctx.ownerThreat)
-
-/** Extra logit for pass kind `a` from its options: the old safety lean (0 while pass.safetyWeight is 0). */
-const kindTerm = (ctx: CandidateContext, candidates: ReadonlyArray<Candidate>, a: Action, _base: Readonly<Record<Action, number>>): number => {
-  const sw = ctx.p.pass.safetyWeight
-  if (sw <= 0) return 0
-  let best = -Infinity
-  for (const c of candidates) if (c.action === a && c.xpass > best) best = c.xpass
-  return Number.isFinite(best) ? sw * (best - SAFETY_PIVOT) : 0
+/** The opponents' midfield line in the passer's frame: mean u of their 5th-8th deepest outfielders; NaN with fewer than 8. */
+export const midLine = (ctx: CandidateContext): number => {
+  const us = ctx.input.opponents.filter((o) => !o.sentOff && o.role !== "GK").map((o) => attackX(ctx.side, o.pos.x, ctx.period)).sort((a, b) => b - a)
+  return us.length >= 8 ? (us[4]! + us[5]! + us[6]! + us[7]!) / 4 : NaN
 }
 
-/** Index of the chosen option among `options` (all of the chosen kind). */
+const midLines = new WeakMap<CandidateContext, number>()
+const midLineOf = (ctx: CandidateContext): number => {
+  let m = midLines.get(ctx)
+  if (m === undefined) {
+    m = midLine(ctx)
+    midLines.set(ctx, m)
+  }
+  return m
+}
+
+/** The real choice model's features (carrier-report C3) for a pass to `receiver`, measured at `at`, in the passer's frame. */
+export const choiceFeatures = (ctx: CandidateContext, receiver: PlayerState, at: Vec2): ChoiceCoefs => {
+  const owner = ctx.input.owner
+  const du = (at.x - owner.pos.x) * ctx.dir
+  const dv = at.y - owner.pos.y
+  let open = 99
+  for (const o of ctx.input.opponents) if (!o.sentOff) open = Math.min(open, dist(o.pos, at))
+  const ml = midLineOf(ctx)
+  const pu = attackX(ctx.side, owner.pos.x, ctx.period)
+  const tu = attackX(ctx.side, at.x, ctx.period)
+  return {
+    dist: Math.hypot(du, dv) / 10,
+    fwd: du / 10,
+    lat: Math.abs(dv) / 10,
+    lane: defendersInLane(owner.pos, at, ctx.input.opponents) > 0 ? 1 : 0,
+    open: Math.min(open, 10) / 5,
+    lineBreak: Number.isFinite(ml) && pu < ml && tu > ml ? 1 : 0,
+    keeper: receiver.role === "GK" ? 1 : 0
+  }
+}
+
+const FEATURES = ["dist", "fwd", "lat", "lane", "open", "lineBreak", "keeper"] as const
+
+/** Utility of a pass: the fitted coefficients, moving with pressure about the real mean, plus leadLane for a blocked aim. */
+export const choiceUtility = (ctx: CandidateContext, receiver: PlayerState, at: Vec2, leadLane: number): number => {
+  const c = ctx.p.choice
+  const x = choiceFeatures(ctx, receiver, at)
+  let u = leadLane > 0 ? c.leadLane : 0
+  for (const k of FEATURES) u += (c.base[k] + c.press[k] * (ctx.pressure - c.pressCentre)) * x[k]
+  return u
+}
+
+/** Receiver-choice temperature: choice.temperature at the league's mean vision (0.6), sharper for better passers. */
+export const choiceTemperature = (ctx: CandidateContext): number => Math.max(0.05, (ctx.p.choice.temperature * (1.4 - ctx.input.owner.attrs.vision)) / 0.8)
+
+/** Inclusive value T log sum exp(U / T) of a non-empty set of utilities. */
+export const inclusiveValue = (values: ReadonlyArray<number>, T: number): number => {
+  const m = Math.max(...values)
+  return m + T * Math.log(values.reduce((s, v) => s + Math.exp((v - m) / T), 0))
+}
+
+/**
+ * The D1 receiver shares of `options`: softmax(U / T) at choiceTemperature, the probabilities receiverPick draws with
+ * under choice.rule (sums to 1; empty for no options). For records that must match the draw (Task 10: keeper hands).
+ */
+export const choiceShares = (options: ReadonlyArray<Candidate>, ctx: CandidateContext): number[] => {
+  if (options.length === 0) return []
+  const T = choiceTemperature(ctx)
+  const m = Math.max(...options.map((c) => c.value / T))
+  const w = options.map((c) => Math.exp(c.value / T - m))
+  const z = w.reduce((a, b) => a + b, 0)
+  return w.map((x) => x / z)
+}
+
+/**
+ * An option's value: the D1 utility, or the old expected-threat value. As fitted, D1 measures the features at the
+ * receiver's current position for every option (lead passes, through balls, crosses, throws, punts); the aimed point
+ * only enters through the lane to it (`lane`, choice.leadLane). Every option has a receiver, so `featureAt` is not used.
+ */
+const choiceValue = (ctx: CandidateContext, receiver: PlayerState, target: Vec2, _featureAt: Vec2, lane: number, xp: number): number => {
+  if (ctx.p.choice.rule <= 0) return xp * (0.3 + threat(ctx.side, ctx.period, target)) - (1 - xp) * 0.3 * (1 - ctx.ownerThreat)
+  return choiceUtility(ctx, receiver, receiver.pos, lane)
+}
+
+/**
+ * Extra logit for pass kind `a`. D1: a nested logit, so the kind sits at the pass family's level (the zone's short_pass
+ * logit) plus its fitted shift plus the inclusive value of its options. Old engine: the safety lean.
+ */
+const kindTerm = (ctx: CandidateContext, candidates: ReadonlyArray<Candidate>, a: Action, base: Readonly<Record<Action, number>>): number => {
+  const c = ctx.p.choice
+  if (c.rule <= 0) {
+    const sw = ctx.p.pass.safetyWeight
+    if (sw <= 0) return 0
+    let best = -Infinity
+    for (const x of candidates) if (x.action === a && x.xpass > best) best = x.xpass
+    return Number.isFinite(best) ? sw * (best - SAFETY_PIVOT) : 0
+  }
+  const values = candidates.filter((x) => x.action === a).map((x) => x.value)
+  if (values.length === 0) return 0
+  return base.short_pass - base[a] + c.kindShift[a as PassAction] + c.inclusive * (inclusiveValue(values, choiceTemperature(ctx)) - c.ivCentre)
+}
+
+/** Index of the chosen option among `options` (all of the chosen kind): softmax(U / T) under D1, else the old rule. */
 const receiverPick = (ctx: CandidateContext, options: ReadonlyArray<Candidate>, rng: Rng): number => {
+  if (ctx.p.choice.rule > 0) {
+    const T = choiceTemperature(ctx)
+    return softmaxPick(options.map((c) => c.value / T), rng)
+  }
   const temp = ctx.p.pass.choiceTemperature * (1.4 - ctx.input.owner.attrs.vision)
   return softmaxPick(options.map((c) => c.value / Math.max(0.05, temp)), rng)
 }
 
-/** The decision record's quality of the chosen option against the best one, 0..1. */
-const optionQuality = (_ctx: CandidateContext, chosen: Candidate, best: number): number => (best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1)
+/** Quality of the chosen option: exp((U - U_best) / T) under D1 (utilities can be negative), else chosen / best value. */
+const optionQuality = (ctx: CandidateContext, chosen: Candidate, best: number): number => {
+  if (ctx.p.choice.rule > 0) return Math.max(0, Math.min(1, Math.exp((chosen.value - best) / choiceTemperature(ctx))))
+  return best > 0 ? Math.max(0, Math.min(1, chosen.value / best)) : 1
+}
 
 // ================================================================ end of P3 choice seam
 
