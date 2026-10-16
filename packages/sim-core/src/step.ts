@@ -922,6 +922,7 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
     minute: w.minute(),
     restart,
     scriptBias: scriptBias(w, side),
+    tick: w.tick,
     onBallS: (w.tick - poss.since) * w.dt,
     keeperHands
   }
