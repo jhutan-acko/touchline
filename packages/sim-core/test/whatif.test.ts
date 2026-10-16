@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { applyIntervention, forkState, initMatch, isFinished, passOptions, playAhead, playAheadFrames, runScript, statesAt, step, whatIf, WhatIfError, type DomainEvent, type MatchState, type Script } from "../src/index.js"
+import { dirOf } from "../src/geometry.js"
 import { makeConfig } from "../src/testing.js"
 
 const cfg = makeConfig(41)
@@ -103,6 +104,37 @@ describe("interventions", () => {
     const pass = playAhead(after, 100).events.find((e) => e.type === "pass" && e.player_id === owner)!
     expect(pass.attrs.intended_receiver_id).toBe(target.receiverId)
     expect(pass.frame_id).toBe(s.tick + 1)
+  })
+
+  it("offer a live run_in_behind runner a through-kind target under through.rule=1, and not once the run has expired", () => {
+    const s00 = onBall(12_000)
+    const ownerId = (s00.possession as { playerId: string }).playerId
+    const side = s00.players.find((p) => p.id === ownerId)!.side
+    const d = dirOf(side, s00.period)
+    // Geometry that makes the run a through ball: the owner in his own half, every opponent on the line at u 15, the runner ahead of it.
+    const runnerId = s00.players.find((p) => p.side === side && p.id !== ownerId && p.role !== "GK")!.id
+    const s0: MatchState = {
+      ...s00,
+      players: s00.players.map((p) =>
+        p.id === ownerId ? { ...p, pos: { x: d * -10, y: 0 }, vel: { x: 0, y: 0 } } : p.side !== side ? { ...p, pos: { x: d * 15, y: (p.slot % 7) * 4 - 12 }, vel: { x: 0, y: 0 } } : p
+      )
+    }
+    const owner = s0.players.find((p) => p.id === ownerId)!
+    const runner = s0.players.find((p) => p.id === runnerId)!
+    const withRun = (until: number): MatchState => ({
+      ...s0,
+      config: { ...s0.config, params: { ...s0.config.params, through: { ...s0.config.params.through, rule: 1 } } },
+      players: s0.players.map((p) =>
+        p.id === runner.id
+          ? { ...p, pos: { x: d * 5, y: 0 }, vel: { x: 0, y: 0 }, intent: { kind: "run_in_behind" as const, target: { x: d * 30, y: 0 } }, intentUntil: until }
+          : p
+      )
+    })
+    const isThrough = (c: { receiverId: string; kind: string }) => c.receiverId === runner.id && (c.kind === "through" || c.kind === "lofted_through")
+    const live = passOptions(withRun(s0.tick + 100)).filter(isThrough)
+    expect(live).toHaveLength(1)
+    expect(live[0]!.target.x * d).toBeGreaterThan(5)
+    expect(passOptions(withRun(s0.tick - 1)).filter(isThrough)).toEqual([])
   })
 
   it("refuse a pass the player cannot make", () => {
