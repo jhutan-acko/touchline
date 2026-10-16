@@ -215,5 +215,39 @@
   "territory_sd_m": 1.9,
   "centroid_in_m": 3.9,
   "centroid_out_m": -9.5
+ },
+ "passing": {
+  "source": "realism v2 analysis 2026-10-13 (carrier-report.md C3/C5/C6/C9/C10, gk-report.md, finalthird.json A2/A3) and P2 task-8b-report.md (ball thirds): IDSSE, 7 matches; aggregates only. Bands are plan 8c rulings.",
+  "rows": {
+   "passes_per_match": {"label": "Passes per match", "real": 866, "lo": 776, "hi": 956, "fmt": "{:.0f}"},
+   "first_tick_share": {"label": "Open-play passes dying at the boot (first tick, under 1 m)", "real": 0.0, "lo": 0.0, "hi": 0.01, "fmt": "{:.3f}"},
+   "near1_completion": {"label": "Completion, opponent within 1 m at release", "real": 0.70, "lo": 0.64, "hi": 0.76, "fmt": "{:.3f}"},
+   "avail_10_20_completion": {"label": "Completion to an available receiver, 10–20 m", "real": 0.936, "lo": 0.90, "hi": 0.97, "fmt": "{:.3f}"},
+   "avail_30p_completion": {"label": "Completion to an available receiver, 30 m+", "real": 0.805, "lo": 0.74, "hi": 0.85, "fmt": "{:.3f}"},
+   "long_share": {"label": "Completed passes of 32 m+", "real": 0.143, "lo": 0.12, "hi": 0.17, "fmt": "{:.3f}"},
+   "switch_share": {"label": "Switches (|dy| > 25 m), open play", "real": 0.061, "lo": 0.04, "hi": 0.08, "fmt": "{:.3f}"},
+   "tight_share": {"label": "Receiver tightly marked (under 3 m), completed", "real": 0.09, "lo": 0.06, "hi": 0.12, "fmt": "{:.3f}"},
+   "back_gk_share": {"label": "Passes back to the keeper", "real": 0.062, "lo": 0.045, "hi": 0.08, "fmt": "{:.3f}"},
+   "most_fwd_share": {"label": "Most forward available option chosen", "real": 0.20, "lo": 0.15, "hi": 0.25, "fmt": "{:.3f}"},
+   "crosses_per_match": {"label": "Open-play crosses per match (10 s after restarts excluded)", "real": 14.9, "lo": 12, "hi": 18, "fmt": "{:.1f}"},
+   "cross_contact_m": {"label": "Cross end point from the goal line, median (m)", "real": 10.0, "lo": 8, "hi": 12, "fmt": "{:.1f}"},
+   "through_per_match": {"label": "Through balls per match", "real": null, "lo": null, "hi": null, "fmt": "{:.1f}"},
+   "through_shot_share": {"label": "Shots after a through ball", "real": 0.025, "lo": 0.0, "hi": 0.05, "fmt": "{:.3f}"},
+   "keeper_passes_per_team": {"label": "Keeper passes per team-match", "real": 45.4, "lo": 35, "hi": 55, "fmt": "{:.1f}"},
+   "keeper_open_completion": {"label": "Keeper open-play completion", "real": 0.779, "lo": 0.72, "hi": 0.84, "fmt": "{:.3f}"},
+   "punts_per_team": {"label": "Punts per team-match", "real": 1.6, "lo": 1.0, "hi": 2.2, "fmt": "{:.2f}"},
+   "throws_per_team": {"label": "Keeper throws per team-match", "real": 3.4, "lo": 2.4, "hi": 4.4, "fmt": "{:.2f}"},
+   "release_median_lt2_s": {"label": "Time to release, received under 2 m pressure, median (s)", "real": 0.4, "lo": 0.2, "hi": 0.7, "fmt": "{:.2f}"},
+   "release_under1_lt2": {"label": "Released within 1 s, received under 2 m pressure", "real": 0.63, "lo": 0.50, "hi": 0.75, "fmt": "{:.3f}"},
+   "release_median_s": {"label": "Time to release, median (s)", "real": 1.4, "lo": 1.2, "hi": 1.6, "fmt": "{:.2f}"},
+   "release_over3": {"label": "On the ball over 3 s", "real": 0.16, "lo": 0.12, "hi": 0.20, "fmt": "{:.3f}"},
+   "ball_own_third": {"label": "Ball in the possessing team's own third", "real": 0.35, "lo": 0.30, "hi": 0.40, "fmt": "{:.3f}"},
+   "ball_u_mean": {"label": "Ball u in possession, mean (m)", "real": -5.2, "lo": -8, "hi": -2, "fmt": "{:.1f}"}
+  },
+  "choice": {
+   "features": ["dist/10", "fwd du/10", "|dv|/10", "lane blocked", "open (min(d,10)/5)", "line-breaking", "GK"],
+   "b": [-1.3254, 0.5586, 0.1772, -0.5532, 1.2715, 0.0388, 0.9477],
+   "se": [0.0336, 0.0254, 0.0308, 0.0399, 0.0389, 0.0625, 0.0848]
+  }
  }
 }

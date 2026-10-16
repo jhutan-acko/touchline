@@ -7,6 +7,7 @@ import type { League } from "@touchline/league"
 import { CliError, cliOptions, exitOnUserError, positiveInteger, writeMatch } from "@touchline/sim"
 import { DEFAULT_PARAMS, ParamsError, paramsFromJson, type Params } from "@touchline/sim-core"
 import { FIXTURES } from "./evaluate.js"
+import { applySets, parseSets } from "./overrides.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
@@ -14,7 +15,10 @@ const o = cliOptions("realism: simulate held-out matches and write a realism rep
   // Pass --out docs/realism/realism-report.md to update the committed report.
   out: { default: join(root, "out/realism-report.md"), help: "where to write the report" },
   matches: { default: "10", check: positiveInteger, help: "held-out matches to simulate (seeds 2000+)" },
-  params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" }
+  params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" },
+  set: { default: "", help: "comma-separated key=value overrides on the parameter file, e.g. firstTick.rule=1,firstTick.bootBlock=0.3" },
+  only: { default: "", help: "\"passing\": write only the P3 passing section (faster)" },
+  runs: { default: join(root, "out/realism"), help: "folder for the simulated matches; use a separate one for each concurrent run" }
 })
 // Make the report's folder now, before the matches are simulated.
 exitOnUserError(() => {
@@ -25,16 +29,21 @@ exitOnUserError(() => {
   }
 })
 const matches = Number(o.matches)
+const sets = exitOnUserError(() => {
+  if (o.only !== "" && o.only !== "passing") throw new CliError(`--only must be "passing", got "${o.only}"`)
+  return parseSets(o.set)
+})
 const params: Params = exitOnUserError(() => {
-  if (o.params === "default") return DEFAULT_PARAMS
+  if (o.params === "default" && sets.length === 0) return DEFAULT_PARAMS
   try {
-    return paramsFromJson(JSON.parse(readFileSync(here(o.params), "utf8")))
+    const json: unknown = o.params === "default" ? structuredClone(DEFAULT_PARAMS) : JSON.parse(readFileSync(here(o.params), "utf8"))
+    return paramsFromJson(applySets(json, sets))
   } catch (e) {
-    throw new CliError(`Cannot use params file ${o.params}: ${e instanceof ParamsError ? e.message : String(e)}`)
+    throw new CliError(`Cannot use params file ${o.params}${o.set ? ` with --set ${o.set}` : ""}: ${e instanceof ParamsError ? e.message : String(e)}`)
   }
 })
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
-const outRoot = join(root, "out/realism")
+const outRoot = here(o.runs)
 rmSync(outRoot, { recursive: true, force: true })
 
 // Seeds 2000+ are disjoint from the tuner's 1000+ seeds, so the report checks matches the tuner never saw.
@@ -47,8 +56,8 @@ for (let i = 0; i < matches; i++) {
   dirs.push(dir)
   process.stdout.write(`match ${i + 1}/${matches}\n`)
 }
-const note = `${params.provenance.version}; held-out seeds 2000–${2000 + matches - 1}`
+const note = `${params.provenance.version}${o.set ? `; --set ${o.set}` : ""}; held-out seeds 2000–${2000 + matches - 1}`
 execFileSync("uv", ["run", "--project", join(root, "python/analytics"), "python", "-m", "touchline_analytics.report", ...dirs,
-  "--targets", join(root, "data/params/targets-idsse.json"), "--note", note, "--out", here(o.out),
+  "--targets", join(root, "data/params/targets-idsse.json"), "--note", note, "--out", here(o.out), ...(o.only ? ["--only", o.only] : []),
   "--physics", join(root, "data/params/physics.json"), "--league", join(root, "data/league/league.json"),
   "--carriers", join(root, "data/params/still-carriers.json")], { stdio: "inherit" })
