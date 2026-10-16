@@ -286,8 +286,41 @@ const optionQuality = (_ctx: CandidateContext, chosen: Candidate, best: number):
 
 export interface CrossOption { readonly receiver: PlayerState; readonly target: Vec2; readonly height: PassHeight; readonly bonus: number }
 
-/** Crosses aimed at zones rather than teammates (D3). None until Task 5. */
-const crossTargets = (_ctx: CandidateContext): CrossOption[] => []
+/**
+ * Crosses aimed at zones rather than teammates (D3). A carrier in the final third (u beyond classifier.finalThirdAttackX)
+ * and wide (|y| beyond classifier.crossOriginAbsY) gets one option per zone that an attacker can reach by the ball's
+ * arrival: the fastest such attacker is the intended receiver, and each one adds cross.attackerValue.
+ */
+const crossTargets = (ctx: CandidateContext): CrossOption[] => {
+  const { input, p } = ctx
+  const c = p.cross
+  if (c.rule <= 0 || input.restart !== null) return []
+  const owner = input.owner
+  const ou = attackX(ctx.side, owner.pos.x, ctx.period)
+  if (ou <= p.classifier.finalThirdAttackX || Math.abs(owner.pos.y) <= p.classifier.crossOriginAbsY) return []
+  const near = Math.sign(owner.pos.y)
+  const out: CrossOption[] = []
+  for (const zone of c.zones) {
+    if (ou < zone.minOriginU) continue
+    const target = { x: ctx.dir * zone.u, y: near * zone.s }
+    const arrive = dist(owner.pos, target) / (zone.height === "high" ? c.flightSpeed : p.pass.arriveSpeed) + c.arriveSlackS
+    let receiver: PlayerState | null = null
+    let fastest = Infinity
+    let n = 0
+    for (const tm of input.teammates) {
+      if (tm.id === owner.id || tm.sentOff || tm.role === "GK") continue
+      const t = dist(tm.pos, target) / c.runSpeed
+      if (t > arrive) continue
+      n++
+      if (t < fastest) {
+        fastest = t
+        receiver = tm
+      }
+    }
+    if (receiver) out.push({ receiver, target, height: zone.height, bonus: c.attackerValue * n })
+  }
+  return out
+}
 
 // ================================================================ end of P3 cross seam
 
