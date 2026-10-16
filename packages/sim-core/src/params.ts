@@ -565,8 +565,8 @@ export const DEFAULT_PARAMS: Params = {
     ],
     flightSpeed: 18,
     runSpeed: 7,
-    arriveSlackS: 0.3,
-    attackerValue: 0.3
+    arriveSlackS: 0.6,
+    attackerValue: 0.6
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06, handsRule: 1, handsHoldS: [5, 10], feetPressFactor: 0.25 },
   // P3 G5 (plan 8c Task 7 may change the values, not rule). Real: 3.4 throws and 1.6 punts per team-match (gk-report).
