@@ -614,12 +614,17 @@ const releaseDelayTicks = (w: Work, _pl: PlayerState): number => w.decisionDelay
 
 // ================================================================ P3 keeper-distribution seam (plan 8c Task 7 owns this block)
 
-/** keeper_distribution's method attribute: the old label (any short pass is a "throw") until Task 7. */
-const keeperMethod = (_w: Work, d: Decision): string => (d.action === "short_pass" ? "throw" : "kick")
+/** keeper_distribution's method: with distribution.rule, the real one (throw, punt, or a kick from his feet); else the old label. */
+const keeperMethod = (w: Work, d: Decision): string =>
+  w.p.distribution.rule > 0 ? (d.candidate?.method ?? "kick") : d.action === "short_pass" ? "throw" : "kick"
 
-/** How a pass is struck: the technique and body-part attributes and the execution-error multiplier. */
-const kickStyle = (_w: Work, _d: Decision, restart: RestartKind | null): { technique: "throw" | "foot"; hands: boolean; errorScale: number } =>
-  restart === "throw_in" ? { technique: "throw", hands: true, errorScale: 1 } : { technique: "foot", hands: false, errorScale: 1 }
+/** How a pass is struck: throw-ins and keeper throws by hand (throws more accurately), punts with more error. */
+const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { technique: "throw" | "foot"; hands: boolean; errorScale: number } => {
+  if (restart === "throw_in") return { technique: "throw", hands: true, errorScale: 1 }
+  if (d.candidate?.method === "throw") return { technique: "throw", hands: true, errorScale: w.p.distribution.throwErrorScale }
+  if (d.candidate?.method === "punt") return { technique: "foot", hands: false, errorScale: w.p.distribution.puntErrorScale }
+  return { technique: "foot", hands: false, errorScale: 1 }
+}
 
 // ================================================================ end of P3 keeper-distribution seam
 

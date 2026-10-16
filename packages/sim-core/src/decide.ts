@@ -303,8 +303,77 @@ const throughTargets = (ctx: CandidateContext, tm: PlayerState): ThroughOption[]
 
 // ================================================================ P3 keeper-hands seam (plan 8c Task 7 owns this block)
 
-/** A keeper's throw or punt from his hands (G5); null keeps the normal decision. Nothing until Task 7. */
-const keeperHandsDecision = (_ctx: CandidateContext, _rng: Rng): Decision | null => null
+/** Softmax shares of a pool's options, at the temperature the old receiver pick uses (sums to 1; empty for an empty pool). */
+const poolShares = (ctx: CandidateContext, pool: ReadonlyArray<Candidate>): number[] => {
+  if (pool.length === 0) return []
+  const temp = Math.max(0.05, ctx.p.pass.choiceTemperature * (1.4 - ctx.input.owner.attrs.vision))
+  const m = Math.max(...pool.map((c) => c.value / temp))
+  const w = pool.map((c) => Math.exp(c.value / temp - m))
+  const z = w.reduce((a, b) => a + b, 0)
+  return w.map((x) => x / z)
+}
+
+/**
+ * The throws and punts open to a keeper with the ball in his hands (G5), or null when G5 does not apply (rule off, not
+ * in his hands, a restart, not a keeper) or he has no option. Exported so that a what-if override can use the same pools.
+ */
+export const keeperHandsCandidates = (ctx: CandidateContext): { readonly throws: Candidate[]; readonly punts: Candidate[] } | null => {
+  const { input, p } = ctx
+  const g = p.distribution
+  if (g.rule <= 0 || input.keeperHands !== true || input.restart !== null || input.owner.role !== "GK") return null
+  const owner = input.owner
+  const throws: Candidate[] = []
+  const punts: Candidate[] = []
+  for (const tm of input.teammates) {
+    if (tm.id === owner.id || tm.sentOff) continue
+    const lead = leadOf(tm)
+    const d = dist(owner.pos, lead)
+    if (d >= 4 && d <= g.throwMaxM) pushCandidate(ctx, throws, tm, lead, "ground", { featureAt: tm.pos, method: "throw" })
+    else if (d >= g.puntMinM && d <= g.puntMaxM && (tm.role === "ST" || tm.role === "W" || tm.role === "AM")) pushCandidate(ctx, punts, tm, lead, "high", { featureAt: tm.pos, method: "punt" })
+  }
+  return throws.length + punts.length === 0 ? null : { throws, punts }
+}
+
+/**
+ * A keeper's distribution from his hands (G5): open play only, and only when his hold in his hands has just ended. He
+ * throws to a teammate 4..throwMaxM away along the ground, or punts high to a forward (ST, W, AM) puntMinM..puntMaxM away,
+ * punting with chance sigmoid(distribution.puntLogit); then the receiver is drawn as for any pass. actionProbs is keyed
+ * by each option's classified action (a long throw can be a switch or a long pass, a punt a lofted through ball):
+ * P(action) = sum over throws of (1 - pPunt) * share + sum over punts of pPunt * share. Draws only from `rng` (decision).
+ */
+const keeperHandsDecision = (ctx: CandidateContext, rng: Rng): Decision | null => {
+  const pools = keeperHandsCandidates(ctx)
+  if (pools === null) return null
+  const { throws, punts } = pools
+  const g = ctx.p.distribution
+  const pPunt = punts.length === 0 ? 0 : throws.length === 0 ? 1 : sigmoid(g.puntLogit)
+  const pool = rng.chance(pPunt) ? punts : throws
+  const chosen = pool[Math.max(0, receiverPick(ctx, pool, rng))]!
+  const all = [...throws, ...punts]
+  const best = Math.max(...all.map((c) => c.value))
+  const probs: Record<string, number> = {}
+  const add = (opts: ReadonlyArray<Candidate>, pMethod: number): void =>
+    poolShares(ctx, opts).forEach((share, i) => {
+      const a = opts[i]!.action
+      probs[a] = (probs[a] ?? 0) + pMethod * share
+    })
+  add(throws, 1 - pPunt)
+  add(punts, pPunt)
+  const actionProbs: Record<string, number> = {}
+  for (const a of Object.keys(probs)) actionProbs[a] = r3(probs[a]!)
+  const { options, chosenRank } = recordOf(all, chosen)
+  return {
+    action: chosen.action,
+    candidate: chosen,
+    decisionQuality: optionQuality(ctx, chosen, best),
+    xg: null,
+    pressure: ctx.pressure,
+    actionProbs,
+    options,
+    chosenRank,
+    fallback: false
+  }
+}
 
 // ================================================================ end of P3 keeper-hands seam
 
