@@ -60,8 +60,11 @@ export const executeKick = (k: KickIntent, p: Params, rng: Rng): Executed => {
     ang = ang0 + g3 * 0.45
     actualLen = intendedLen * (0.35 + 1.3 * u)
   } else {
-    ang = ang0 + g1 * e.dirSigma * pressureScale * skill * foot
-    actualLen = intendedLen * (1 + g2 * e.distSigma * pressureScale * skill * foot)
+    // X2: a high ball beyond pass.longErrorFromM misses by more per metre (pass.longErrorPerM; 0 = off, exactly).
+    // Multiplies the same expression as errorScale (inside skill), so the two compose multiplicatively.
+    const longScale = k.height === "high" ? 1 + p.pass.longErrorPerM * Math.max(0, intendedLen - p.pass.longErrorFromM) : 1
+    ang = ang0 + g1 * e.dirSigma * pressureScale * skill * foot * longScale
+    actualLen = intendedLen * (1 + g2 * e.distSigma * pressureScale * skill * foot * longScale)
   }
   const to = { x: k.from.x + Math.cos(ang) * actualLen, y: k.from.y + Math.sin(ang) * actualLen }
   const errorM = dist(to, k.to)
