@@ -71,10 +71,11 @@ export interface Params {
     readonly headerHeightM: number
   }
   /**
-   * X1 (realism v2 P3). On a pass's first tick an opponent's contact point is taken at least alongM along the path, and
+   * X1 (realism v2 P3). In the first 0.1 s of a pass's flight (resolve.ts BOOT_WINDOW_S: the first tick at 10 Hz, the
+   * first three at 25 Hz) an opponent's contact point is taken at least alongM along the path from the pass start, and
    * only an opponent standing within coneDeg of the pass direction from the passer can play it then: outright if the
    * contact is within reach, otherwise by the reachable disc (with reactionS). An opponent beside or behind the passer
-   * cannot play the first tick. The nearest outfield opponent within bootM of the passer blocks an open-play pass at the
+   * cannot play the ball in that window. The nearest outfield opponent within bootM of the passer blocks an open-play pass at the
    * boot with chance bootBlock (boot RNG stream). rule 0: the old first-tick rule, no boot blocks.
    */
   readonly firstTick: { readonly rule: number; readonly alongM: number; readonly coneDeg: number; readonly bootM: number; readonly bootBlock: number }

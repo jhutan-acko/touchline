@@ -18,6 +18,9 @@ export interface Resolution {
 /** Longest flight we predict before calling the ball stopped (seconds, so it is tick-length independent). */
 export const MAX_FLIGHT_S = 8
 
+/** X1: how long after release the first-tick rule applies (seconds): the first tick at 10 Hz, the first 3 ticks at 25 Hz. */
+export const BOOT_WINDOW_S = 0.1
+
 const sigmoid = (z: number): number => 1 / (1 + Math.exp(-z))
 
 /** Where a ball moving from `a` to `b` crosses a goal line, if it does, with interpolated y and z. */
@@ -43,9 +46,10 @@ const closestOnSegment = (a: Vec2, b: Vec2, q: Vec2): { t: number; d: number } =
 
 /**
  * X1: whether an opponent standing at `pl` is in front of the pass: within firstTick.coneDeg of the pass direction `dir`
- * (a unit vector) as seen from the ball's start. With firstTick.rule on, only such an opponent can play the ball on
- * its first tick (outright or by the reachable-disc test, both at a contact at least alongM along the path); an
- * opponent beside or behind the passer cannot, and is left to the boot block (bootBlocker in deflect.ts).
+ * (a unit vector) as seen from the ball's start. With firstTick.rule on, only such an opponent can play the ball in
+ * the first BOOT_WINDOW_S of its flight (outright or by the reachable-disc test, both at a contact at least alongM along
+ * the path from the start); an opponent beside or behind the passer cannot, and is left to the boot block
+ * (bootBlocker in deflect.ts).
  */
 export const outrightAtBoot = (start: Vec2, dir: Vec2, pl: Vec2, p: Params): boolean => {
   const vx = pl.x - start.x
@@ -79,6 +83,8 @@ export const resolveFlight = (
   const v0 = Math.hypot(start.vel.x, start.vel.y)
   const dir0 = v0 > 1e-9 ? { x: start.vel.x / v0, y: start.vel.y / v0 } : null
   const start0 = { x: start.pos.x, y: start.pos.y }
+  // X1: ground distance the ball has covered before the current tick, for the alongM clamp.
+  let travelled = 0
   for (let k = 1; k <= maxTicks; k++) {
     const prev = b
     b = stepBall(b, dt, p)
@@ -88,16 +94,19 @@ export const resolveFlight = (
     const a2 = { x: prev.pos.x, y: prev.pos.y }
     const b2 = { x: b.pos.x, y: b.pos.y }
     const t = k * dt
+    // X1: the boot window is the first BOOT_WINDOW_S of the flight in time, so it covers the same ground at any tick rate.
+    const bootTick = x1 && (k - 1) * dt < BOOT_WINDOW_S - 1e-9
+    const seg = bootTick ? Math.hypot(b2.x - a2.x, b2.y - a2.y) : 0
     const qualifiers: Array<{ pl: PlayerState; slack: number; f: number }> = []
     for (const pl of players) {
       if (pl.sentOff) continue
       if (pl.id === fromId && t < 0.6) continue
       let { t: f, d } = closestOnSegment(a2, b2, pl.pos)
-      // X1: on the first tick an opponent meets the ball no nearer than alongM along its path: not at the passer's feet.
-      const boot = x1 && k === 1 && dir0 !== null && passerSide !== undefined && pl.side !== passerSide
+      // X1: in the boot window an opponent meets the ball no nearer than alongM along its path from the pass start:
+      // not at the passer's feet.
+      const boot = bootTick && dir0 !== null && passerSide !== undefined && pl.side !== passerSide
       if (boot) {
-        const seg = Math.hypot(b2.x - a2.x, b2.y - a2.y)
-        const fMin = seg > 1e-9 ? Math.min(1, p.firstTick.alongM / seg) : 1
+        const fMin = seg > 1e-9 ? Math.max(0, Math.min(1, (p.firstTick.alongM - travelled) / seg)) : 1
         if (f < fMin) {
           f = fMin
           d = Math.hypot(a2.x + f * (b2.x - a2.x) - pl.pos.x, a2.y + f * (b2.y - a2.y) - pl.pos.y)
@@ -115,12 +124,13 @@ export const resolveFlight = (
       const radius = p.kinematics.reachM + p.kinematics.reachMargin * reachIn(tc - reaction, 0, vmax, accelFor(pl.attrs, p))
       const fromDrift = Math.hypot(contact.x - drift.x, contact.y - drift.y)
       const withinSpeed = Math.hypot(contact.x - pl.pos.x, contact.y - pl.pos.y) <= p.kinematics.reachM + vmax * tc
-      // X1: on the first tick an opponent outside the cone cannot play the ball at all, outright or by the disc test.
+      // X1: in the boot window an opponent outside the cone cannot play the ball at all, outright or by the disc test.
       const front = !boot || outrightAtBoot(start0, dir0!, pl.pos, p)
       const outright = d <= p.kinematics.reachM && tc <= dt && front
       if (outright) qualifiers.push({ pl, slack: p.kinematics.reachM - d, f })
       else if (front && fromDrift <= radius && withinSpeed) qualifiers.push({ pl, slack: radius - fromDrift, f })
     }
+    travelled += seg
     if (qualifiers.length === 0) continue
     const contactBall = (f: number): BallState => ({
       pos: { x: a2.x + f * (b2.x - a2.x), y: a2.y + f * (b2.y - a2.y), z: prev.pos.z + f * (b.pos.z - prev.pos.z) },

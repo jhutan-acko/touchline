@@ -19,6 +19,14 @@ const winner = (def: PlayerState, p: Params, dt = 0.1) => {
   const ball = { pos: { x: 0, y: 0, z: 0 }, vel: launchVelocity(passer.pos, receiver.pos, "ground", p) }
   return resolveFlight(ball, passer.id, receiver.id, [passer, receiver, def], p, dt, new Rng(seedRng(1))).winnerId
 }
+/** A ground pass from the origin to a receiver `len` metres away along `sign`·x, with one defender at (dx, dy). */
+const winnerAt = (len: number, dx: number, dy: number, p: Params, dt: number, sign = 1) => {
+  const from = at(base[2]!, 0, 0)
+  const to = at(base[5]!, sign * len, 0)
+  const def = at(base[13]!, dx, dy)
+  const ball = { pos: { x: 0, y: 0, z: 0 }, vel: launchVelocity(from.pos, to.pos, "ground", p) }
+  return { winnerId: resolveFlight(ball, from.id, to.id, [from, to, def], p, dt, new Rng(seedRng(1))).winnerId, to: to.id, def: def.id }
+}
 
 describe("X1: the first tick", () => {
   it("a pass played directly away from an adjacent defender is not cut out (the old rule cut it out)", () => {
@@ -34,6 +42,21 @@ describe("X1: the first tick", () => {
     expect(winner(at(base[13]!, -0.8, 0), on, 0.04)).toBe(receiver.id)
     expect(winner(at(base[13]!, 1.0, 0.2), on, 0.04)).toBe(base[13]!.id)
   })
+  it("at 25 Hz a defender close behind or beside the passer cannot take a short pass on a later tick of the first 0.1 s", () => {
+    for (const len of [5, 8])
+      for (const [dx, dy] of [[-0.3, 0], [-0.5, 0], [0, 0.5]] as const) {
+        const r = winnerAt(len, dx, dy, on, 0.04)
+        expect(r.winnerId, `len ${len}, defender at (${dx}, ${dy})`).toBe(r.to)
+      }
+  })
+  it("the rule does not depend on the pass direction (a pass along -x mirrors one along +x)", () => {
+    for (const dt of [0.1, 0.04]) {
+      const away = winnerAt(8, 0.5, 0, on, dt, -1)
+      expect(away.winnerId).toBe(away.to)
+      const through = winnerAt(8, -1.0, 0.2, on, dt, -1)
+      expect(through.winnerId).toBe(through.def)
+    }
+  })
   it("a teammate at the boot keeps the old rule", () => {
     const mate = at(base[4]!, -0.8, 0)
     expect(winner(mate, on)).toBe(mate.id)
@@ -45,6 +68,7 @@ describe("X1: boot blocks", () => {
     const near = at(base[13]!, 0.6, 0.3), far = at(base[14]!, 1.5, 0), gk = at(base[11]!, 0.2, 0.2)
     expect(bootBlocker(passer, [far, near, gk], on)?.id).toBe(near.id)
     expect(bootBlocker(passer, [far, gk], on)).toBeNull()
+    expect(bootBlocker(passer, [{ ...near, sentOff: true }, far], on)).toBeNull()
   })
 })
 
