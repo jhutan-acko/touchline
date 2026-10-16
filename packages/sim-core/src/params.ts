@@ -527,7 +527,10 @@ export const DEFAULT_PARAMS: Params = {
     pressCentre: 0.366,
     leadLane: 0,
     inclusive: 1,
-    ivCentre: 0,
+    // Task 9 (X1 on, seeds 2000-2015): ivCentre 1 keeps passes per match at the X1-only level (1047 vs 1048); switch 0
+    // already gives a switch share of 0.052 (real 0.061). No long shift: +0.5 moved the 32 m+ share only 0.049 -> 0.054
+    // (real 0.143), and +3 reaches 0.105 at the cost of the refit (distance -0.75) and the ball's depth (own third 0.200).
+    ivCentre: 1,
     temperature: 1,
     kindShift: { short_pass: 0, long_pass: 0, through_ball: 0, lofted_through: 0, switch: 0, cross: 0, cutback: 0, back_pass: 0 }
   },
