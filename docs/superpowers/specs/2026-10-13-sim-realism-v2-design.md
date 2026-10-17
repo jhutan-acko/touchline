@@ -743,8 +743,14 @@ Changes made on measurement:
     - `keeper.test` counts a press only while it is live (tick < intentUntil).
     - `execute-decide.test` states `recordOf`'s rule (best 5 plus the chosen option when it ranks below them).
     - `positioning.test`: both NOT MET `it.fails` now hold (relIn +0.09; deep count 6, on its bound) and are plain tests again.
-    - Seeds re-picked by each file's rule: `whatif` forced window; manager `situation` "adds up" (seed 12; it asserts its
-      precondition).
+    - Seeds re-picked by each file's rule:
+      - `whatif` forced window;
+      - manager `situation` "adds up" (seed 12; it asserts its precondition);
+      - api library fixture 2 → 5;
+      - agents ERROR_SEED 164 → 62 and SEED 9 → 2;
+      - gateway e2e 62.
+    - The advisor explain-pass check uses the verdict's own `clearlyBetter` rule, not a bare 2 SE.
+    - The stats and manager goldens were regenerated.
 
 ### Calibration
 
