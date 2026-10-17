@@ -111,7 +111,13 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: DEFAULT_PARAMS.marking.weight, min: 0, max: 1, step: 0.25,
     apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
   { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: DEFAULT_PARAMS.support.distM, min: 8, max: 18, step: 2,
-    apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) }
+    apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) },
+  // Support rule 1 (P3 Task 10d): the space other teammates keep from an outfield carrier, and in the attacking third
+  // (spaceAttM never wider than spaceM: each knob clamps the attacking-third value to the general one).
+  { name: "support_space", what: "space teammates keep from the carrier (open near options, support within 15 m, pass length)", init: DEFAULT_PARAMS.support.spaceM, min: 12, max: 20, step: 2,
+    apply: (p, v) => ({ ...p, support: { ...p.support, spaceM: v, spaceAttM: Math.min(p.support.spaceAttM, v) } }) },
+  { name: "support_space_att", what: "space teammates keep from the carrier in the attacking third (chances, crosses, support)", init: DEFAULT_PARAMS.support.spaceAttM, min: 7, max: 15, step: 2,
+    apply: (p, v) => ({ ...p, support: { ...p.support, spaceAttM: Math.min(v, p.support.spaceM) } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>
