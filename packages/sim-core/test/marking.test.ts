@@ -17,8 +17,16 @@ const near = (a: Vec2, b: Vec2) => {
   expect(a.x).toBeCloseTo(b.x, 9)
   expect(a.y).toBeCloseTo(b.y, 9)
 }
-const on = (p: Params): Params => ({ ...p, marking: { ...p.marking, rule: 1 } })
-const off = (p: Params): Params => ({ ...p, marking: { ...p.marking, rule: 0 } })
+// Both arms pin the marking numbers and every other P4 rule to 0, so that retuning the params file or switching other rules on cannot move these tests.
+const pin = (p: Params, rule: number): Params => ({
+  ...p,
+  marking: { ...p.marking, rule, weight: 0.75, laneShare: 0.4, cbStepM: 10, dropMps: 1 },
+  tackle: { ...p.tackle, rule: 0 }, fouls: { ...p.fouls, rule: 0 }, aerial: { ...p.aerial, rule: 0 },
+  transition: { ...p.transition, rule: 0 }, press: { ...p.press, rule: 0 },
+  firstTick: { ...p.firstTick, scopeRule: 0 }, release: { ...p.release, rejudge: 0 }
+})
+const on = (p: Params): Params => pin(p, 1)
+const off = (p: Params): Params => pin(p, 0)
 
 describe("lane marking (P4 A5)", () => {
   it("the marker goes weight of the way to a spot 40 % from the ball to his man", () => {
@@ -39,11 +47,11 @@ describe("lane marking (P4 A5)", () => {
     for (const [side, period, k] of MIRRORS) {
       const anchor = { x: k * -30, y: 0 }
       const st = (up: number, dropSpeed: number) => fakeAttacker({ x: k * (-30 + up), y: 3 }, { x: k * dropSpeed, y: 0 })
-      expect(stepsOut(anchor, st(6, 2), side, period, P.marking), `${side} ${period}`).toBe(true)
-      expect(stepsOut(anchor, st(12, 2), side, period, P.marking)).toBe(false)
-      expect(stepsOut(anchor, st(6, 0.5), side, period, P.marking)).toBe(false)
+      expect(stepsOut(anchor, st(6, 2), side, period, on(P).marking), `${side} ${period}`).toBe(true)
+      expect(stepsOut(anchor, st(12, 2), side, period, on(P).marking)).toBe(false)
+      expect(stepsOut(anchor, st(6, 0.5), side, period, on(P).marking)).toBe(false)
       // moving away from his own goal (not dropping)
-      expect(stepsOut(anchor, st(6, -2), side, period, P.marking)).toBe(false)
+      expect(stepsOut(anchor, st(6, -2), side, period, on(P).marking)).toBe(false)
     }
   })
 
@@ -60,7 +68,9 @@ describe("lane marking (P4 A5)", () => {
     const { w, cb, st, anchor, ball } = fixture(on(P))
     expect(w.period).toBe("first_half")
     const m = w.p.marking
-    expect(markSpot(w, "home", cb.id, anchor, st, ball)).toEqual(markTarget(anchor, st.pos, "home", w.period, m.goalSideM, 1, m.widthSlackM))
+    const spot = markSpot(w, "home", cb.id, anchor, st, ball)
+    expect(spot).toEqual(markTarget(anchor, st.pos, "home", w.period, m.goalSideM, 1, m.widthSlackM))
+    expect(spot).not.toEqual(laneMarkTarget(anchor, ball, st.pos, m.weight, m.laneShare, m.widthSlackM))
   })
 
   it("a CB marking a striker beyond the step-out range, or a non-CB, is zonal under on", () => {
@@ -106,7 +116,10 @@ describe("lane marking (P4 A5)", () => {
       const a = tight(params, 7), b = tight(params, 9)
       return { n: Math.min(a.n, b.n), share: (a.t + b.t) / (a.n + b.n) }
     }
+    const FLOOR = 0.09
     const a = share(off(calibrated)), b = share(on(calibrated))
+    // The off arm must be tight enough for the comparison to mean something (seeds 7 and 9 read about 0.1 here).
+    expect(a.share).toBeGreaterThan(FLOOR)
     expect(a.n).toBeGreaterThanOrEqual(400)
     expect(b.n).toBeGreaterThanOrEqual(400)
     expect(b.share).toBeLessThan(a.share)
