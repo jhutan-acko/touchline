@@ -84,6 +84,8 @@ export type Intent =
   | { readonly kind: "chase"; readonly target: Vec2 }
   | { readonly kind: "carry"; readonly dir: Vec2; readonly speed: number }
   | { readonly kind: "hold" }
+  /** A4 recovery run (realism v2 P4): back to his out-of-possession shape spot after a loss. */
+  | { readonly kind: "recover"; readonly target: Vec2 }
 
 export interface PlayerState {
   readonly id: string
@@ -135,6 +137,19 @@ export interface Flight {
   readonly looseBall: BallState | null
   /** After resolution the ball is deflected straight out over the goal line to this point (a corner). */
   readonly deflectTo: Vec3 | null
+  /** An aerial foul decided at release (realism v2 P4, aerial seam), applied at resolution; absent: none. */
+  readonly foul?: FlightFoul
+}
+
+/** The kinds of foul (realism v2 P4): attrs.kind of a foul event. */
+export type FoulKind = "tackle" | "take_on" | "shielding" | "aerial"
+
+/** An aerial foul carried by a flight (P4): offender, victim, the contact point, and the offender's yellows at release. */
+export interface FlightFoul {
+  readonly offenderId: string
+  readonly victimId: string
+  readonly at: Vec2
+  readonly offenderYellow: number
 }
 
 export type FlightOutcome =
@@ -280,7 +295,7 @@ export interface Frame {
   readonly possession_side: Side | null
 }
 
-export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift", "boot", "release"] as const
+export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift", "boot", "release", "foul", "aerial", "counter", "press"] as const
 export type Concern = (typeof CONCERNS)[number]
 
 /** One team's substitutions: planned windows (match minutes) still to come, changes made, windows used, bench players used. */
@@ -386,6 +401,25 @@ export interface MatchState {
   readonly load?: Readonly<Record<string, number>>
   /** Support rule 1 pressure gate for the current carrier (hysteresis); absent while support.rule is 0 or nobody has the ball. */
   readonly supportGate?: SupportGate
+  /** A4 transition after the last live-play loss (realism v2 P4); absent while transition.rule is 0 or none is live. */
+  readonly transition?: TransitionState
+  /** A5 team-press state (realism v2 P4); absent while press.rule is 0. */
+  readonly press?: PressState
+}
+
+/** A4 (P4): the side that lost the ball, when and where, and who counter-presses. */
+export interface TransitionState {
+  readonly loser: Side
+  readonly tick: number
+  readonly at: Vec2
+  readonly joiners: ReadonlyArray<string>
+}
+
+/** A5 (P4): the last completed reception (back-to-goal trigger) and the second-presser draw for the current first press. */
+export interface PressState {
+  readonly reception: { readonly playerId: string; readonly tick: number; readonly ballMps: number } | null
+  readonly secondFor: string | null
+  readonly secondId: string | null
 }
 
 /** Whether support rule 1 counts the carrier as pressed, and for which carrier that was judged. */
