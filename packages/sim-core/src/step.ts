@@ -74,6 +74,7 @@ import { bootBlocker } from "./deflect.js"
 import { releaseDelayS } from "./release.js"
 
 // ---- P4 imports, tackle seam (plan 8d Task 3 inserts below this line)
+import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 
 // ---- P4 imports, foul seam (plan 8d Task 4 inserts below this line)
 
@@ -589,7 +590,15 @@ const danger = (defSide: Side, period: Period, at: Vec2): number => Math.max(0, 
 // ================================================================ P4 tackle seam (plan 8d Task 3 owns this block)
 
 /** T2: the logit that `def` wins his tackle attempt on `owner`. rule 0: the old logit, defending.tackleBase + 3 (tackling - dribbling). @internal */
-export const tackleWinLogit = (w: Work, def: PlayerState, owner: PlayerState): number => w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling)
+export const tackleWinLogit = (w: Work, def: PlayerState, owner: PlayerState): number => {
+  if (w.p.tackle.rule !== 1) return w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling)
+  const t = w.p.tackle
+  const inBox = attackX(owner.side, owner.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
+  return tackleLogit(
+    t.base, def.attrs.tackling - owner.attrs.dribbling, bearingOf(owner.pos, owner.vel, dirOf(owner.side, w.period), def.pos, t),
+    supportCount(owner.pos, def.id, w.active(def.side), t.supportM), Math.hypot(owner.vel.x, owner.vel.y), inBox, t
+  )
+}
 
 // ================================================================ end of P4 tackle seam
 
