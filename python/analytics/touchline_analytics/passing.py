@@ -268,7 +268,6 @@ def summarize(ms: list[dict]) -> dict:
         "through_shot_share": tot("through_shots") / max(1, tot("shots")),
         "keeper_passes_per_team": tot("gk_passes") / (2 * n),
         "keeper_open_completion": _rate([x["gk_open"] for x in ms]),
-        # The engine emits only "throw" and "kick" until Task 7 (G5, plan ruling 13) adds "punt": reads 0 before then.
         "punts_per_team": methods.get("punt", 0) / (2 * n),
         "throws_per_team": methods.get("throw", 0) / (2 * n),
         "release_median_lt2_s": med(lt2),
@@ -313,4 +312,4 @@ def passing_section(ms: list[dict], t: dict) -> list[str]:
 def passing_report(run_dirs: list[Path], targets: dict, note: str, roles: dict[str, str]) -> str:
     ms = [match_passing(d, roles) for d in run_dirs]
     return "\n".join(["# Touchline passing diagnostics", "", f"{len(ms)} synthetic matches ({note}).", "",
-                       "Note: punts read 0 until Task 7 (G5) makes the engine emit method punt; until then keeper kicks are recorded as kick.", ""] + passing_section(ms, targets["passing"]))
+                       ""] + passing_section(ms, targets["passing"]))

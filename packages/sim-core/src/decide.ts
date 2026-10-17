@@ -7,13 +7,9 @@ import type { OptionRecord, PlayerState, RestartKind, TeamStyle } from "./types.
 // ---- P3 imports, choice seam (plan 8c Task 9 inserts below this line)
 import type { ChoiceCoefs, PassAction } from "./params.js"
 
-// ---- P3 imports, cross seam (plan 8c Task 5 inserts below this line)
-
 // ---- P3 imports, through-ball seam (plan 8c Task 6 inserts below this line)
 import { add, clampToPitch, norm, scale, sub } from "./geometry.js"
 import type { Intent } from "./types.js"
-
-// ---- P3 imports, keeper-hands seam (plan 8c Task 7 inserts below this line)
 
 export const KIND_TO_ACTION: Readonly<Record<Exclude<PassKind, "set_piece">, Action>> = {
   short: "short_pass",
@@ -167,8 +163,6 @@ export interface CandidateContext {
 }
 
 export interface PushOptions {
-  /** Where the choice features are measured (P3 D1); default the target. */
-  readonly featureAt?: Vec2
   /** Added to the option's value (P3 D3: attackers expected at a cross zone). */
   readonly bonus?: number
   /** A keeper's throw or punt from his hands (P3 G5). */
@@ -204,7 +198,7 @@ export const pushCandidate = (ctx: CandidateContext, out: Candidate[], receiver:
   const lanes = xpassOf(p, distance, lane, ctx.pressure, height)
   const w = p.pass.pitchControlWeight
   const xp = ctx.pc ? (1 - w) * lanes + w * pitchControlAt(target, ctx.pc.att, ctx.pc.def, owner.pos).att : lanes
-  const value = choiceValue(ctx, receiver, target, o.featureAt ?? target, lane, xp) + (o.bonus ?? 0)
+  const value = choiceValue(ctx, receiver, target, lane, xp) + (o.bonus ?? 0)
   out.push({ action: KIND_TO_ACTION[kind], kind, receiverId: receiver.id, target, height, xpass: xp, value, lane, ...(o.method ? { method: o.method } : {}) })
 }
 
@@ -225,7 +219,7 @@ export const buildCandidatesIn = (ctx: CandidateContext): Candidate[] => {
     // Nobody lofts the ball back at their own keeper: a high ball dropping in front of the goal ends in the net
     // when it is overhit or the keeper miscontrols it. Back passes to the keeper go along the ground, from close.
     if (tm.role === "GK" && height === "high") continue
-    pushCandidate(ctx, out, tm, lead, height, { featureAt: tm.pos })
+    pushCandidate(ctx, out, tm, lead, height)
     for (const t of throughTargets(ctx, tm)) pushCandidate(ctx, out, tm, t.target, t.height)
   }
   for (const c of crossTargets(ctx)) pushCandidate(ctx, out, c.receiver, c.target, c.height, { bonus: c.bonus })
@@ -332,9 +326,9 @@ export const choiceShares = (options: ReadonlyArray<Candidate>, ctx: CandidateCo
 /**
  * An option's value: the D1 utility, or the old expected-threat value. As fitted, D1 measures the features at the
  * receiver's current position for every option (lead passes, through balls, crosses, throws, punts); the aimed point
- * only enters through the lane to it (`lane`, choice.leadLane). Every option has a receiver, so `featureAt` is not used.
+ * only enters through the lane to it (`lane`, choice.leadLane). Every option has a receiver.
  */
-const choiceValue = (ctx: CandidateContext, receiver: PlayerState, target: Vec2, _featureAt: Vec2, lane: number, xp: number): number => {
+const choiceValue = (ctx: CandidateContext, receiver: PlayerState, target: Vec2, lane: number, xp: number): number => {
   if (ctx.p.choice.rule <= 0) return xp * (0.3 + threat(ctx.side, ctx.period, target)) - (1 - xp) * 0.3 * (1 - ctx.ownerThreat)
   return choiceUtility(ctx, receiver, receiver.pos, lane)
 }
@@ -422,7 +416,7 @@ const crossTargets = (ctx: CandidateContext): CrossOption[] => {
 export interface ThroughOption { readonly target: Vec2; readonly height: PassHeight }
 
 /** Off-ball runs that ask for a ball into space (D4). P5 (A6) adds overlap runs here. */
-export const isRunIntent = (intent: Intent): boolean => intent.kind === "run_in_behind"
+export const isRunIntent = (intent: Intent): intent is Extract<Intent, { kind: "run_in_behind" }> => intent.kind === "run_in_behind"
 
 /**
  * Through-ball targets for teammate `tm`. Old rule: an 8 m lead straight upfield for anyone near the last defender or on a
@@ -437,7 +431,7 @@ const throughTargets = (ctx: CandidateContext, tm: PlayerState): ThroughOption[]
     const target = { x: tm.pos.x + ctx.dir * ctx.p.pass.throughLeadM, y: tm.pos.y }
     return Math.abs(target.x) < PITCH.halfL - 2 ? [{ target, height: heightTo(target) }] : []
   }
-  if (tm.role === "GK" || tm.intent.kind !== "run_in_behind" || !isRunIntent(tm.intent)) return []
+  if (tm.role === "GK" || !isRunIntent(tm.intent)) return []
   // step.ts never clears an expired intent, so a run counts only while tick < intentUntil
   if (ctx.input.tick === undefined || ctx.input.tick >= tm.intentUntil) return []
   const t = ctx.p.through
@@ -487,8 +481,8 @@ export const keeperHandsCandidates = (ctx: CandidateContext): { readonly throws:
     if (tm.id === owner.id || tm.sentOff) continue
     const lead = leadOf(tm)
     const d = dist(owner.pos, lead)
-    if (d >= 4 && d <= g.throwMaxM) pushCandidate(ctx, throws, tm, lead, "ground", { featureAt: tm.pos, method: "throw" })
-    else if (d >= g.puntMinM && d <= g.puntMaxM && (tm.role === "ST" || tm.role === "W" || tm.role === "AM")) pushCandidate(ctx, punts, tm, lead, "high", { featureAt: tm.pos, method: "punt" })
+    if (d >= 4 && d <= g.throwMaxM) pushCandidate(ctx, throws, tm, lead, "ground", { method: "throw" })
+    else if (d >= g.puntMinM && d <= g.puntMaxM && (tm.role === "ST" || tm.role === "W" || tm.role === "AM")) pushCandidate(ctx, punts, tm, lead, "high", { method: "punt" })
   }
   return throws.length + punts.length === 0 ? null : { throws, punts }
 }

@@ -460,7 +460,7 @@ export const DEFAULT_PARAMS: Params = {
     version: "prior-1"
   },
   kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
-  // P3 X1 (plan 8c Task 3 may change the values, not rule).
+  // P3 X1 (rule 1 ships; the values are the calibrated ones).
   firstTick: { rule: 1, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
@@ -482,7 +482,7 @@ export const DEFAULT_PARAMS: Params = {
     restartDelayS: { kickoff: 45, throw_in: 18, corner: 37, goal_kick: 30, free_kick: 25, penalty: 60 },
     addedTimeMinS: [60, 300]
   },
-  // P3 D2 (plan 8c Task 4 may change the values, not rule).
+  // P3 D2 (rule 1 ships; the values are the calibrated ones).
   release: { rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
   actions: {
     logits: {
@@ -506,7 +506,7 @@ export const DEFAULT_PARAMS: Params = {
     choiceTemperature: 0.35,
     pitchControlWeight: 0,
     safetyWeight: 0,
-    // P3 X2 (plan 8c Task 8 may change this line).
+    // P3 X2 (0 ships: the distance-error knob is not tuned).
     longErrorPerM: 0, longErrorFromM: 30
   },
   execution: { dirSigma: 0.035, distSigma: 0.07, pressureK: 1.6, weakFootK: 1.45, mishitBase: 0.006, mishitK: 0.11 },
@@ -525,7 +525,7 @@ export const DEFAULT_PARAMS: Params = {
     // A prior shaped like public post-shot xG findings (corners and close range beat keepers); the intercept is tuned to the IDSSE save rate.
     save: { b0: 1.3, bWide: -1.6, bEdge: -0.7, bDistance: 0.6, bReflexes: 2.0 }
   },
-  // P3 D1 (plan 8c Task 9 may change the values, not rule). Real pooled fit (carrier-report C3, all passes, IDSSE 7 matches)
+  // P3 D1 (rule 1 ships; the values are the calibrated ones). Real pooled fit (carrier-report C3, all passes, IDSSE 7 matches)
   // and the change per unit of pressure about the real mean pressure at release (0.366).
   choice: {
     rule: 1,
@@ -568,7 +568,7 @@ export const DEFAULT_PARAMS: Params = {
     clearToTouch: 0.2,
     clearSliceBehind: 0.2
   },
-  // P3 D3 (plan 8c Task 5 may change the values, not rule). Zones in the team frame; s toward the crosser's touchline.
+  // P3 D3 (rule 1 ships; the values are the calibrated ones). Zones in the team frame; s toward the crosser's touchline.
   cross: {
     rule: 1,
     zones: [
@@ -583,12 +583,12 @@ export const DEFAULT_PARAMS: Params = {
     attackerValue: 0.6
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06, handsRule: 1, handsHoldS: [5, 10], feetPressFactor: 0.25 },
-  // P3 G5 (plan 8c Task 7 may change the values, not rule). Real: 3.4 throws and 1.6 punts per team-match (gk-report).
+  // P3 G5 (rule 1 ships; the values are the calibrated ones). Real: 3.4 throws and 1.6 punts per team-match (gk-report).
   distribution: { rule: 1, throwMaxM: 35, throwErrorScale: 0.5, puntMinM: 35, puntMaxM: 70, puntErrorScale: 1.6, puntLogit: -0.25 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
-  // P3 D4 (plan 8c Task 6 may change the values, not rule).
+  // P3 D4 (rule 1 ships; the values are the calibrated ones).
   through: { rule: 1, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
   // P3 Task 10d. Real nearest non-carrier teammates in possession 8.9 / 13.3 / 17.2 m (offball-report T14); pressM is
   // the carrier-report pressure bucket (5 m). Real teams crowd the ball more in the attacking third (nearest-3 mean
@@ -740,6 +740,20 @@ const checkSupport = (s: Params["support"]): void => {
   if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
 }
 
+/** The P3 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
+const checkRuleSwitches = (v: Params): void => {
+  const switches: ReadonlyArray<readonly [string, number]> = [
+    ["firstTick.rule", v.firstTick.rule],
+    ["release.rule", v.release.rule],
+    ["choice.rule", v.choice.rule],
+    ["cross.rule", v.cross.rule],
+    ["distribution.rule", v.distribution.rule],
+    ["through.rule", v.through.rule],
+    ["keeper.handsRule", v.keeper.handsRule]
+  ]
+  for (const [path, x] of switches) if (x !== 0 && x !== 1) throw new ParamsError(`params field ${path} must be 0 or 1 (got ${x})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
@@ -747,5 +761,6 @@ export const paramsFromJson = (json: unknown): Params => {
   const { provenance: _, ...values } = merged
   checkRanges(values, "")
   checkSupport(merged.support)
+  checkRuleSwitches(merged)
   return merged
 }

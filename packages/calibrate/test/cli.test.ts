@@ -26,6 +26,14 @@ describe("calibration command lines", () => {
     expect(r.stderr).toMatch(/^Cannot use params file no-such-file\.json/)
     expect(r.stderr).not.toMatch(/at .*\.ts:\d+/)
   })
+  it("the realism report refuses to delete a --runs folder it did not make", () => {
+    const base = mkdtempSync(join(tmpdir(), "touchline-cli-"))
+    writeFileSync(join(base, "precious.txt"), "keep me")
+    const r = run("src/realism.ts", ["--params", "default", "--matches", "1", "--runs", base, "--out", join(base, "../touchline-cli-report.md")])
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/^Refusing to delete /)
+    expect(existsSync(join(base, "precious.txt"))).toBe(true)
+  })
   it("write to out/ unless a committed path is given explicitly", () => {
     const tune = run("src/cli.ts", ["--help"]).stdout
     expect(tune).toMatch(/--out\s.*\(default: [^)]*out\/touchline-params\.json\)/)

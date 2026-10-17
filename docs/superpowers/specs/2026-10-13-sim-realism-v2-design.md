@@ -764,6 +764,8 @@ Changes made on measurement:
 
 - `long_shift`, `cross_shift`, `choice_temp` and `iv_centre` stayed at their identity values.
 - `support_space` stayed at 16 and `support_space_att` at 11.
+- `movement.shapeSpeedShare` went 0.85 → 0.7 in the calibrated file (it comes from the default) and the `shape_speed` knob entry
+  was dropped. Neither has an effect: `relaxed` is 1, so the share is not read.
 
 ### Results
 
@@ -906,7 +908,7 @@ Changes made on measurement:
   | Switches | 0.146 | 0.04–0.08 | NOT MET, `it.fails` |
   | Back to the keeper | 0.019 | 0.045–0.08 | NOT MET, `it.fails` |
   | Open-play crosses per match | 7.25 | 12–18 | NOT MET, `it.fails` |
-  | Completion, opponent within 1 m at release | 0.299 (261 passes) | 0.64–0.76 (real 0.70) | NOT MET, `it.fails` (deep report 0.474) |
+  | Completion, opponent within 1 m at release | 0.303 (251 passes) | 0.64–0.76 (real 0.70) | NOT MET, `it.fails` (deep report 0.474) |
 
 - **Scenarios** (calibrated params, seeds 1–10): `late_comeback` 9/10 and `keeper_heroics` 10/10. No script nudge was needed.
 - **Manager A/B** (rules against none, 40 seeds, for information): xG difference +0.108 per match (95 % interval −0.061 to
@@ -927,6 +929,25 @@ Changes made on measurement:
 - **Boot deaths 0.049.** These are defenders in front of the pass taking it on the first tick, which X1 keeps by ruling 2.
   Part of it is P4's duels.
 - **Fouls and distance.** Fouls are 13–14 against 22.9; outfield distance is 9.2–9.4 km against 10.9.
+
+### Carried to P4/P5
+
+Found in the final review and left alone, because each changes behaviour (the sim outcomes and the baseline stay as they are):
+
+- **M5:** boot blocks apply to a keeper's throw or punt from his hands (preventing a release from the hands is an offence;
+  rare, since presses on an in-hands keeper end). X1's first-tick exemption also covers clearances, which have no boot block,
+  so clearances lost their first-tick charge-down entirely. Fix: exclude `d.candidate?.method` from `bootBlock`; P4 duels.
+- **M6:** the D2 release tail is uncapped and not re-checked when a presser arrives. About 0.6 % of free receptions hold
+  more than 10 s. A cap, or a re-judgement on pressure, is cheap (release-median work).
+- **M10:** three tests pass on their exact bounds: punts per team-match 1.00 (bound 1.0; 0.63 over 64 matches, NOT MET),
+  punt share 0.40 (bound 0.40), and positioning deep count 6 (bound 6). The punt test passes by the luck of its 4 seeds, so
+  an engine change may flip it red without being a regression.
+- **Deferred missing tests:** a free-kick restart case for the keeper-hands seam; the `pPunt` 0/1 branches; the throw
+  lower bound and punt-by-foot; rule-off bit-identity at unit level (the gate covers it); an in-match test of the support
+  hold carry and of dt 0.04; a sim-core test of the sent-off restart fix (`takerFor` fallback); `cross.zones` SIGNED regex
+  is broad; the EventType parse in `pass-length.test.ts` stops at the first blank line.
+- **10d gate not cleared at half-time:** the support gate is keyed by carrier id and the restart phase returns before the
+  support branch, so at most 1 s of stale state for the same carrier. Not Important.
 
 ### Rulings
 

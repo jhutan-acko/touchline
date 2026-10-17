@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { mkdirSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect } from "effect"
@@ -44,7 +44,18 @@ const params: Params = exitOnUserError(() => {
 })
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const outRoot = here(o.runs)
-rmSync(outRoot, { recursive: true, force: true })
+// Clear the runs folder only if this tool made it: missing, empty, marked, or holding nothing but m-<seed> match folders.
+// Anything else (--runs . or --runs out by mistake) is refused, not deleted.
+const MARKER = ".touchline-realism-runs"
+exitOnUserError(() => {
+  if (!existsSync(outRoot)) return
+  const names = readdirSync(outRoot)
+  if (names.length > 0 && !names.includes(MARKER) && !names.every((n) => /^m-\d+$/.test(n)))
+    throw new CliError(`Refusing to delete ${outRoot}: it was not made by this tool (no ${MARKER} file, and it holds more than m-<seed> match folders). Pick a new or empty folder with --runs.`)
+  rmSync(outRoot, { recursive: true, force: true })
+})
+mkdirSync(outRoot, { recursive: true })
+writeFileSync(join(outRoot, MARKER), "made by realism.ts; safe to delete\n")
 
 // Seeds 2000+ are disjoint from the tuner's 1000+ seeds, so the report checks matches the tuner never saw.
 const dirs: string[] = []

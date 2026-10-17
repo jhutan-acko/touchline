@@ -69,9 +69,6 @@ import { bootBlocker } from "./deflect.js"
 // ---- P3 imports, release seam (plan 8c Task 4 inserts below this line)
 import { releaseDelayS } from "./release.js"
 
-// ---- P3 imports, keeper-distribution seam (plan 8c Task 7 inserts below this line)
-
-
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
 const MATCH_SECONDS_90 = 5400
@@ -618,7 +615,7 @@ const technique = (a: Action, pl: PlayerState): number =>
 // ================================================================ P3 boot-block seam (plan 8c Task 3 owns this block)
 
 /** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. Draws from the boot stream. */
-const bootBlock = (w: Work, owner: PlayerState, _d: Decision, _target: Vec2): { blocker: PlayerState; loose: BallState } | null => {
+const bootBlock = (w: Work, owner: PlayerState): { blocker: PlayerState; loose: BallState } | null => {
   if (w.p.firstTick.rule <= 0) return null
   const b = bootBlocker(owner, w.active(other(owner.side)), w.p)
   if (!b || !w.rng.boot.chance(w.p.firstTick.bootBlock)) return null
@@ -702,7 +699,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const keeper = opps.find((o) => o.role === "GK") ?? null
   const crossBlock = d.candidate?.kind === "cross" && restart === null ? crossBlocker(owner, opps, p) : null
   // A defender at the boot may block any other open-play pass (X1); always null while firstTick.rule is 0.
-  const boot = d.candidate?.kind !== "cross" && !isClear && restart === null ? bootBlock(w, owner, d, target) : null
+  const boot = d.candidate?.kind !== "cross" && !isClear && restart === null ? bootBlock(w, owner) : null
   const blocker = crossBlock ?? boot?.blocker ?? null
   const blocked = boot !== null || (crossBlock !== null && w.rng.duel.chance(p.defending.crossBlock))
   const contact = res.ball.pos

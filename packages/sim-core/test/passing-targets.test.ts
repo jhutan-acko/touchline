@@ -19,7 +19,8 @@ const measure = (seed: number): M => {
   let s = initMatch(cfg)
   const events: DomainEvent[] = []
   const near = new Map<string, number>()
-  // Nearest opponent to the passer at release (the deep report's "Completion, opponent within 1 m at release").
+  // Nearest opponent to the passer at the tracking frame of the pass event, i.e. after the step that emits it (the deep
+  // report's "Completion, opponent within 1 m at release" reads the frame at the event's frame_id).
   const atRelease = new Map<string, number>()
   while (!isFinished(s)) {
     const before = s
@@ -27,8 +28,8 @@ const measure = (seed: number): M => {
     s = r.state
     for (const e of r.events) {
       if (e.type === "pass" && !e.attrs.restart) {
-        const me = before.players.find((x) => x.id === e.player_id)!
-        atRelease.set(e.id, Math.min(...before.players.filter((x) => x.side !== me.side && !x.sentOff).map((x) => Math.hypot(x.pos.x - me.pos.x, x.pos.y - me.pos.y))))
+        const me = (s.players.find((x) => x.id === e.player_id) ?? before.players.find((x) => x.id === e.player_id))!
+        atRelease.set(e.id, Math.min(...s.players.filter((x) => x.side !== me.side && !x.sentOff).map((x) => Math.hypot(x.pos.x - me.pos.x, x.pos.y - me.pos.y))))
       }
       if (e.type !== "reception" || e.attrs.first_touch !== "controlled") continue
       const me = s.players.find((x) => x.id === e.player_id)!
@@ -104,8 +105,9 @@ describe("P3 real-data targets on the calibrated parameters (4 matches)", () => 
     expect(v).toBeGreaterThanOrEqual(0.24)
     expect(v).toBeLessThanOrEqual(0.4)
   }, 600_000)
-  // NOT MET (Task 10 fix round 1, calibrated params): 0.299 of 261 open-play passes released with an opponent within
-  // 1 m complete on these 4 matches (deep report: 0.474 on 64 league matches). The remaining failures are defenders in front of the pass and later
+  // NOT MET (final fix wave, calibrated params): 0.303 of 251 open-play passes released with an opponent within
+  // 1 m complete on these 4 matches (deep report: 0.474 on 64 league matches; same frame, after the step that emits the
+  // pass, but test teams against league clubs and 4 matches against 64). The remaining failures are defenders in front of the pass and later
   // interceptions (Task 3 ruling: the target moved to the P3 exit).
   it.fails("NOT MET: passes released with an opponent within 1 m complete about 70 % (X1; 0.64-0.76)", () => {
     const v = sum("near1Ok") / sum("near1")
