@@ -68,12 +68,15 @@ const median = (values: ReadonlyArray<number>): number => {
 const SET_PIECE: Readonly<Record<string, string>> = { corner: "corner", throw_in: "throw_in", goal_kick: "goal_kick", free_kick: "free_kick", kickoff: "kick_off", penalty: "penalty" }
 
 /**
- * Events that are not feed events on their own in the real data (receptions, carries, pressure, runs, markers), so they
- * are never the "next action" a pass is measured to. Everything else the sim emits is an on-ball action.
+ * Every sim event type is classified explicitly (a test fails on a type in neither list or in both). On-ball actions are
+ * what a pass can be measured to: events that are feed events of their own in the real data. The skipped ones are not
+ * (receptions, carries, pressure, runs, markers). The Python lists in metrics.py must equal these.
  */
+export const ON_BALL_ACTION: ReadonlySet<string> = new Set([
+  "pass", "take_on", "shot", "goal", "keeper_save", "keeper_distribution", "keeper_claim", "keeper_punch", "aerial_duel", "tackle", "interception", "block", "clearance", "ball_recovery", "foul", "offside", "ground_duel"
+])
 export const NOT_ON_BALL_ACTION: ReadonlySet<string> = new Set([
-  "reception", "carry", "pressure", "off_ball_run", "possession_change", "ball_out", "set_piece", "substitution", "card",
-  "match_start", "period_start", "period_end", "match_end"
+  "reception", "carry", "pressure", "off_ball_run", "possession_change", "ball_out", "set_piece", "substitution", "card", "match_start", "period_start", "period_end", "match_end"
 ])
 
 /**
@@ -83,7 +86,7 @@ export const NOT_ON_BALL_ACTION: ReadonlySet<string> = new Set([
  * pass's reception frame and in the same period. With none, it falls back to the reception point.
  */
 export const passLengths = (events: ReadonlyArray<DomainEvent>): number[] => {
-  const onBall = events.filter((e) => !NOT_ON_BALL_ACTION.has(e.type) && e.x !== null && e.y !== null).sort((a, b) => a.frame_id - b.frame_id)
+  const onBall = events.filter((e) => ON_BALL_ACTION.has(e.type) && e.x !== null && e.y !== null).sort((a, b) => a.frame_id - b.frame_id)
   const out: number[] = []
   for (const p of events) {
     if (p.type !== "pass" || p.outcome !== "successful" || p.x_end === null) continue

@@ -1,6 +1,10 @@
+import { execFileSync, spawnSync } from "node:child_process"
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import type { DomainEvent } from "@touchline/sim-core"
-import { passLengths } from "../src/metrics.js"
+import { NOT_ON_BALL_ACTION, ON_BALL_ACTION, passLengths } from "../src/metrics.js"
 
 const ev = (type: string, frame: number, x: number | null, y: number | null, o: { xe?: number; ye?: number; fe?: number; outcome?: string; period?: string } = {}): DomainEvent =>
   ({
@@ -37,5 +41,25 @@ describe("pass length is measured to the receiver's next action", () => {
     expect(passLengths(tail)).toEqual([10])
     const nextPeriod = [pass(0, 0, 0, 10, 0, 10), ev("reception", 10, 10, 0), pass(100, 60, 0, 70, 0, 110, "successful", "second_half")]
     expect(passLengths(nextPeriod)[0]).toBe(10)
+  })
+})
+
+describe("event type classification", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
+  const src = readFileSync(join(root, "packages/sim-core/src/types.ts"), "utf8")
+  const union = src.slice(src.indexOf("export type EventType ="))
+  const types = [...union.slice(0, union.indexOf("\n\n")).matchAll(/\|\s*"([a-z_]+)"/g)].map((m) => m[1]!)
+
+  it("puts every sim EventType in exactly one of the on-ball and skip lists", () => {
+    expect(types.length).toBeGreaterThan(25)
+    for (const t of types) expect(ON_BALL_ACTION.has(t) !== NOT_ON_BALL_ACTION.has(t), `${t} must be in exactly one list`).toBe(true)
+    for (const t of [...ON_BALL_ACTION, ...NOT_ON_BALL_ACTION]) expect(types, `${t} is not a sim EventType`).toContain(t)
+  })
+
+  it.skipIf(spawnSync("uv", ["--version"]).status !== 0 && !process.env.CI)("equals the Python lists", () => {
+    const code = "import json;from touchline_analytics.metrics import ON_BALL_ACTION as a, NOT_ON_BALL_ACTION as b;print(json.dumps([sorted(a),sorted(b)]))"
+    const py = JSON.parse(execFileSync("uv", ["run", "--locked", "--project", join(root, "python/analytics"), "python", "-c", code], { encoding: "utf8" })) as string[][]
+    expect(py[0]).toEqual([...ON_BALL_ACTION].sort())
+    expect(py[1]).toEqual([...NOT_ON_BALL_ACTION].sort())
   })
 })

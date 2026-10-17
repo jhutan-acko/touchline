@@ -187,11 +187,12 @@ def spatial_metrics(frames: Iterable[tuple], half_length: float = 52.5) -> dict:
 _SET_PIECE = {"corner": "corner", "throw_in": "throw_in", "goal_kick": "goal_kick", "free_kick": "free_kick", "kickoff": "kick_off", "penalty": "penalty"}
 
 
-# Events that are not feed events on their own in the real data (receptions, carries, pressure, runs, markers), so they are never
-# the "next action" a pass is measured to. Everything else the sim emits is an on-ball action. Mirrors NOT_ON_BALL_ACTION in metrics.ts.
+# Every sim event type is classified explicitly; the lists equal ON_BALL_ACTION and NOT_ON_BALL_ACTION in metrics.ts (checked by
+# packages/calibrate/test/pass-length.test.ts). On-ball actions are feed events of their own in the real data.
+ON_BALL_ACTION = frozenset({
+    "pass", "take_on", "shot", "goal", "keeper_save", "keeper_distribution", "keeper_claim", "keeper_punch", "aerial_duel", "tackle", "interception", "block", "clearance", "ball_recovery", "foul", "offside", "ground_duel"})
 NOT_ON_BALL_ACTION = frozenset({
-    "reception", "carry", "pressure", "off_ball_run", "possession_change", "ball_out", "set_piece", "substitution", "card",
-    "match_start", "period_start", "period_end", "match_end"})
+    "reception", "carry", "pressure", "off_ball_run", "possession_change", "ball_out", "set_piece", "substitution", "card", "match_start", "period_start", "period_end", "match_end"})
 
 
 def pass_lengths(events: list[dict]) -> list[float | None]:
@@ -202,7 +203,7 @@ def pass_lengths(events: list[dict]) -> list[float | None]:
     frame (ties in stream order), at or after the pass's reception frame and in the same period. With none, the
     reception point. Mirrors passLengths in metrics.ts.
     """
-    on_ball = sorted((e for e in events if e["type"] not in NOT_ON_BALL_ACTION and e["x"] is not None and e["y"] is not None), key=lambda e: e["frame_id"])
+    on_ball = sorted((e for e in events if e["type"] in ON_BALL_ACTION and e["x"] is not None and e["y"] is not None), key=lambda e: e["frame_id"])
     frames = [e["frame_id"] for e in on_ball]
     out: list[float | None] = []
     for p in events:
