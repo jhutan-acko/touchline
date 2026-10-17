@@ -271,8 +271,15 @@ export interface Params {
   readonly runs: { readonly runInBehindRatePerS: number }
   /** D4 (P3): a teammate on a run gets the ball into the space where he will be when it arrives (at most leadMaxM along his run); nobody else gets a through target. rule 0: the old 8 m lead for anyone near the last defender. */
   readonly through: { readonly rule: number; readonly ballSpeed: number; readonly runSpeed: number; readonly leadMaxM: number }
-  /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
-  readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
+  /**
+   * Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off).
+   * rule 1 (P3 Task 10d): `count` come short only while the carrier is pressed (calmCount otherwise): an opponent within
+   * pressM (released when none is within pressExitM), judged once per tick, each decision held at least gateHoldS;
+   * their spot is on the distM circle, and every other teammate's target stays at least spaceM from an outfield carrier
+   * (easing to spaceAttM in the attacking third; 0 = no spacing), never pushed past the forward-line cap (positioning.lineCapM
+   * below the last defender). rule 0: the 2-nearest softmax spot at every moment of possession, no spacing.
+   */
+  readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number; readonly rule: number; readonly pressM: number; readonly calmCount: number; readonly spaceM: number; readonly spaceAttM: number; readonly pressExitM: number; readonly gateHoldS: number }
   /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
   readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
@@ -454,7 +461,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   // P3 X1 (plan 8c Task 3 may change the values, not rule).
-  firstTick: { rule: 0, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
+  firstTick: { rule: 1, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
     ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },
@@ -476,7 +483,7 @@ export const DEFAULT_PARAMS: Params = {
     addedTimeMinS: [60, 300]
   },
   // P3 D2 (plan 8c Task 4 may change the values, not rule).
-  release: { rule: 0, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
+  release: { rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
   actions: {
     logits: {
       def_wide: row({ short_pass: 1.6, long_pass: 0.4, switch: -0.6, back_pass: -0.1, carry: 0.5, take_on: -1.2, clear: -0.4, hold: -0.6 }),
@@ -521,7 +528,7 @@ export const DEFAULT_PARAMS: Params = {
   // P3 D1 (plan 8c Task 9 may change the values, not rule). Real pooled fit (carrier-report C3, all passes, IDSSE 7 matches)
   // and the change per unit of pressure about the real mean pressure at release (0.366).
   choice: {
-    rule: 0,
+    rule: 1,
     base: { dist: -1.33, fwd: 0.56, lat: 0.18, lane: -0.55, open: 1.27, lineBreak: 0.04, keeper: 0.95 },
     press: { dist: 0, fwd: 0.22, lat: -0.46, lane: 0, open: -0.58, lineBreak: -0.58, keeper: 0.98 },
     pressCentre: 0.366,
@@ -530,9 +537,11 @@ export const DEFAULT_PARAMS: Params = {
     // Task 9 (X1 on, seeds 2000-2015): ivCentre 1 keeps passes per match at the X1-only level (1047 vs 1048); switch 0
     // already gives a switch share of 0.052 (real 0.061). No long shift: +0.5 moved the 32 m+ share only 0.049 -> 0.054
     // (real 0.143), and +3 reaches 0.105 at the cost of the refit (distance -0.75) and the ball's depth (own third 0.200).
+    // Task 10 (all P3 on, 16 matches): through_ball 0 / -0.5 / -1 / -1.5 gave shots after a through ball 0.119 / 0.141 /
+    // 0.077 / 0.043 (real 0.025, band to 0.05) with own third 0.244 / 0.226 / 0.238 / 0.230 and passes 872-882: -1.5.
     ivCentre: 1,
     temperature: 1,
-    kindShift: { short_pass: 0, long_pass: 0, through_ball: 0, lofted_through: 0, switch: 0, cross: 0, cutback: 0, back_pass: 0 }
+    kindShift: { short_pass: 0, long_pass: 0, through_ball: -1.5, lofted_through: 0, switch: 0, cross: 0, cutback: 0, back_pass: 0 }
   },
   defending: {
     pressRatePerS: 0.6,
@@ -561,7 +570,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   // P3 D3 (plan 8c Task 5 may change the values, not rule). Zones in the team frame; s toward the crosser's touchline.
   cross: {
-    rule: 0,
+    rule: 1,
     zones: [
       { u: 47.5, s: 3, height: "high", minOriginU: 0 },
       { u: 41.5, s: 0, height: "high", minOriginU: 0 },
@@ -575,13 +584,16 @@ export const DEFAULT_PARAMS: Params = {
   },
   keeper: { letRunShare: 0.85, claimRangeM: 11, claimDepthM: 13, comeShare: 0.85, catchBase: 0.4, catchHandling: 0.35, fumbleShare: 0.06, handsRule: 1, handsHoldS: [5, 10], feetPressFactor: 0.25 },
   // P3 G5 (plan 8c Task 7 may change the values, not rule). Real: 3.4 throws and 1.6 punts per team-match (gk-report).
-  distribution: { rule: 0, throwMaxM: 35, throwErrorScale: 0.5, puntMinM: 35, puntMaxM: 70, puntErrorScale: 1.6, puntLogit: -0.25 },
+  distribution: { rule: 1, throwMaxM: 35, throwErrorScale: 0.5, puntMinM: 35, puntMaxM: 70, puntErrorScale: 1.6, puntLogit: -0.25 },
   takeOn: { b0: -0.2, bSkill: 3.0, bPressure: -0.8 },
   carry: { speed: 5.5, durationS: [0.8, 2.0], avoidM: 6, shieldM: 3, shieldSpeed: 1.5, holdSpeed: 1.4 },
   runs: { runInBehindRatePerS: 0.12 },
   // P3 D4 (plan 8c Task 6 may change the values, not rule).
-  through: { rule: 0, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
-  support: { count: 2, distM: 12, speedShare: 0.8 },
+  through: { rule: 1, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
+  // P3 Task 10d. Real nearest non-carrier teammates in possession 8.9 / 13.3 / 17.2 m (offball-report T14); pressM is
+  // the carrier-report pressure bucket (5 m). Real teams crowd the ball more in the attacking third (nearest-3 mean
+  // 7.1-8.9 m there against 10.5-13.0 m in the defensive third, fit-report section 3), hence spaceAttM < spaceM.
+  support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
   marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
   shape: { width: 1, depth: 1, defDepth: 1 },
@@ -720,11 +732,20 @@ const checkRanges = (v: unknown, path: string): void => {
   if (v < 0) throw new ParamsError(`params field ${path} must not be negative (got ${v})`)
 }
 
+/** Support play (P3 Task 10d): whole numbers of supporters, a known rule, a release no tighter than the trigger, attacking-third spacing no wider. */
+const checkSupport = (s: Params["support"]): void => {
+  for (const k of ["count", "calmCount"] as const) if (!Number.isInteger(s[k])) throw new ParamsError(`params field support.${k} must be a whole number (got ${s[k]})`)
+  if (s.rule !== 0 && s.rule !== 1) throw new ParamsError(`params field support.rule must be 0 or 1 (got ${s.rule})`)
+  if (s.pressExitM < s.pressM) throw new ParamsError(`params field support.pressExitM must be at least support.pressM (got ${s.pressExitM} < ${s.pressM})`)
+  if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
   const merged = mergeInto(DEFAULT_PARAMS, json, "params") as Params
   const { provenance: _, ...values } = merged
   checkRanges(values, "")
+  checkSupport(merged.support)
   return merged
 }

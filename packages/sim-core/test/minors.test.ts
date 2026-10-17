@@ -43,7 +43,9 @@ describe("the hard stop at the end of a half", () => {
 describe("blocked crosses and deflections", () => {
   // Every cross within 8 m of a defender is blocked, so each match has plenty of blocks to check.
   const blocky = { ...calibrated, defending: { ...calibrated.defending, crossBlock: 1, crossBlockM: 8 } }
-  const runs = [1, 2, 3].map((seed) => play(makeConfig(seed, { params: blocky })))
+  // Seeds 1-4: P3 Task 10d (support rule 1) left 9 blocked crosses on seeds 1-3, under the more-than-10 floor; a fourth
+  // seed adds blocks to check (every one must still pass), it does not relax any bound.
+  const runs = [1, 2, 3, 4].map((seed) => play(makeConfig(seed, { params: blocky })))
   it("the ball travels to the blocker: no jump in the frame before the block", () => {
     let n = 0
     for (const r of runs) {

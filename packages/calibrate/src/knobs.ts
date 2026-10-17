@@ -1,4 +1,4 @@
-import { ACTION_ZONES, DEFAULT_PARAMS, type Action, type Params, type ShapeRow } from "@touchline/sim-core"
+import { ACTION_ZONES, DEFAULT_PARAMS, type Action, type Params, type PassAction, type ShapeRow } from "@touchline/sim-core"
 
 /**
  * The settings the tuner may move, each a pure transform of the base parameters.
@@ -27,6 +27,12 @@ const shiftLogits = (p: Params, actions: ReadonlyArray<Action>, v: number): Para
   return { ...p, actions: { ...p.actions, logits } }
 }
 
+/** The D1 kind shifts of `kinds` moved by v (on top of the shifts Task 9 fitted into DEFAULT_PARAMS). */
+const shiftKinds = (p: Params, kinds: ReadonlyArray<PassAction>, v: number): Params => ({
+  ...p,
+  choice: { ...p.choice, kindShift: { ...p.choice.kindShift, ...Object.fromEntries(kinds.map((k) => [k, p.choice.kindShift[k] + v])) } }
+})
+
 /** Every outfield group's row `row` moved upfield by v metres (the rule table's depth intercepts). */
 const shiftRows = (p: Params, row: ShapeRow, v: number): Params => ({
   ...p,
@@ -41,10 +47,17 @@ const shiftRows = (p: Params, row: ShapeRow, v: number): Params => ({
 export const KNOBS: ReadonlyArray<Knob> = [
   { name: "decision_scale", what: "time on the ball before each decision (passes per match)", init: 1, min: 0.6, max: 2.5, step: 0.25,
     apply: (p, v) => ({ ...p, timing: { ...p.timing, decisionMinS: p.timing.decisionMinS * v, decisionMaxS: p.timing.decisionMaxS * v } }) },
-  { name: "long_bias", what: "logit shift for long passes, switches and lofted through balls", init: 0, min: -1, max: 3, step: 0.5,
-    apply: (p, v) => shiftLogits(p, ["long_pass", "switch", "lofted_through"], v) },
-  { name: "cross_bias", what: "logit shift for crosses (corners)", init: 0, min: -1, max: 3, step: 0.5, apply: (p, v) => shiftLogits(p, ["cross"], v) },
   { name: "shot_bias", what: "logit shift for shooting (shots per match)", init: 0, min: -2, max: 1.5, step: 0.4, apply: (p, v) => shiftLogits(p, ["shot"], v) },
+  { name: "long_shift", what: "pass-choice shift for long passes and lofted through balls (long-pass share)", init: 0, min: -2, max: 2, step: 0.5,
+    apply: (p, v) => shiftKinds(p, ["long_pass", "lofted_through"], v) },
+  { name: "switch_shift", what: "pass-choice shift for switches of play", init: 0, min: -2, max: 2, step: 0.5,
+    apply: (p, v) => shiftKinds(p, ["switch"], v) },
+  { name: "cross_shift", what: "pass-choice shift for crosses and cut-backs (corners, crosses)", init: 0, min: -2, max: 2, step: 0.5,
+    apply: (p, v) => shiftKinds(p, ["cross", "cutback"], v) },
+  { name: "choice_temp", what: "receiver-choice temperature (how often passers pick a lesser option; completion)", init: DEFAULT_PARAMS.choice.temperature, min: 0.6, max: 1.6, step: 0.2,
+    apply: (p, v) => ({ ...p, choice: { ...p.choice, temperature: v } }) },
+  { name: "iv_centre", what: "passing against carrying and holding (passes per match)", init: DEFAULT_PARAMS.choice.ivCentre, min: -2, max: 4, step: 0.5,
+    apply: (p, v) => ({ ...p, choice: { ...p.choice, ivCentre: v } }) },
   { name: "aim_noise", what: "shot aiming error (on-target share)", init: 1, min: 0.6, max: 2.2, step: 0.2,
     apply: (p, v) => ({ ...p, shot: { ...p.shot, aimNoise: v } }) },
   { name: "xg_b0", what: "xG intercept (goals per shot)", init: DEFAULT_PARAMS.shot.xg.b0, min: -2.5, max: 0, step: 0.25,
@@ -79,10 +92,6 @@ export const KNOBS: ReadonlyArray<Knob> = [
     }) },
   { name: "save_b0", what: "keeper save model intercept (save rate, shots on target, goals)", init: DEFAULT_PARAMS.shot.save.b0, min: -1, max: 3.5, step: 0.25,
     apply: (p, v) => ({ ...p, shot: { ...p.shot, save: { ...p.shot.save, b0: v } } }) },
-  { name: "pass_pc_weight", what: "weight of pitch control in a passer's estimate of a pass arriving (pass completion)", init: DEFAULT_PARAMS.pass.pitchControlWeight, min: 0, max: 0.8, step: 0.2,
-    apply: (p, v) => ({ ...p, pass: { ...p.pass, pitchControlWeight: v } }) },
-  { name: "pass_safety", what: "how much the safest option of each kind of pass sways the choice of pass (completion, long-pass share)", init: DEFAULT_PARAMS.pass.safetyWeight, min: 0, max: 6, step: 1,
-    apply: (p, v) => ({ ...p, pass: { ...p.pass, safetyWeight: v } }) },
   { name: "pass_arrive", what: "ground passes are struck to arrive at this speed (m/s): faster passes are intercepted less but run out more", init: DEFAULT_PARAMS.pass.arriveSpeed, min: 5, max: 12, step: 1,
     apply: (p, v) => ({ ...p, pass: { ...p.pass, arriveSpeed: v } }) },
   { name: "clear_to_touch", what: "share of wide clearances kicked into touch (throw-ins)", init: DEFAULT_PARAMS.defending.clearToTouch, min: 0, max: 0.7, step: 0.1,
@@ -102,7 +111,15 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: DEFAULT_PARAMS.marking.weight, min: 0, max: 1, step: 0.25,
     apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
   { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: DEFAULT_PARAMS.support.distM, min: 8, max: 18, step: 2,
-    apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) }
+    apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) },
+  // Support rule 1 (P3 Task 10d): the space other teammates keep from an outfield carrier, and in the attacking third
+  // (spaceAttM never wider than spaceM: each knob clamps the attacking-third value to the general one).
+  { name: "support_space", what: "space teammates keep from the carrier (open near options, support within 15 m, pass length)", init: DEFAULT_PARAMS.support.spaceM, min: 12, max: 20, step: 2,
+    apply: (p, v) => ({ ...p, support: { ...p.support, spaceM: v, spaceAttM: Math.min(p.support.spaceAttM, v) } }) },
+  // The file records the tuner's value, not the clamped one: with support_space_att above support_space the engine uses
+  // support_space, so the tuner can sit on a flat stretch there (harmless at the calibrated 16 and 11).
+  { name: "support_space_att", what: "space teammates keep from the carrier in the attacking third (chances, crosses, support)", init: DEFAULT_PARAMS.support.spaceAttM, min: 7, max: 15, step: 2,
+    apply: (p, v) => ({ ...p, support: { ...p.support, spaceAttM: Math.min(v, p.support.spaceM) } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

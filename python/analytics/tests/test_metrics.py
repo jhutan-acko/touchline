@@ -47,7 +47,7 @@ def test_touchline_events_reads_details_from_attrs(tmp_path):
 
     from touchline_analytics.metrics import touchline_events
 
-    base = {"x": 0.0, "y": 0.0, "x_end": 20.0, "y_end": 0.0}
+    base = {"x": 0.0, "y": 0.0, "x_end": 20.0, "y_end": 0.0, "frame_id": 0, "frame_id_end": 10, "period": "first_half"}
     lines = [
         {"type": "pass", "outcome": "successful", "attrs": {"restart": "corner"}, **base},
         {"type": "shot", "outcome": "saved", "attrs": {"technique": "penalty"}, **base},
@@ -126,3 +126,43 @@ def test_touchline_spatial_frames_reads_possession_ball_and_teams(tmp_path):
     [(period, t, live, poss, ball, teams)] = list(touchline_spatial_frames(tmp_path, 10.0))
     assert (period, t, live, poss, ball) == ("second_half", 10_003.0, True, "away", (3.0, 4.0))
     assert teams == {"home": [(1.0, 2.0)], "away": [(-1.0, -2.0)]}
+
+
+def _ev(type_, frame, x, y, x_end=None, y_end=None, frame_end=None, outcome=None, period="first_half"):
+    return {"type": type_, "frame_id": frame, "frame_id_end": frame_end, "period": period, "x": x, "y": y, "x_end": x_end, "y_end": y_end, "outcome": outcome, "attrs": {}}
+
+
+def test_pass_length_runs_to_the_receivers_next_action_start():
+    from touchline_analytics.metrics import pass_lengths
+
+    ev = [
+        _ev("pass", 0, 0.0, 0.0, 10.0, 0.0, 10, "successful"),
+        _ev("reception", 10, 10.0, 0.0),
+        _ev("pressure", 11, 11.0, 0.0),  # not an action
+        _ev("pass", 30, 16.0, 0.0, 40.0, 0.0, 40, "successful"),  # the receiver, after a 6 m carry
+        _ev("carry", 12, 10.0, 0.0, 16.0, 0.0, 30),  # carries are not feed events; emitted late, so the stream is out of order
+        _ev("reception", 40, 40.0, 0.0),
+    ]
+    out = pass_lengths(ev)
+    assert out[0] == 16.0  # to the start of his pass, carry included
+    assert out[3] == 24.0 and out[1] is None and out[4] is None
+
+
+def test_pass_length_incomplete_pass_has_none():
+    from touchline_analytics.metrics import pass_lengths
+
+    ev = [_ev("pass", 0, 0.0, 0.0, 10.0, 0.0, 10, "intercepted"), _ev("interception", 10, 10.0, 0.0)]
+    assert pass_lengths(ev) == [None, None]
+
+
+def test_pass_length_possession_ending_reception():
+    from touchline_analytics.metrics import pass_lengths
+
+    # the receiver is tackled: the next feed event is the opponent's, where it starts
+    lost = [_ev("pass", 0, 0.0, 0.0, 10.0, 0.0, 10, "successful"), _ev("reception", 10, 10.0, 0.0), _ev("tackle", 20, 12.0, 5.0, outcome="won")]
+    assert pass_lengths(lost)[0] == math.hypot(12.0, 5.0)
+    # nothing follows (or only the next period does): the reception point
+    tail = [_ev("pass", 0, 0.0, 0.0, 10.0, 0.0, 10, "successful"), _ev("reception", 10, 10.0, 0.0), _ev("ball_out", 15, 50.0, 0.0), _ev("period_end", 20, None, None)]
+    assert pass_lengths(tail)[0] == 10.0
+    nxt = tail[:2] + [_ev("pass", 100, 60.0, 0.0, 70.0, 0.0, 110, "successful", period="second_half")]
+    assert pass_lengths(nxt)[0] == 10.0

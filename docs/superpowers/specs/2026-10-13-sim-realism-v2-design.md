@@ -660,3 +660,363 @@ The plan's rulings ("Rulings on the spec", plan 8b) hold as written, with these 
 - Regenerate every `out/` run folder in main (pre-P1 folders are refused).
 - Regenerate `realism-deep.md`.
 - Run `pnpm library`. It needs the agent service and the LLM, and stays pending until the user OKs it.
+
+## Results: P3 (2026-10-17)
+
+**Switched on** in `DEFAULT_PARAMS`:
+- `firstTick.rule` 1, `choice.rule` 1, `release.rule` 1, `cross.rule` 1, `through.rule` 1 and `distribution.rule` 1. D1 and D4
+  went on together, because D1 alone doubles through balls.
+- `support.rule` 1 (Task 10d; a deviation, see below).
+
+**Values the tasks set:**
+- **X1:** `alongM` 0.5, `coneDeg` 60, `bootM` 1, `bootBlock` 0.10.
+- **D2:** `pressedS` 0.2–0.7 (spec), `tailShare` 0.35, `tailMeanS` 2.5.
+- **D3:** zones as the spec (ruling 15), `arriveSlackS` 0.6, `attackerValue` 0.6.
+- **D4:** `ballSpeed` 14, `runSpeed` 7, `leadMaxM` 15.
+- **G5:** `puntLogit` −0.25 (one allowed step from −0.75), throw error ×0.5, punt error ×1.6.
+- **D1:** the real pooled coefficients and pressure interactions (ruling 5), `ivCentre` 1, `temperature` 1, `leadLane` 0
+  (not needed). `kindShift` is 0 except `through_ball` −1.5, from Task 10's sweep (below); the tuner adds `switch_shift` +2 in
+  the calibrated file.
+- **X2 not needed:** `pass.longErrorPerM` 0. With X1 on, completion to an available receiver at 30 m+ was 0.812, within
+  0.85.
+- **Support rule 1:**
+  - `pressM` 5, `count` 2, `calmCount` 0, `spaceM` 16, `spaceAttM` 11, `gateHoldS` 1;
+  - `pressExitM` 5 (no band);
+  - `distM` 14 in the calibrated file.
+
+**Retired knobs:** `long_bias`, `cross_bias`, `pass_pc_weight` and `pass_safety` (inert under D1; rulings 9 and 10).
+In the calibrated file, `pass.pitchControlWeight` 0.8 → 0 and `pass.safetyWeight` 3 → 0, so the logged `xpass` (decision
+records, `options[].xpass`) is now the lane-only model. The advisor and the agents read this value. Sim outcomes are
+unchanged under D1, which reads neither.
+**New knobs:** `long_shift`, `switch_shift`, `cross_shift`, `choice_temp`, `iv_centre`, `support_space` and
+`support_space_att`. There is no knob on D1's fitted distance coefficient (ruling).
+
+**Sources.**
+- C1, C2 and C4: `docs/realism/realism-report.md` (16 matches, seeds 2000–2015).
+- The P3 passing targets, the choice refit, C3, the physical bands, territory and discipline:
+  `docs/realism/realism-deep-report.md` (64 matches, seeds 2000–2063).
+- Real-target tests: `passing-targets.test.ts` (4 matches, test teams).
+
+### Deviations from the plan
+
+Planning rulings that changed the spec:
+- **2:** first-tick contact clamped and cone-gated. Task 3 extended the cone to the disc test (variant A), and applied it to
+  every tick in the first 0.1 s at 25 Hz.
+- **5–10:** D1 as a nested logit with the real coefficients, features measured as fitted, `leadLane` 0, pitch control out of
+  the utility, and kind shifts for the refitted switch and long logits.
+- **13:** G5 throw or punt from the hands.
+- **16:** D4 keys on `run_in_behind`; there is no overlap intent until P5.
+
+Changes made on measurement:
+1. **Task 3 (variant A).** The ±60° cone also gates the first-tick disc test. `bootBlock` is 0.10, not about 70 %
+   completion: near-1 completion cannot reach 0.70 through blocks, so that target moved to the P3 exit.
+2. **Task 4.** Tail 0.35 / 2.5 s, chosen outside the brief's sweep; it hits the 1.40 s median.
+3. **Task 7.** `puntLogit` −0.25.
+4. **Task 9 review.** D1 prices every option at its receiver's current position (as fitted); the aimed point enters only
+   through the lane.
+5. **Task 10, `kindShift.through_ball` −1.5.** Sweep with all P3 on, 16 matches:
+
+   | Shift | 0 | −0.5 | −1 | −1.5 |
+   |---|---|---|---|---|
+   | Shots after a through ball | 0.119 | 0.141 | 0.077 | 0.043 |
+   | Own third | 0.244 | 0.226 | 0.238 | 0.230 |
+
+   Passes were 872–882 throughout.
+6. **Task 10, `release.pressedS` stays 0.2–0.7.** 0.2–1.2 put pressed-within-1 s in band (0.616), but the pressed median went
+   to 0.80 s (band 0.2–0.7).
+7. **Task 10, records and what-ifs.**
+   - The keeper-hands recorded probabilities use D1's `choiceShares`, so they match the draw.
+   - A what-if pass from the keeper's hands is a throw or a punt.
+   - A new test checks that crosses, clearances and restarts never boot-block (F17).
+8. **Task 10b, diagnosis (no commit).** The first recalibration was blocked: held-out 46.35, pass length z −4.04. The causes
+   were:
+   - the sim offers 0.72 open teammates at 4–10 m per pass, against 0.33 real (P2 support runners);
+   - the gate measured pass length to the reception point, while the real target ends at the receiver's next action.
+9. **Task 10c (user ruling).** The sim's `pass_len_median`, in both TS and Python, ends each completed pass at the receiver's
+   next on-ball action, as kloppy's `receiver_coordinates` does. The real target (17.15 m) is unchanged. This changes a gate
+   statistic's definition, approved by the user; the baseline was refreshed.
+10. **Task 10d (user ruling).** P3 reworked the P2 support runs:
+    - supporters come short only when the carrier is pressed, held 1 s;
+    - other teammates keep 16 m from an outfield carrier (11 m in the attacking third), under the forward-line cap.
+
+    Measured: open teammates at 4–10 m 0.77 → 0.47 (real 0.33), support_15m 2.47 → 2.13 (2.10). It also fixed two old bugs:
+    a restart with every outfielder sent off, and a press kept on a keeper with the ball in his hands.
+11. **Task 10 test changes** (no bound widened):
+    - `release.test` and `choice.test` fixtures pin the other P3 rules off (F4).
+    - `keeper.test` counts a press only while it is live (tick < intentUntil).
+    - `execute-decide.test` states `recordOf`'s rule (best 5 plus the chosen option when it ranks below them).
+    - `positioning.test`: both NOT MET `it.fails` now hold (relIn +0.09; deep count 6, on its bound) and are plain tests again.
+    - Seeds re-picked by each file's rule:
+      - `whatif` forced window;
+      - manager `situation` "adds up" (seed 12; it asserts its precondition);
+      - api library fixture 2 → 5;
+      - agents ERROR_SEED 164 → 62 and SEED 9 → 2;
+      - gateway e2e 62.
+    - The advisor explain-pass check uses the verdict's own `clearlyBetter` rule, not a bare 2 SE.
+    - The stats and manager goldens were regenerated.
+
+### Calibration
+
+| Run | Start | Tuner loss | Held-out loss | Knobs that moved |
+|---|---|---|---|---|
+| 1 (from the P2 params, all P3 on; 24 matches, 1 round) | 90.42 | 42.58 | **46.35** (blocked) | decision_scale 0.75 → 0.6, switch_shift → 2, shot_bias 0.8 → 1.2, aim_noise 1.35 → 1.15, xg_b0 −1 → −1.25, save_b0 2.05 → 1.8, tackle_rate 0.575 → 0.275, foul_per_tackle 0.405 → 0.345, yellow_per_foul 0.35 → 0.45, box_intensity 2 → 1, deflect_behind 1.875 → 2 |
+| 2 (from run 1, after Tasks 10c and 10d; 24 matches, 1 round) | 30.63 | **25.46** | **26.87** | decision_scale 0.6 → 1.1, xg_b0 −1.25 → −1.5 |
+
+- `long_shift`, `cross_shift`, `choice_temp` and `iv_centre` stayed at their identity values.
+- `support_space` stayed at 16 and `support_space_att` at 11.
+
+### Results
+
+- **Gate: MET.** Held-out loss **26.87** (< 30), maxDrift 0 against the refreshed baseline, **15 within 1 SD and 25 within
+  2 SD** (P2: 11 and 19), every |z| < 3. The largest:
+
+  | Statistic | z |
+  |---|---|
+  | distance | −2.73 |
+  | throw-ins | −1.90 |
+  | peak speed | −1.84 |
+  | fouls | −1.83 |
+  | line height | −1.81 |
+  | pass length | −1.64 |
+
+  Physics: 2 of 13 inside (max_speed and hsr25).
+- **C1: NOT MET.** 12 of 19 within 1 SD (needs 16), 17 within 2 SD (needs 19). Off: fouls (z −2.05) and distance (−3.17).
+  P2 had 9 and 18.
+- **C2: NOT MET.**
+
+  | Statistic | z |
+  |---|---|
+  | Free kicks | −0.44 |
+  | Goals | −0.57 |
+  | Shots on target | −0.90 |
+  | Fouls | **−2.05** (13.4 per match against 22.9; P2 −1.64) |
+
+- **C3: NOT MET.** Team shot-share SD 0.227 on 64 matches (P2 0.223; real 0.090, needs ≤ 0.18). Pressing is P4 (A5).
+- **C4: MET.** All seven |z| < 2:
+
+  | Metric | z |
+  |---|---|
+  | Width in possession | +1.00 |
+  | Width out of possession | +0.54 |
+  | Defending length | −1.60 |
+  | Line height | −1.98 |
+  | Ball pressure | +1.56 |
+  | Support within 15 m | +0.32 (P2 +2.52) |
+  | Free space | +1.29 |
+
+- **P3 passing targets** (64 matches; pre-P3 values from `p3-passing-baseline.md`, 16 matches):
+
+  | Measure | Real | Pre-P3 | P3 | Status |
+  |---|---|---|---|---|
+  | Passes per match | 866 | 1054 | 806 | MET |
+  | Open-play passes dying at the boot | 0 | 0.052 | 0.049 | NOT MET |
+  | Completion, opponent within 1 m | 0.70 | 0.081 | 0.474 | NOT MET |
+  | Completion to available, 10–20 m | 0.936 | 0.828 | 0.902 | MET |
+  | Completion to available, 30 m+ | 0.805 | 0.799 | 0.818 | MET |
+  | Completed 32 m+ share | 0.143 | 0.150 | 0.112 | NOT MET |
+  | Switches | 0.061 | 0.166 | 0.135 | NOT MET |
+  | Tightly marked, completed | 0.090 | 0.170 | 0.100 | MET |
+  | Back to the keeper | 0.062 | 0.011 | 0.022 | NOT MET |
+  | Most forward chosen | 0.20 | 0.355 | 0.276 | NOT MET |
+  | Open-play crosses per match | 14.9 | 5.6 | 7.0 | NOT MET |
+  | Cross end point, median (m) | 10.0 | 12.2 | 10.0 | MET |
+  | Shots after a through ball | 0.025 | 0.138 | 0.043 | MET |
+  | Keeper passes per team-match | 45.4 | 17.1 | 21.3 | NOT MET |
+  | Keeper open-play completion | 0.779 | 0.760 | 0.893 | NOT MET (over) |
+  | Punts per team-match | 1.60 | 0 | 0.63 | NOT MET |
+  | Keeper throws per team-match | 3.40 | 3.69 (old label) | 2.97 | MET |
+  | Pressed release median (s) | 0.40 | 1.20 | 0.50 | MET |
+  | Pressed released within 1 s | 0.63 | 0.216 | 0.786 | NOT MET (over) |
+  | Release median (s) | 1.40 | 1.20 | 2.00 | NOT MET |
+  | On the ball over 3 s | 0.16 | 0.022 | 0.217 | NOT MET |
+  | Ball in own third | 0.35 | 0.161 | 0.206 | NOT MET |
+  | Ball u in possession (m) | −5.2 | +2.7 | +0.1 | NOT MET |
+
+  The tuner's `decision_scale` 1.1 lengthens time on the ball, so the release median and the over-3 s share overshoot. It
+  also brings passes per match to 806.
+
+- **Choice-model refit** (64 matches, 45 537 passes):
+
+  | Coefficient | Real (90 % interval) | P3 | Status |
+  |---|---|---|---|
+  | Distance | −1.33 (−1.38, −1.27) | −1.16 | NOT MET |
+  | Forward | +0.56 (+0.52, +0.60) | +0.58 | MET |
+  | Lateral | +0.18 (+0.13, +0.23) | +0.55 | NOT MET (`switch_shift` +2) |
+  | Lane | −0.55 (−0.62, −0.49) | −0.45 | NOT MET |
+  | Openness | +1.27 (+1.21, +1.34) | +1.22 | MET |
+  | Line-breaking | +0.04 (−0.06, +0.14) | +0.01 | MET |
+  | Keeper | +0.95 (+0.81, +1.09) | +0.57 | NOT MET |
+
+  Before D1, only the keeper coefficient was MET (`p3-passing-baseline.md`).
+
+- **Per task** (16 matches each, before → after, details in the task reports):
+
+  | Task | Change | Before → after |
+  |---|---|---|
+  | X1 | First-tick share | 0.052 → 0.019 |
+  | X1 | Near-1 completion | 0.081 → 0.44 |
+  | D2 | Passes per match | 1054 → 948 |
+  | D2 | Pressed median (s) | 1.20 → 0.50 |
+  | D3 | Crosses per match | 5.6 → 6.4 |
+  | D3 | Cross depth (m) | 12.2 → 10.6 |
+  | D4 | Through shot share | 0.138 → 0.104 |
+  | G5 | Punts per team-match | 0 → 0.75 |
+  | G5 | Throws per team-match (by hand) | → 2.19 |
+  | D1 (with X1) | Own third | 0.163 → 0.249 |
+  | D1 (with X1) | Switches | 0.176 → 0.052 |
+  | D1 (with X1) | Back to the keeper | 0.011 → 0.032 |
+  | D1 (with X1) | 32 m+ share | 0.156 → 0.049 |
+  | 10d (support) | Open at 4–10 m | 0.77 → 0.47 |
+  | 10d (support) | support_15m | 2.47 → 2.13 |
+
+- **P2's carried problems:**
+  - **Passes per match: MET** (owner D2). 1054 → 806 (band 776–956).
+  - **Ball in own third: NOT MET** (owner D1). 0.161 → 0.206 (real 0.35); ball u +2.7 → +0.1 (real −5.2). It reached 0.23–0.25
+    before support rule 1 and the recalibration.
+- **Physical bands** (64 matches; P2 → P3, real):
+
+  | Band | P2 | P3 | Real | Status |
+  |---|---|---|---|---|
+  | Walking (km) | 1.93 | 2.24 | 3.50 | NOT MET |
+  | High-speed + sprint (km) | 1.01 | 0.80 | 0.69 | NOT MET, closer |
+  | Accelerations over 2.5 m/s² | 289 | 253 | 50 | NOT MET |
+  | Live running (m/min) | 156 | 140 | 130–150 | MET |
+  | Dead-ball running (m/min) | 50 | 45 | 65 | NOT MET |
+  | Sprints | 4.9 | 4.0 | 8.4 | NOT MET |
+  | Distance (km, 16-match report) | — | 9.16 | 10.88 | z −3.17, worse |
+
+- **Territory and centroids** (64 matches):
+
+  | Measure | P2 | P3 | Real | Status |
+  |---|---|---|---|---|
+  | Territory SD (m) | 4.5 | 5.6 | 1.9 | NOT MET |
+  | Centroid minus ball, with the ball (m) | −3.0 | −0.4 | +3.9 | NOT MET, closer |
+  | Centroid minus ball, without the ball (m) | −4.6 | −7.2 | −9.5 | NOT MET, closer |
+
+- **Discipline** (64 matches): 0.75 sent off per match (P2 0.50; real 0.29): NOT MET, worse. The tuner raised
+  `yellow_per_foul` to 0.45. Penalties 0.09 (P2 0.28; real 0.43).
+- **Real-target tests** (`passing-targets.test.ts`, calibrated params, 4 matches):
+
+  | Target | Measured | Bound | Status |
+  |---|---|---|---|
+  | Punts per team-match | 1.00 | 1.0–2.2 | MET, on the bound |
+  | Punt share of hands distributions | 0.40 | 0.24–0.40 (real 0.32) | MET, on the bound |
+  | Pressed release median (s) | 0.50 | 0.2–0.7 | MET |
+  | Boot deaths | 0.046 | ≤ 0.01 | NOT MET, `it.fails` |
+  | Switches | 0.146 | 0.04–0.08 | NOT MET, `it.fails` |
+  | Back to the keeper | 0.019 | 0.045–0.08 | NOT MET, `it.fails` |
+  | Open-play crosses per match | 7.25 | 12–18 | NOT MET, `it.fails` |
+  | Completion, opponent within 1 m at release | 0.299 (261 passes) | 0.64–0.76 (real 0.70) | NOT MET, `it.fails` (deep report 0.474) |
+
+- **Scenarios** (calibrated params, seeds 1–10): `late_comeback` 9/10 and `keeper_heroics` 10/10. No script nudge was needed.
+- **Manager A/B** (rules against none, 40 seeds, for information): xG difference +0.108 per match (95 % interval −0.061 to
+  0.281), no detectable difference.
+
+### Gaps outside P3
+
+- **Crosses need box occupancy** (P5 A6, S1). There are 7 open-play crosses per match against 14.9, and the box is empty when
+  a cross is on.
+- **Keeper volume.**
+  - Hands distributions are about 3 per team-match against 5 real, so punts and throws fall short (P5 G3: keeper catches,
+    claims and free kicks).
+  - Keeper passes are 21 per team-match against 45.
+- **Long passes.** Much of the real 32 m+ share is goal kicks and keeper free kicks (P5). `long_shift` did not move, and long
+  options are mostly classed as switches, which drives `switch_shift` to its +2 maximum and switches to 0.135.
+- **Tight receivers, marking and pressing** (P4 A5). Near-1 completion is 0.47 against 0.70, and open teammates at 4–10 m are
+  0.47 against 0.33 (defenders stand off: ball pressure z +1.56).
+- **Boot deaths 0.049.** These are defenders in front of the pass taking it on the first tick, which X1 keeps by ruling 2.
+  Part of it is P4's duels.
+- **Fouls and distance.** Fouls are 13–14 against 22.9; outfield distance is 9.2–9.4 km against 10.9.
+
+### Rulings
+
+The plan's rulings ("Rulings on the spec", plan 8c) hold as written, with these notes:
+
+1. **Params names:** `firstTick`, `choice`, `release`, `cross`, `through`, `distribution`; `pass.longErrorPerM` with
+   `longErrorFromM` 30.
+2. **X1 geometry:** first tick, opponents only, contact clamped to ≥ `alongM` from the start, outright within `reachM` inside
+   ±`coneDeg`, else the disc test on the clamped contact. As amended by Task 3 (variant A), the disc test is cone-gated too.
+3. **Boot blocks:** the nearest outfield opponent within `bootM`, chance `bootBlock` (boot stream), knocked loose at 2–6 m/s;
+   not for clearances, restarts or crosses.
+4. **X2 is conditional;** it was not needed.
+5. **D1 coefficients:** the real pooled fit, with pressure interactions centred on 0.366.
+6. **No pressure interaction on distance.**
+7. **Features measured as fitted,** at the receiver's current position (also for through balls and crosses, Task 9 review
+   ruling); the aim point stays the aim.
+8. **`leadLane`** stays 0 (not needed).
+9. **Pitch control** leaves the utility; `pass_pc_weight` and `pass_safety` are retired.
+10. **Nested-logit two-step choice;** kind shifts replace the refitted zone logits.
+11. **Decision record under D1:** value = utility; quality = exp((U − U_best)/T).
+12. **Keeper as receiver (G5a)** via the fitted keeper coefficient; no lofted ball back to him.
+13. **G5 from the hands:** throw or punt, punting with chance sigmoid(`puntLogit`), method on the candidate, method recorded
+    truthfully.
+14. **D2:** pressed means an opponent within 2 m at the reception; 0.2–0.7 s; otherwise the base range plus the tail.
+15. **D3 zones** as the spec, with the classifier's wide-carrier geometry.
+16. **D4 keys on `run_in_behind`.**
+17. **Diagnostics in Python** (no TS port).
+18. **P2's two problems:** passes owned by D2, ball upfield by D1.
+19. **Real-target tests** in `passing-targets.test.ts`, misses in `it.fails` unwidened.
+20. **The choice refit** uses the engine's true intended receiver.
+
+Controller and user rulings during execution (progress.md):
+
+- **Process:**
+  - The pre-flight scan was delegated and run concurrently with Task 2.
+  - The punts row reads 0 until Task 7, by design.
+- **Pre-flight findings:**
+
+  | Finding | Ruling |
+  |---|---|
+  | F1 | Task 5's test asserts only what the rule adds, against the rule-off set |
+  | F2 | Task 6's fixture: winger at (20, −20), old target (28, −20) |
+  | F3 | Keeper-hands `actionProbs` keyed by each candidate's classified action; the chosen action is in `actionProbs` |
+  | F4 | Tests define explicit off/on params, not DEFAULT_PARAMS |
+  | F5 | Task 10 updates the longErrorPerM assertion; it stays 0 |
+  | F6 | `passing.test` safety and pitch-control cases pinned to `choice.rule` 0 |
+  | F7 | Reword the expected-failure lines (cosmetic) |
+  | F8 | Import markers after the last import (cosmetic) |
+  | F9 | Shared `recordOf` and `leadOf` |
+  | F10 | Test-measure duplication accepted |
+  | F11 | No vacuous tests (`forced`, at least one quality, at least one throw) |
+  | F12 | Task 2's scan already fixed; no plan change |
+  | F13 | Task 2's stricter `--set` key check accepted |
+  | F14 | Task 9 runs its own X1 baseline |
+  | F15 | Ownership table aligned with the Files blocks |
+  | F16 | Task 4 comment "about 8.6 %" |
+  | F17 | Boot call-site condition excludes crosses, clearances and restarts |
+
+- **Task 4:**
+  - The 0.35 / 2.5 s tail was accepted, though chosen outside the brief's sweep.
+  - `pressedS` stays 0.2–0.7; Task 10 revisited it and kept it.
+- **Task 6:**
+  - Granted out-of-region edits: `DecisionInput.tick` and `whatif.ts`.
+  - A run counts only while tick < intentUntil.
+- **Task 3:**
+  - Variant A (the cone also gates the disc test).
+  - `bootBlock` 0.10, and the near-1 target moves to the P3 exit.
+- **Task 7:**
+  - The punt-share mechanism test is sigmoid(`puntLogit`) ± 0.08; the real 0.32 share is in `passing-targets.test`.
+  - The punt and throw volume shortfall is keeper catch volume (P5).
+- **Wave 2:**
+  - Started without waiting for Task 5.
+  - Task 8 reuses Task 3's measurement: X2 not needed.
+  - Task 9 exports `choiceShares` for Task 10.
+- **Task 9:**
+  - `kindShift.long_pass` stays 0, and the tuner gets `long_shift`.
+  - Features are measured at the receiver's position for every option with a receiver.
+  - `kindShift.through_ball` is set by Task 10's sweep (−1.5).
+- **User rulings after the first gate failure:**
+  - Diagnose, fix, recalibrate (Task 10b).
+  - Pass length measured the way the real target is (Task 10c).
+  - P3 may rework the P2 support runs (Task 10d).
+- **Afterwards:**
+  - No tuner knob on D1's fitted distance coefficient: pass length is moved by the support fix and the support knobs.
+  - The scenario 9-of-10 tests are handled after recalibration by the script nudge, never the bound. No nudge was needed.
+
+`pnpm library` was not rebuilt. It needs the agent service and the LLM, and is on the merge checklist.
+
+### P3 merge checklist
+
+- Regenerate every `out/` run folder in main.
+- Regenerate `realism-deep.md` (`pnpm realism:deep`).
+- Run `pnpm library`. It needs the agent service and the LLM, and stays pending until the user OKs it.

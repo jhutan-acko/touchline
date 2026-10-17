@@ -121,8 +121,9 @@ describe("realism v2 P2 params", () => {
 
 describe("realism v2 P3 params", () => {
   const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
-  it("ship switched off, with the real choice coefficients, four cross zones and two new RNG streams", () => {
-    for (const rule of [DEFAULT_PARAMS.firstTick.rule, DEFAULT_PARAMS.choice.rule, DEFAULT_PARAMS.release.rule, DEFAULT_PARAMS.cross.rule, DEFAULT_PARAMS.through.rule, DEFAULT_PARAMS.distribution.rule]) expect(rule).toBe(0)
+  it("ship switched on (Task 10), with the real choice coefficients, four cross zones and two new RNG streams", () => {
+    for (const rule of [DEFAULT_PARAMS.firstTick.rule, DEFAULT_PARAMS.choice.rule, DEFAULT_PARAMS.release.rule, DEFAULT_PARAMS.cross.rule, DEFAULT_PARAMS.through.rule, DEFAULT_PARAMS.distribution.rule]) expect(rule).toBe(1)
+    // X2 not needed (Task 8 ruling: 30 m+ completion to an available receiver 0.812 with X1 on, at most 0.85).
     expect(DEFAULT_PARAMS.pass.longErrorPerM).toBe(0)
     expect(DEFAULT_PARAMS.choice.base).toEqual({ dist: -1.33, fwd: 0.56, lat: 0.18, lane: -0.55, open: 1.27, lineBreak: 0.04, keeper: 0.95 })
     expect(DEFAULT_PARAMS.choice.press).toEqual({ dist: 0, fwd: 0.22, lat: -0.46, lane: 0, open: -0.58, lineBreak: -0.58, keeper: 0.98 })

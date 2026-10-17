@@ -38,7 +38,9 @@ describe("D1: features as fitted (same fixture as test_passing.py)", () => {
 
 describe("D1: every option is priced at its receiver's current position", () => {
   it("a through ball and a plain pass to the same receiver share the feature vector; their values differ only by the lane to the aim", () => {
-    const lead = { ...on, choice: { ...on.choice, leadLane: -0.3 } }
+    // The fixture's through ball is the old rule's (8 m beyond a runner past the last line, no run intent needed): pinned
+    // to through.rule 0 (F4), since Task 10 switched D4 on in the defaults. The pricing under test is D1's either way.
+    const lead = { ...on, through: { ...on.through, rule: 0 }, choice: { ...on.choice, leadLane: -0.3 } }
     const probe = candidateContext(input({}), lead, 0)
     const d = probe.dir
     const owner = at(home[5]!, 0, 0), runner = at(home[9]!, 20 * d, 5)

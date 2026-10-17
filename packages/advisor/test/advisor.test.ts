@@ -106,7 +106,11 @@ describe("better option explainer", () => {
     for (const o of x.options) if (o.chosen) expect(o.simulated).toBeNull()
     const simulated = x.options.filter((o) => o.simulated)
     expect(simulated.length).toBeGreaterThan(0)
-    const clearly = simulated.filter((o) => o.simulated!.mean > 2 * o.simulated!.se && o.simulated!.mean > 0)
+    // The verdict's own rule (clearlyBetter: corrected margin and minimum gain), not a bare 2 SE: since P3 this pass has an
+    // alternative above 2 SE that the corrected margin rejects.
+    const clearly = simulated.filter((o) => clearlyBetter(o.simulated!, 12, simulated.length))
+    // The case the comment names, asserted so it cannot rot: some option is above 2 SE and the corrected rule rejects it.
+    expect(simulated.some((o) => o.simulated!.mean > 2 * o.simulated!.se && o.simulated!.mean > 0 && !clearlyBetter(o.simulated!, 12, simulated.length))).toBe(true)
     expect(x.verdict).toBe(clearly.length ? "better_option_found" : "played_pass_was_best")
     if (x.better) expect(x.better.simulated!.mean).toBe(Math.max(...clearly.map((o) => o.simulated!.mean)))
     expect(explainPass(session, passes()[3]!.id, xt, { seeds: 12, horizonS: 10 })).toEqual(x)

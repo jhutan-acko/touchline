@@ -132,15 +132,14 @@ describe("positioning in a match (rule table on)", () => {
     expect(mean(m.cbSecondHalf)).toBeLessThan(-5)
   }, 300_000)
 
-  // NOT MET (Task 8b, seed 7 on DEFAULT_PARAMS): relIn -3.6 (real +3.9), deep while the keeper holds 7 (real 3). The
-  // in-possession centroid is held back by the sim's ball distribution (the ball sits ~7 m further upfield than real
-  // while a team has it) and by players tracking their anchors with a relaxed-motion lag on top of the fitted lag and
-  // blend (task-8b-report.md). These flip when met; then move them back to plain tests.
-  it.fails("NOT MET: puts the block ahead of the ball with it (relIn > -3; real +3.9 m)", () => {
+  // MET since P3 Task 10 (all P3 on, seed 7: relIn +0.09, deep while the keeper holds median 6). Both were it.fails after
+  // Task 8b (relIn -3.6, deep 7): D1's pass choice keeps the ball deeper while a team has it, so the in-possession
+  // centroid is no longer held behind it and fewer players stay deep. The deep count sits on its bound.
+  it("puts the block ahead of the ball with it (relIn > -3; real +3.9 m)", () => {
     expect(mean(seven().relIn)).toBeGreaterThan(-3)
   }, 300_000)
 
-  it.fails("NOT MET: builds up with few players deep while the keeper holds (median <= 6; real 3)", () => {
+  it("builds up with few players deep while the keeper holds (median <= 6; real 3)", () => {
     expect(median(seven().deepWhileKeeper)).toBeLessThanOrEqual(6)
   }, 300_000)
 

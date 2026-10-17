@@ -37,7 +37,9 @@ describe("keeper in hands or at feet", () => {
         const poss = s.possession
         const gk = poss.kind === "owned" ? s.players.find((p) => p.id === poss.playerId && p.role === "GK") : undefined
         if (gk && poss.kind === "owned" && poss.restart === null) {
-          if (poss.inHands) for (const o of s.players) if (o.side !== gk.side) expect(o.intent.kind === "press" && o.intent.targetId === gk.id).toBe(false)
+          // A press is live only while tick < intentUntil (step.ts never clears an expired intent; frames export it as
+          // "shape"). P3 Task 10: seed 7 now has a keeper winning the ball in his hands 34 ticks after a press on him expired.
+          if (poss.inHands) for (const o of s.players) if (o.side !== gk.side) expect(o.intent.kind === "press" && s.tick < o.intentUntil && o.intent.targetId === gk.id).toBe(false)
           if (!open || open.id !== gk.id || open.since !== poss.since) open = { id: gk.id, since: poss.since, inHands: poss.inHands === true }
         } else if (open && prev.possession.kind === "owned" && prev.possession.playerId === open.id && s.possession.kind === "in_flight" && s.possession.flight.fromId === open.id) {
           // The keeper released it in open play.
