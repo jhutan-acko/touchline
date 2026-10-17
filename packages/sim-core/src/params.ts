@@ -739,7 +739,7 @@ export const DEFAULT_PARAMS: Params = {
   // P4 T3/T4 fouls (spec items T3, T4; rule 0: the old behaviour).
   fouls: { rule: 0, finalThirdU: 17.5, finalThird: 0.4, box: 0.12, side: 1.6, behind: 2.4, attackerShare: 0.05, shieldSpeedMax: 2, takeOnShare: 0.15 },
   // P4 T4 aerial duels (spec item T4; rule 0: the old behaviour).
-  aerial: { rule: 0, contestM: 1, bHeading: 3, bSlack: 1, foulShare: 0.13 },
+  aerial: { rule: 0, contestM: 2, bHeading: 3, bSlack: 1, foulShare: 0.13 },
   // P4 A4 transitions (spec item A4; rule 0: the old behaviour).
   transition: {
     rule: 0, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
