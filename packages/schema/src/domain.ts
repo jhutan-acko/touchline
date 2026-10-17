@@ -47,7 +47,7 @@ export const DomainEvent = Schema.Struct({
 })
 export type DomainEvent = typeof DomainEvent.Type
 
-export const Intent = Schema.Literals(["shape", "press", "run_in_behind", "chase", "carry", "hold", "on_ball"])
+export const Intent = Schema.Literals(["shape", "press", "run_in_behind", "chase", "carry", "hold", "on_ball", "recover"])
 const FramePlayer = Schema.Struct({ id: Schema.String, x: Schema.Finite, y: Schema.Finite, vel: Schema.Finite, intent: Intent })
 export const Frame = Schema.Struct({
   tick: Schema.Int,

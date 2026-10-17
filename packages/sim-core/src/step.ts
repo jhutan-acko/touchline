@@ -27,8 +27,8 @@ import {
 } from "./geometry.js"
 import { assignMarks, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, supportersWanted, supportGate, supportSpot } from "./offball.js"
 import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
-import type { Action } from "./params.js"
-import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
+import type { Action, Params } from "./params.js"
+import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight, type Resolution } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { MAX_SUBS, MAX_SUB_WINDOWS, type SubOrder } from "./orders.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
@@ -43,6 +43,8 @@ import {
   type Concern,
   type DomainEvent,
   type Flight,
+  type FlightFoul,
+  type FoulKind,
   type Frame,
   type MatchConfig,
   type MatchState,
@@ -51,23 +53,37 @@ import {
   type Phase,
   type PlayerState,
   type Possession,
+  type PressState,
   type RestartKind,
   type PlayerSetup,
   type Role,
   type StepResult,
   type SubsState,
   type SupportGate,
-  type TeamSetup
+  type TeamSetup,
+  type TransitionState
 } from "./types.js"
 import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, outShare, rowFor, settled, slotGeometry, type Blend, type SlotGeometry } from "./anchor.js"
 import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
-// ---- P3 imports, boot-block seam (plan 8c Task 3 inserts below this line)
+// ---- P3 imports, boot-block seam (plan 8c Task 3; plan 8d Task 9 inserts below this line)
 import { bootBlocker } from "./deflect.js"
 
-// ---- P3 imports, release seam (plan 8c Task 4 inserts below this line)
+// ---- P3 imports, release seam (plan 8c Task 4; plan 8d Task 9 inserts below this line)
 import { releaseDelayS } from "./release.js"
+
+// ---- P4 imports, tackle seam (plan 8d Task 3 inserts below this line)
+
+// ---- P4 imports, foul seam (plan 8d Task 4 inserts below this line)
+
+// ---- P4 imports, aerial seam (plan 8d Task 5 inserts below this line)
+
+// ---- P4 imports, transition seam (plan 8d Task 6 inserts below this line)
+
+// ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
+
+// ---- P4 imports, marking seam (plan 8d Task 8 inserts below this line)
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -160,9 +176,12 @@ export const initMatch = (cfg: MatchConfig): MatchState => {
   }
 }
 
+/** @internal The working copy type, for P4 seam tests (see workAt). */
+export type { Work }
+
 export const isFinished = (s: MatchState): boolean => s.phase.kind === "full_time"
 
-/** Mutable working copy for one step. Nothing outside step() sees it. */
+/** Mutable working copy for one step. Nothing outside step() sees it, except P4 seam tests through workAt. */
 class Work {
   readonly cfg: MatchConfig
   tick: number
@@ -195,6 +214,10 @@ class Work {
   load: Record<string, number> | undefined
   /** Support rule 1 pressure gate (P3 Task 10d); absent while support.rule is 0 or nobody has the ball. */
   supportGate: SupportGate | undefined
+  /** A4 transition after the last live-play loss (P4); absent while transition.rule is 0 or none is live. */
+  transition: TransitionState | undefined
+  /** A5 team-press state (P4); absent while press.rule is 0. */
+  press: PressState | undefined
 
   constructor(s: MatchState) {
     this.cfg = s.config
@@ -229,6 +252,8 @@ class Work {
     this.anchor = s.anchor
     this.load = s.load ? { ...s.load } : undefined
     this.supportGate = s.supportGate
+    this.transition = s.transition
+    this.press = s.press
   }
 
   get p() {
@@ -337,7 +362,9 @@ class Work {
       ...(Object.values(this.subOrders).some((q) => q.length > 0) ? { subOrders: this.subOrders } : {}),
       ...(this.anchor ? { anchor: this.anchor } : {}),
       ...(this.load ? { load: { ...this.load } } : {}),
-      ...(this.supportGate ? { supportGate: this.supportGate } : {})
+      ...(this.supportGate ? { supportGate: this.supportGate } : {}),
+      ...(this.transition ? { transition: this.transition } : {}),
+      ...(this.press ? { press: this.press } : {})
     }
   }
 }
@@ -362,6 +389,8 @@ const startRestart = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: r.at.x, y: r.at.y, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
   w.pressedBy = []
+  // A restart is not a loss (P4 A4): it ends any transition.
+  w.transition = undefined
   if (w.period === "second_half") for (const side of ["home", "away"] as const) subWindow(w, side)
 }
 
@@ -494,7 +523,10 @@ const endPressesOnHands = (w: Work): void => {
 const changePossession = (w: Work, to: PlayerState, reasonEvent: PendingEvent | null): void => {
   const prevSide = w.lastTouch?.side ?? null
   if (reasonEvent) w.emit(reasonEvent)
-  if (prevSide !== null && prevSide !== to.side) w.emit(w.pending("possession_change", to, to.pos, { reason: reasonEvent?.type ?? "recovery" }))
+  if (prevSide !== null && prevSide !== to.side) {
+    w.emit(w.pending("possession_change", to, to.pos, { reason: reasonEvent?.type ?? "recovery" }))
+    noteLoss(w, prevSide, to.pos)
+  }
   w.possession = ownedBy(w, to, w.lastTouch)
   endPressesOnHands(w)
   w.lastTouch = { playerId: to.id, side: to.side }
@@ -509,20 +541,25 @@ const book = (w: Work, pl: PlayerState, card: "yellow" | "second_yellow" | "red"
   w.setPlayer({ ...cur, yellow: cur.yellow + 1, sentOff: card !== "yellow" })
 }
 
-const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState): void => {
-  w.emit(w.pending("foul", offender, offender.pos, { kind: "tackle", victim_id: victim.id }))
+/**
+ * A foul by `offender` on `victim` (of `kind`, at `at`): the event, any card, and the restart — a penalty if `at` is in
+ * the box the victim attacks, else a free kick there.
+ * @internal
+ */
+export const foulAndCards = (w: Work, offender: PlayerState, victim: PlayerState, kind: FoulKind = "tackle", at: Vec2 = victim.pos): void => {
+  w.emit(w.pending("foul", offender, offender.pos, { kind, victim_id: victim.id }))
   const ref = w.rng.referee
   let card: "yellow" | "second_yellow" | "red" | null = null
   const forcedRed = w.takeForced(offender.side, "red_card")
   if (forcedRed || ref.chance(Math.min(1, w.p.defending.redPerFoul * w.mods(offender.side).red))) card = "red"
   else if (ref.chance(w.p.defending.yellowPerFoul * (offender.yellow >= 1 ? w.p.defending.bookedYellowFactor : 1))) card = offender.yellow >= 1 ? "second_yellow" : "yellow"
   if (card) book(w, offender, card, forcedRed ? { scripted: true } : {})
-  const inBox = attackX(victim.side, victim.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(victim.pos.y) < PITCH.boxHalfWidth
+  const inBox = attackX(victim.side, at.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(at.y) < PITCH.boxHalfWidth
   startRestart(
     w,
     inBox
       ? { restart: "penalty", side: victim.side, at: { x: dirOf(victim.side, w.period) * PITCH.penaltySpot, y: 0 } }
-      : { restart: "free_kick", side: victim.side, at: clampToPitch(victim.pos, 1) }
+      : { restart: "free_kick", side: victim.side, at: clampToPitch(at, 1) }
   )
 }
 
@@ -549,6 +586,33 @@ const knockLoose = (w: Work, toucher: PlayerState, at: Vec2): void => {
 /** How urgently `defSide` must defend a ball at `at`: 1 on its goal line, 0 beyond 30 m from its goal. */
 const danger = (defSide: Side, period: Period, at: Vec2): number => Math.max(0, 1 - dist(at, { x: -dirOf(defSide, period) * PITCH.halfL, y: 0 }) / 30)
 
+// ================================================================ P4 tackle seam (plan 8d Task 3 owns this block)
+
+/** T2: the logit that `def` wins his tackle attempt on `owner`. rule 0: the old logit, defending.tackleBase + 3 (tackling - dribbling). @internal */
+export const tackleWinLogit = (w: Work, def: PlayerState, owner: PlayerState): number => w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling)
+
+// ================================================================ end of P4 tackle seam
+
+// ================================================================ P4 foul seam (plan 8d Task 4 owns this block)
+
+/** T3: the chance that `def`, having lost his tackle on `owner`, fouls him (one referee draw). rule 0: the flat rate, x boxFoulFactor in the box. @internal */
+export const foulChance = (w: Work, def: PlayerState, owner: PlayerState): number => {
+  const victimInBox = attackX(owner.side, owner.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
+  const booked = def.yellow >= 1 ? w.p.defending.bookedFoulFactor : 1
+  return Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul * booked)
+}
+
+/** T4: whether the carrier `owner` fouls the tackler `def` (shielding or holding; foul stream). rule 0: never, no draw. @internal */
+export const shieldingFoul = (_w: Work, _def: PlayerState, _owner: PlayerState): boolean => false
+
+/** T3: whether the beaten defender `def` fouls `owner`, who has just won a take-on (foul stream). rule 0: never, no draw. @internal */
+export const takeOnFoul = (_w: Work, _owner: PlayerState, _def: PlayerState): boolean => false
+
+/** T3: the foul-zone factor for `victim` fouled at `at`, in his attacking frame. rule 0: 1. @internal */
+export const foulZone = (_w: Work, _victim: PlayerState, _at: Vec2): number => 1
+
+// ================================================================ end of P4 foul seam
+
 const duels = (w: Work, owner: PlayerState): boolean => {
   const opps = w.active(other(owner.side))
   for (const o of opps) {
@@ -562,7 +626,12 @@ const duels = (w: Work, owner: PlayerState): boolean => {
   const style = teamOf(w.cfg, def.side).style
   const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, w.period, owner.pos)) * w.mods(def.side).tackle
   if (!w.rng.duel.chance(hazard(rate, w.dt))) return false
-  const pWin = 1 / (1 + Math.exp(-(w.p.defending.tackleBase + 3 * (def.attrs.tackling - owner.attrs.dribbling))))
+  if (shieldingFoul(w, def, owner)) {
+    finishCarry(w, owner)
+    foulAndCards(w, owner, def, "shielding", def.pos)
+    return true
+  }
+  const pWin = 1 / (1 + Math.exp(-tackleWinLogit(w, def, owner)))
   if (w.rng.duel.chance(pWin)) {
     finishCarry(w, owner)
     if (w.rng.duel.chance(w.p.defending.tackleLooseShare)) {
@@ -571,9 +640,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
     } else changePossession(w, def, w.pending("tackle", def, def.pos, { outcome: "won", opponent_id: owner.id, ball: "won" }))
     return true
   }
-  const victimInBox = attackX(owner.side, owner.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
-  const booked = def.yellow >= 1 ? w.p.defending.bookedFoulFactor : 1
-  if (w.rng.referee.chance(Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul * booked)) || w.hasForced(def.side, "red_card")) {
+  if (w.rng.referee.chance(foulChance(w, def, owner)) || w.hasForced(def.side, "red_card")) {
     finishCarry(w, owner)
     w.emit(w.pending("tackle", def, def.pos, { outcome: "foul", opponent_id: owner.id }))
     foulAndCards(w, def, owner)
@@ -612,19 +679,22 @@ const footPart = (pl: PlayerState, weakFoot: boolean): string => `${weakFoot ? o
 const technique = (a: Action, pl: PlayerState): number =>
   a === "cross" ? pl.attrs.crossing : a === "long_pass" || a === "switch" || a === "lofted_through" || a === "clear" ? pl.attrs.longPassing : pl.attrs.shortPassing
 
-// ================================================================ P3 boot-block seam (plan 8c Task 3 owns this block)
+// ================================================================ P3 boot-block seam (plan 8c Task 3; plan 8d Task 9 owns this block)
 
-/** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. Draws from the boot stream. */
-const bootBlock = (w: Work, owner: PlayerState): { blocker: PlayerState; loose: BallState } | null => {
+/** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. Draws from the boot stream. @internal */
+export const bootBlock = (w: Work, owner: PlayerState, _d: Decision): { blocker: PlayerState; loose: BallState } | null => {
   if (w.p.firstTick.rule <= 0) return null
   const b = bootBlocker(owner, w.active(other(owner.side)), w.p)
   if (!b || !w.rng.boot.chance(w.p.firstTick.bootBlock)) return null
   return { blocker: b, loose: deflectLoose(b.side, w.period, b.pos, w.rng.boot, [2, 6], [0, 1]) }
 }
 
+/** M5 (P4): the params a kick's flight is resolved with (resolveFlight, keeperLetsRun). firstTick.scopeRule 0: w.p itself. @internal */
+export const flightParams = (w: Work, _isClear: boolean): Params => w.p
+
 // ================================================================ end of P3 boot-block seam
 
-// ================================================================ P3 release seam (plan 8c Task 4 owns this block)
+// ================================================================ P3 release seam (plan 8c Task 4; plan 8d Task 9 owns this block)
 
 /** Ticks a player takes before his first decision after winning or receiving the ball (D2; release stream). */
 const releaseDelayTicks = (w: Work, pl: PlayerState): number => {
@@ -632,6 +702,9 @@ const releaseDelayTicks = (w: Work, pl: PlayerState): number => {
   const opp = nearestOpponent(pl.pos, w.active(other(pl.side)))
   return Math.max(1, Math.round(releaseDelayS(opp ? dist(opp.pos, pl.pos) : 50, w.p, w.rng.release) / w.dt))
 }
+
+/** M6 (P4): re-judge the holder's remaining hold once he is pressed (release stream). release.rejudge 0: nothing. @internal */
+export const rejudgeRelease = (_w: Work, _owner: PlayerState): void => {}
 
 // ================================================================ end of P3 release seam
 
@@ -650,6 +723,20 @@ const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { techniq
 }
 
 // ================================================================ end of P3 keeper-distribution seam
+
+// ================================================================ P4 aerial seam (plan 8d Task 5 owns this block)
+
+/**
+ * T4: the aerial duel on a kick's resolution (aerial stream), and any foul by its loser on its winner (foul stream),
+ * decided at release. rule 0: the resolution unchanged, no foul.
+ * @internal
+ */
+export const aerialDuel = (_w: Work, res: Resolution, _owner: PlayerState): { res: Resolution; foul: FlightFoul | null } => ({ res, foul: null })
+
+/** T4: apply a flight's aerial foul at resolution; true if it was given (the restart is set). rule 0: never. @internal */
+export const applyFlightFoul = (_w: Work, _foul: FlightFoul): boolean => false
+
+// ================================================================ end of P4 aerial seam
 
 const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null): void => {
   const p = w.p
@@ -683,7 +770,11 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const start: BallState = { pos: { x: owner.pos.x, y: owner.pos.y, z: 0 }, vel: exe.vel }
   const intended = d.candidate?.receiverId ?? null
   // A keeper lets a ball that is running out over their own goal line go for a goal kick (see keeperLetsRun).
-  const res = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), p, w.dt, w.rng.duel), w.period, p, w.dt, w.rng.duel)
+  const fp = flightParams(w, isClear)
+  const raw = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), fp, w.dt, w.rng.duel), w.period, fp, w.dt, w.rng.duel)
+  // An aerial contact may be contested (T4, aerial seam); a foul in the duel is given when the flight resolves.
+  const ad = aerialDuel(w, raw, owner)
+  const res = ad.res
   const lastDef = lastDefenderAttackX(side, w.period, opps)
   const winner = res.winnerId ? w.player(res.winnerId) : null
   const offside =
@@ -699,15 +790,17 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const keeper = opps.find((o) => o.role === "GK") ?? null
   const crossBlock = d.candidate?.kind === "cross" && restart === null ? crossBlocker(owner, opps, p) : null
   // A defender at the boot may block any other open-play pass (X1); always null while firstTick.rule is 0.
-  const boot = d.candidate?.kind !== "cross" && !isClear && restart === null ? bootBlock(w, owner) : null
+  const boot = d.candidate?.kind !== "cross" && !isClear && restart === null ? bootBlock(w, owner, d) : null
   const blocker = crossBlock ?? boot?.blocker ?? null
   const blocked = boot !== null || (crossBlock !== null && w.rng.duel.chance(p.defending.crossBlock))
+  // An aerial foul stands only on a flight that is neither blocked nor offside (pre-flight G11).
+  const foul = ad.foul && !blocked && !offside ? ad.foul : null
   const contact = res.ball.pos
   const keeperComes =
-    !blocked && height !== "ground" && keeper !== null && (res.result === "reached" || res.result === "stopped") && winner?.id !== keeper.id &&
+    !blocked && !foul && height !== "ground" && keeper !== null && (res.result === "reached" || res.result === "stopped") && winner?.id !== keeper.id &&
     keeperCanCome(keeper, w.period, contact, res.ticks * w.dt, p) && w.rng.duel.chance(p.keeper.comeShare)
   const headsAway =
-    !blocked && !keeperComes && res.result === "reached" && winner !== null && winner.side === defSide && winner.role !== "GK" &&
+    !blocked && !foul && !keeperComes && res.result === "reached" && winner !== null && winner.side === defSide && winner.role !== "GK" &&
     contact.z > p.kinematics.controlHeightM && attackX(defSide, contact.x, w.period) < -17.5 && w.rng.duel.chance(p.defending.headClearShare)
   const kind = restart && restart !== "kickoff" ? "set_piece" : isClear ? null : d.candidate!.kind
   const attrs: Record<string, AttrValue> = {
@@ -745,6 +838,10 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     if (boot) looseAfter = boot.loose
     else if (w.rng.duel.chance(p.defending.crossBlockBehind)) deflectTo = behindPoint(defSide, w.period, blocker!.pos, w.rng.duel)
     else looseAfter = deflectLoose(defSide, w.period, blocker!.pos, w.rng.duel, [3, 8], [0.5, 3])
+  } else if (foul) {
+    // Fouled in the air: the duel is recorded now and the foul given at resolution (no reception).
+    outcome = w.player(foul.victimId).side === side ? "successful" : "intercepted"
+    if (res.aerial) extra.push(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
   } else if (keeperComes) {
     outcome = "intercepted"
     const act = keeperAction(keeper!, p, w.rng.duel)
@@ -790,7 +887,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
     if (deflect) looseAfter = deflectLoose(winner.side, w.period, endAt, w.rng.duel)
   }
   const finalMain: PendingEvent = { ...main, attrs: { ...main.attrs, receiver_id: outcome === "successful" && winner ? winner.id : null } }
-  if (res.aerial && outcome === "successful") extra.unshift(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
+  if (res.aerial && outcome === "successful" && !foul) extra.unshift(at(w.pending("aerial_duel", winner, endAt, { winner_id: res.aerial.winnerId, loser_id: res.aerial.loserId })))
   w.ball = start
   w.possession = {
     kind: "in_flight",
@@ -808,7 +905,8 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
       path: blocked ? { from: start.pos, to: { x: blocker!.pos.x, y: blocker!.pos.y, z: 0.5 } } : null,
       restartAfter,
       looseBall: looseAfter,
-      deflectTo
+      deflectTo,
+      ...(foul ? { foul } : {})
     }
   }
   w.lastTouch = { playerId: owner.id, side }
@@ -965,6 +1063,10 @@ const ownerDecision = (w: Work, owner: PlayerState): void => {
       const pWin = 1 / (1 + Math.exp(-(w.p.takeOn.b0 + w.p.takeOn.bSkill * (owner.attrs.dribbling - def.attrs.tackling) + w.p.takeOn.bPressure * decision.pressure)))
       const won = w.rng.duel.chance(pWin)
       w.emit(w.pending("take_on", owner, owner.pos, { ...decisionAttrs(decision), outcome: won ? "won" : "lost", defender_id: def.id }))
+      if (won && takeOnFoul(w, owner, def)) {
+        foulAndCards(w, def, owner, "take_on")
+        return
+      }
       if (won) {
         const dir = norm(sub({ x: dirOf(side, w.period) * PITCH.halfL, y: 0 }, owner.pos))
         // The carry that follows a won take-on carries the take-on's decision record.
@@ -996,7 +1098,10 @@ const ownedTick = (w: Work): void => {
   // In his hands he can be pressed, not challenged. Under the old rule that is any keeper possession in his own box.
   const inHands = w.p.keeper.handsRule > 0 ? w.possession.inHands === true && inOwnBox(owner.side, w.period, owner.pos) : owner.role === "GK" && inOwnBox(owner.side, w.period, owner.pos)
   if (w.possession.restart === null && !inHands && duels(w, owner)) return
-  if (w.tick >= owner.intentUntil) ownerDecision(w, w.player(owner.id))
+  rejudgeRelease(w, owner)
+  // Read afresh: the release seam may have cut the hold.
+  const now = w.player(owner.id)
+  if (w.tick >= now.intentUntil) ownerDecision(w, now)
 }
 
 // ---------------------------------------------------------------- flights and loose ball
@@ -1018,6 +1123,8 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     touch = drawFirstTouch(firstTouchError({ speed, height: w.ball.pos.z, pressure, skill: (r.attrs.dribbling + r.attrs.composure) / 2 }, w.p), w.rng.execution, w.p)
     w.emit({ ...e, attrs: { ...e.attrs, first_touch: touch, under_pressure: pressure > 0.3, lost_possession: touch !== "controlled" } })
   }
+  // An aerial foul decided at release (T4) is given now, unless something since has voided it.
+  if (f.foul && applyFlightFoul(w, f.foul)) return
   const goal = f.extra.find((e) => e.type === "goal")
   if (goal) w.addGoal(goal.team_id === w.teamId("home") ? "home" : "away")
   if (f.restartAfter) {
@@ -1061,7 +1168,11 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     const winner = w.player(f.winnerId)
     w.possession = ownedBy(w, winner, { side: f.side, playerId: f.fromId })
     endPressesOnHands(w)
-    if (w.lastTouch?.side !== winner.side) w.emit(w.pending("possession_change", winner, winner.pos, { reason: f.outcome }))
+    if (winner.side === f.side) noteReception(w, winner, f)
+    if (w.lastTouch?.side !== winner.side) {
+      w.emit(w.pending("possession_change", winner, winner.pos, { reason: f.outcome }))
+      if (w.lastTouch) noteLoss(w, w.lastTouch.side, winner.pos)
+    }
     w.lastTouch = { playerId: winner.id, side: winner.side }
     w.pressedBy = []
     w.setPlayer({ ...winner, intent: { kind: "hold" }, intentUntil: w.tick + releaseDelayTicks(w, winner) })
@@ -1271,6 +1382,16 @@ const shapeTarget = (w: Work, pl: PlayerState, ballFlat: Vec2, inPossession: boo
 }
 
 /**
+ * For tests (P4 seams): the working copy of state `s` at its own tick, as the seams see it mid-step.
+ * @internal
+ */
+export const workAt = (s: MatchState): Work => {
+  const w = new Work(s)
+  w.tick = s.tick
+  return w
+}
+
+/**
  * For tests: the open-play shape target the seam gives `playerId` at state `s` (its tick, anchor state and positions).
  * @internal
  */
@@ -1295,6 +1416,64 @@ const restartTarget = (w: Work, pl: PlayerState, at: Vec2, inPossession: boolean
 
 // ================================================================ end of P2 positioning seam
 
+/** Where a player heads this tick and how fast; timeLeft for on-time steering to a ball that arrives at a known tick. */
+export interface MoveTarget {
+  readonly target: Vec2
+  readonly speedCap: number
+  readonly timeLeft?: number
+}
+
+// ================================================================ P4 transition seam (plan 8d Task 6 owns this block)
+
+/** A4: `loser` has just lost the ball in live play, the ball at `at` (counter stream for the joins). rule 0: nothing. @internal */
+export const noteLoss = (_w: Work, _loser: Side, _at: Vec2): void => {}
+
+/** A4: whether `side` is counter-pressing now (its hazard-started team press is off). rule 0: never. @internal */
+export const inCounterWindow = (_w: Work, _side: Side): boolean => false
+
+/** A4: a losing player's movement in a transition (counter-press, reaction pause, recovery run) over `base`. rule 0: `base` itself. @internal */
+export const transitionMove = (_w: Work, _pl: PlayerState, base: MoveTarget, _possSide: Side | null): MoveTarget => base
+
+// ================================================================ end of P4 transition seam
+
+// ================================================================ P4 team-press seam (plan 8d Task 7 owns this block)
+
+/**
+ * A5: an out-of-possession outfielder's press on `owner` (movement stream): a live press carries on, else the nearest
+ * defender (two in a scripted surge) may start one at the hazard. Null when he does not press. rule 0: the old press.
+ * @internal
+ */
+export const teamPressMove = (w: Work, pl: PlayerState, owner: PlayerState, vmax: number, keeperFactor: number): MoveTarget | null => {
+  if (pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
+    return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
+  const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
+  // The nearest defender presses; in a scripted press surge the two nearest do, from further away.
+  const surge = w.mods(pl.side).surge
+  const presser = surge ? defenders.slice(0, 2).some((x) => x.id === pl.id) : defenders[0]?.id === pl.id
+  if (presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
+    const style = teamOf(w.cfg, pl.side).style
+    const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, w.period, owner.pos)
+    if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press * keeperFactor * triggerFactor(w, pl), w.dt))) {
+      w.setPlayer({ ...pl, intent: { kind: "press", targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) })
+      return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
+    }
+  }
+  return null
+}
+
+/** A5: `receiver` has just received a completed pass from flight `f` (the back-to-goal trigger). rule 0: nothing. @internal */
+export const noteReception = (_w: Work, _receiver: PlayerState, _f: Flight): void => {}
+
+// ================================================================ end of P4 team-press seam
+
+// ================================================================ P4 marking seam (plan 8d Task 8 owns this block)
+
+/** A5: the marking spot for defender `defId` (anchor `anchor`) on `attacker`, the ball at `ballFlat`. rule 0: goal-side marking (markTarget). @internal */
+export const markSpot = (w: Work, defSide: Side, _defId: string, anchor: Vec2, attacker: PlayerState, _ballFlat: Vec2): Vec2 =>
+  markTarget(anchor, attacker.pos, defSide, w.period, w.p.marking.goalSideM, w.p.marking.weight, w.p.marking.widthSlackM)
+
+// ================================================================ end of P4 marking seam
+
 const moveTarget = (
   w: Work,
   pl: PlayerState,
@@ -1302,7 +1481,7 @@ const moveTarget = (
   possSide: Side | null,
   marks: ReadonlyMap<string, Vec2> | null,
   sup: SupportTick | null
-): { target: Vec2; speedCap: number; timeLeft?: number } => {
+): MoveTarget => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl, pl.energy, w.p)
   const shape = () => {
@@ -1361,19 +1540,10 @@ const moveTarget = (
     // Nobody presses a keeper with the ball in his hands (marking carries on); at his feet he is pressed less (feetPressFactor).
     const keeperHolding = w.p.keeper.handsRule > 0 && owner.role === "GK" && pos.inHands === true && inOwnBox(owner.side, w.period, owner.pos)
     const keeperFactor = w.p.keeper.handsRule > 0 && owner.role === "GK" ? w.p.keeper.feetPressFactor : 1
-    if (!keeperHolding && pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
-      return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
-    const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
-    // The nearest defender presses; in a scripted press surge the two nearest do, from further away.
-    const surge = w.mods(pl.side).surge
-    const presser = surge ? defenders.slice(0, 2).some((x) => x.id === pl.id) : defenders[0]?.id === pl.id
-    if (!keeperHolding && presser && dist(pl.pos, owner.pos) < (surge ? 25 : 18)) {
-      const style = team.style
-      const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, w.period, owner.pos)
-      if (w.rng.movement.chance(hazard(w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press * keeperFactor * triggerFactor(w, pl), w.dt))) {
-        w.setPlayer({ ...pl, intent: { kind: "press", targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) })
-        return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
-      }
+    // A side counter-pressing (A4) has its hazard-started team press off.
+    if (!keeperHolding && !inCounterWindow(w, pl.side)) {
+      const tp = teamPressMove(w, pl, owner, vmax, keeperFactor)
+      if (tp) return tp
     }
   }
   const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
@@ -1420,13 +1590,13 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   const ownerId = w.possession.kind === "owned" ? w.possession.playerId : null
   const defenders = w
     .active(defSide)
-    .filter((x) => x.role !== "GK" && !(x.intent.kind === "press" && w.tick < x.intentUntil))
+    .filter((x) => x.role !== "GK" && !(x.intent.kind === "press" && w.tick < x.intentUntil) && !(x.intent.kind === "recover" && w.tick < x.intentUntil))
     .map((x) => ({ id: x.id, anchor: shapeTarget(w, x, ballFlat, false) }))
   const anchors = new Map(defenders.map((d) => [d.id, d.anchor]))
   const attackers = w.active(other(defSide)).filter((x) => x.role !== "GK" && x.id !== ownerId)
   const out = new Map<string, Vec2>()
   for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
-    out.set(id, markTarget(anchors.get(id)!, a.pos, defSide, w.period, w.p.marking.goalSideM, w.p.marking.weight, w.p.marking.widthSlackM))
+    out.set(id, markSpot(w, defSide, id, anchors.get(id)!, a, ballFlat))
   return out
 }
 
@@ -1472,7 +1642,7 @@ const moveAll = (w: Work): void => {
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, marks, sup)
+    const { target, speedCap, timeLeft } = transitionMove(w, pl, moveTarget(w, pl, ballFlat, possSide, marks, sup), possSide)
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)

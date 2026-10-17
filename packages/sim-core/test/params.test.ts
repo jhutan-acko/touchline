@@ -140,3 +140,23 @@ describe("realism v2 P3 params", () => {
     expect(() => paramsFromJson({ provenance: cc, release: { tailMeanS: -1 } })).toThrow(ParamsError)
   })
 })
+
+describe("realism v2 P4 params", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("ship switched off, with the spec's join table, tackle terms and foul factors, and four new RNG streams", () => {
+    const P = DEFAULT_PARAMS
+    for (const r of [P.tackle.rule, P.fouls.rule, P.aerial.rule, P.transition.rule, P.press.rule, P.marking.rule, P.firstTick.scopeRule, P.release.rejudge]) expect(r).toBe(0)
+    expect(P.release.capS).toBe(0)
+    expect(P.transition.joinP).toEqual([0.8, 0.3, 0.23, 0.13, 0.07])
+    expect([P.tackle.frontLogit, P.tackle.behindLogit, P.tackle.supportLogit, P.tackle.boxLogit]).toEqual([0.35, -0.35, 0.4, 0.3])
+    expect([P.fouls.finalThird, P.fouls.box, P.fouls.behind]).toEqual([0.4, 0.12, 2.4])
+    for (const c of ["foul", "aerial", "counter", "press"]) expect(CONCERNS).toContain(c)
+  })
+  it("reject a P4 switch other than 0 or 1, a join chance above 1, a join table out of order, and accept a negative tackle base", () => {
+    expect(() => paramsFromJson({ provenance: cc, press: { rule: 0.5 } })).toThrow(/press\.rule must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, firstTick: { scopeRule: 2 } })).toThrow(/firstTick\.scopeRule must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, transition: { joinP: [1.2, 0.3, 0.23, 0.13, 0.07] } })).toThrow(/between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, transition: { joinM: [5, 15, 10, 20, 30] } })).toThrow(/transition\.joinM/)
+    expect(paramsFromJson({ provenance: cc, tackle: { base: -0.4 } }).tackle.base).toBe(-0.4)
+  })
+})

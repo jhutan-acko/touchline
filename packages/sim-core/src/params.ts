@@ -78,7 +78,14 @@ export interface Params {
    * cannot play the ball in that window. The nearest outfield opponent within bootM of the passer blocks an open-play pass at the
    * boot with chance bootBlock (boot RNG stream). rule 0: the old first-tick rule, no boot blocks.
    */
-  readonly firstTick: { readonly rule: number; readonly alongM: number; readonly coneDeg: number; readonly bootM: number; readonly bootBlock: number }
+  readonly firstTick: {
+    readonly rule: number; readonly alongM: number; readonly coneDeg: number; readonly bootM: number; readonly bootBlock: number
+    /**
+     * M5 (realism v2 P4): 1 scopes X1 — no boot block on a keeper's throw or punt from his hands, and a clearance's flight
+     * is resolved with firstTick.rule 0 (a defender in front can charge it down on the first tick). rule 0: the old behaviour.
+     */
+    readonly scopeRule: number
+  }
   readonly ball: {
     readonly gravity: number
     readonly substeps: number
@@ -123,7 +130,16 @@ export interface Params {
     readonly addedTimeMinS: readonly [number, number]
   }
   /** D2 (P3): time on the ball after winning or receiving it (release.ts). rule 0: the flat timing.decisionMinS..MaxS draw. */
-  readonly release: { readonly rule: number; readonly pressedM: number; readonly pressedS: readonly [number, number]; readonly tailShare: number; readonly tailMeanS: number }
+  readonly release: {
+    readonly rule: number; readonly pressedM: number; readonly pressedS: readonly [number, number]; readonly tailShare: number; readonly tailMeanS: number
+    /** M6 (realism v2 P4): a free (unpressed) release delay is capped at capS seconds. 0: no cap (the old behaviour). */
+    readonly capS: number
+    /**
+     * M6 (realism v2 P4): 1 re-judges a holder whose remaining hold exceeds pressedS[1] once an opponent comes within
+     * pressedM (his hold is cut to now + a pressedS draw). rule 0: the old behaviour.
+     */
+    readonly rejudge: number
+  }
   readonly actions: {
     readonly logits: Readonly<Record<ActionZone, Readonly<Record<Action, number>>>>
     readonly styleWeight: number
@@ -281,7 +297,15 @@ export interface Params {
    */
   readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number; readonly rule: number; readonly pressM: number; readonly calmCount: number; readonly spaceM: number; readonly spaceAttM: number; readonly pressExitM: number; readonly gateHoldS: number }
   /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
-  readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number }
+  readonly marking: {
+    readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number
+    /**
+     * A5 zonal marking (realism v2 P4): rule 1 moves the marker toward a lane spot laneShare of the way from the ball to the
+     * attacker; a CB marking a dropping ST or AM (moving toward his own goal faster than dropMps) follows him goal-side
+     * while he is at most cbStepM upfield of the CB's anchor. rule 0: the old behaviour (goal-side marking).
+     */
+    readonly rule: number; readonly laneShare: number; readonly cbStepM: number; readonly dropMps: number
+  }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   /**
    * Movement into shape. shapeSpeedShare: share of top speed (the old rule, and marking); read only when relaxed is 0 (it has no effect with relaxed 1 and relaxMarks 1, so it has no tuner knob). relaxed 1 (A0): shape movement
@@ -394,6 +418,56 @@ export interface Params {
   /** Loose balls two opponents can both reach are decided by a ground duel: logit = bSkill x skill difference + bReach x reach advantage (m). */
   readonly groundDuel: { readonly bSkill: number; readonly bReach: number; readonly contestM: number }
   /**
+   * T2 tackle success (realism v2 P4): logit = base + 3 (tackling - dribbling) + approach (frontLogit under frontDeg,
+   * behindLogit at behindDeg or more, bearing from the carrier's velocity, his attack direction below headingMinMps)
+   * + supportLogit min(n, supportMax) (defending outfielders within supportM of the carrier) + speedLogit |carrier v|
+   * + boxLogit in the box he attacks. rule 0: the old behaviour (defending.tackleBase + 3 (tackling - dribbling)).
+   */
+  readonly tackle: {
+    readonly rule: number; readonly base: number; readonly frontLogit: number; readonly behindLogit: number; readonly frontDeg: number; readonly behindDeg: number
+    readonly supportLogit: number; readonly supportM: number; readonly supportMax: number; readonly speedLogit: number; readonly boxLogit: number; readonly headingMinMps: number
+  }
+  /**
+   * T3/T4 fouls (realism v2 P4): the foul chance on a lost tackle is foulPerTackle x zone (1 in his own half, linear to
+   * finalThird at u = finalThirdU, box in the box he attacks) x angle (front 1, side, behind); attackers foul a tackler
+   * (attackerShare, carrier slower than shieldSpeedMax) and beaten defenders foul on a take-on (takeOnShare).
+   * rule 0: the old behaviour (flat rate, box x defending.boxFoulFactor, no attacker or take-on fouls).
+   */
+  readonly fouls: {
+    readonly rule: number; readonly finalThirdU: number; readonly finalThird: number; readonly box: number; readonly side: number; readonly behind: number
+    readonly attackerShare: number; readonly shieldSpeedMax: number; readonly takeOnShare: number
+  }
+  /**
+   * T4 aerial duels (realism v2 P4): the best opponent within contestM of an aerial contact contests it; the winner is
+   * drawn with sigmoid(bHeading dHeading + bSlack dSlack); the loser fouls the winner with chance foulShare x zone.
+   * rule 0: the old behaviour (resolveFlight's draw, no aerial fouls).
+   */
+  readonly aerial: { readonly rule: number; readonly contestM: number; readonly bHeading: number; readonly bSlack: number; readonly foulShare: number }
+  /**
+   * A4 transitions (realism v2 P4): after a live-play loss, losing outfielders counter-press for windowS with chance
+   * joinP[i] by distance to the ball (under joinM[i]) at speed; others hold course for pauseS (pauseShare of top speed,
+   * beyond pauseRadiusM) and run back (recover) from recoverFromS to recoverToS at a ramped hazard recoverRatePerS.
+   * rule 0: the old behaviour (no transition state).
+   */
+  readonly transition: {
+    readonly rule: number; readonly windowS: number; readonly joinM: ReadonlyArray<number>; readonly joinP: ReadonlyArray<number>; readonly speed: number
+    readonly pauseS: number; readonly pauseShare: number; readonly pauseRadiusM: number
+    readonly recoverFromS: number; readonly recoverPeakS: readonly [number, number]; readonly recoverToS: number; readonly recoverRatePerS: number
+    readonly recoverBehindFactor: number; readonly recoverUpfieldM: number; readonly recoverS: readonly [number, number]; readonly recoverSpeedShare: number
+  }
+  /**
+   * A5 team pressing (realism v2 P4): the press hazard is scaled by rateScale and lifted by backToGoalLift (a carrier who
+   * received a forward pass faster than backToGoalBallMps at most backToGoalS ago) and ownThirdLift (ball below
+   * -ownThirdU); the presser is chosen by distance / roleWeight; a second presser (within secondRadiusM, chance
+   * secondShare) joins a first one within secondM, taking the cover shadow shadowM from the carrier.
+   * rule 0: the old behaviour (the nearest defender presses at the even hazard).
+   */
+  readonly press: {
+    readonly rule: number; readonly rateScale: number; readonly backToGoalLift: number; readonly backToGoalS: number; readonly backToGoalBallMps: number
+    readonly ownThirdLift: number; readonly ownThirdU: number; readonly roleWeight: Readonly<Record<Exclude<Role, "GK">, number>>
+    readonly secondM: number; readonly secondRadiusM: number; readonly secondShare: number; readonly shadowM: number
+  }
+  /**
    * Game state on scoring: a multiplier per 15-minute bin (mean 1; the last bin includes added time), and the
    * red-card factors for the team down to fewer players and for its opponent.
    */
@@ -461,7 +535,11 @@ export const DEFAULT_PARAMS: Params = {
   },
   kinematics: { accelMax: 4.5, reactionS: 0.7, reachM: 1.0, reachMargin: 0.75, controlHeightM: 1.0, headerHeightM: 2.4 },
   // P3 X1 (rule 1 ships; the values are the calibrated ones).
-  firstTick: { rule: 1, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1 },
+  firstTick: {
+    rule: 1, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1,
+    // P4 M5 (spec item M5; rule 0: the old behaviour).
+    scopeRule: 0
+  },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
     ball: { drag: 0.013, restitution: 0.62, bounceFriction: 0.6, skidFriction: 0.3, rollC0: 0.5, rollC1: 0.15 },
@@ -483,7 +561,12 @@ export const DEFAULT_PARAMS: Params = {
     addedTimeMinS: [60, 300]
   },
   // P3 D2 (rule 1 ships; the values are the calibrated ones).
-  release: { rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5 },
+  release: {
+    rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5,
+    // P4 M6 (spec item M6; capS 0 and rejudge 0: the old behaviour).
+    capS: 0,
+    rejudge: 0
+  },
   actions: {
     logits: {
       def_wide: row({ short_pass: 1.6, long_pass: 0.4, switch: -0.6, back_pass: -0.1, carry: 0.5, take_on: -1.2, clear: -0.4, hold: -0.6 }),
@@ -594,7 +677,11 @@ export const DEFAULT_PARAMS: Params = {
   // the carrier-report pressure bucket (5 m). Real teams crowd the ball more in the attacking third (nearest-3 mean
   // 7.1-8.9 m there against 10.5-13.0 m in the defensive third, fit-report section 3), hence spaceAttM < spaceM.
   support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
-  marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
+  marking: {
+    weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
+    // P4 A5 zonal marking (spec item A5; rule 0: the old behaviour).
+    rule: 0, laneShare: 0.4, cbStepM: 10, dropMps: 1
+  },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
   shape: { width: 1, depth: 1, defDepth: 1 },
   // Real fits (IDSSE, 7 matches; fit-report.md, offball-report.md, transitions-report.md, gk-report.md, 2026-10-13).
@@ -647,6 +734,22 @@ export const DEFAULT_PARAMS: Params = {
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 1, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
+  // P4 T2 tackle success (spec item T2; rule 0: the old behaviour).
+  tackle: { rule: 0, base: 0, frontLogit: 0.35, behindLogit: -0.35, frontDeg: 60, behindDeg: 120, supportLogit: 0.4, supportM: 5, supportMax: 2, speedLogit: -0.1, boxLogit: 0.3, headingMinMps: 1 },
+  // P4 T3/T4 fouls (spec items T3, T4; rule 0: the old behaviour).
+  fouls: { rule: 0, finalThirdU: 17.5, finalThird: 0.4, box: 0.12, side: 1.6, behind: 2.4, attackerShare: 0.05, shieldSpeedMax: 2, takeOnShare: 0.15 },
+  // P4 T4 aerial duels (spec item T4; rule 0: the old behaviour).
+  aerial: { rule: 0, contestM: 1, bHeading: 3, bSlack: 1, foulShare: 0.13 },
+  // P4 A4 transitions (spec item A4; rule 0: the old behaviour).
+  transition: {
+    rule: 0, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
+    recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.1, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9
+  },
+  // P4 A5 team pressing (spec item A5; rule 0: the old behaviour).
+  press: {
+    rule: 0, rateScale: 1, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
+    roleWeight: { CB: 0.6, FB: 0.9, DM: 1, CM: 1, AM: 0.8, W: 1, ST: 0.7 }, secondM: 12, secondRadiusM: 15, secondShare: 0.45, shadowM: 4
+  },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   script: {
@@ -709,7 +812,7 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
 /** Model coefficients and logits, which may take any sign. */
-const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones/, /^distribution\.puntLogit$/]
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones/, /^distribution\.puntLogit$/, /^tackle\.(base|behindLogit|speedLogit)$/, /^transition\.recoverUpfieldM$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
@@ -720,7 +823,8 @@ const PROBABILITIES = new Set([
   "keeper.letRunShare", "keeper.comeShare", "keeper.catchBase", "keeper.catchHandling", "keeper.fumbleShare",
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
   "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS",
-  "firstTick.bootBlock", "release.tailShare"
+  "firstTick.bootBlock", "release.tailShare",
+  "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
@@ -740,7 +844,7 @@ const checkSupport = (s: Params["support"]): void => {
   if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
 }
 
-/** The P3 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
+/** The P3 and P4 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
 const checkRuleSwitches = (v: Params): void => {
   const switches: ReadonlyArray<readonly [string, number]> = [
     ["firstTick.rule", v.firstTick.rule],
@@ -749,9 +853,25 @@ const checkRuleSwitches = (v: Params): void => {
     ["cross.rule", v.cross.rule],
     ["distribution.rule", v.distribution.rule],
     ["through.rule", v.through.rule],
-    ["keeper.handsRule", v.keeper.handsRule]
+    ["keeper.handsRule", v.keeper.handsRule],
+    ["tackle.rule", v.tackle.rule],
+    ["fouls.rule", v.fouls.rule],
+    ["aerial.rule", v.aerial.rule],
+    ["transition.rule", v.transition.rule],
+    ["press.rule", v.press.rule],
+    ["marking.rule", v.marking.rule],
+    ["firstTick.scopeRule", v.firstTick.scopeRule],
+    ["release.rejudge", v.release.rejudge]
   ]
   for (const [path, x] of switches) if (x !== 0 && x !== 1) throw new ParamsError(`params field ${path} must be 0 or 1 (got ${x})`)
+}
+
+/** A4 join table (P4): distance bands strictly increasing, one chance per band. */
+const checkTransition = (t: Params["transition"]): void => {
+  if (t.joinM.length !== t.joinP.length)
+    throw new ParamsError(`params field transition.joinM must have as many bands as transition.joinP (got ${t.joinM.length} and ${t.joinP.length})`)
+  for (let i = 1; i < t.joinM.length; i++)
+    if (!(t.joinM[i]! > t.joinM[i - 1]!)) throw new ParamsError(`params field transition.joinM must be strictly increasing (got ${t.joinM.join(", ")})`)
 }
 
 export const paramsFromJson = (json: unknown): Params => {
@@ -762,5 +882,6 @@ export const paramsFromJson = (json: unknown): Params => {
   checkRanges(values, "")
   checkSupport(merged.support)
   checkRuleSwitches(merged)
+  checkTransition(merged.transition)
   return merged
 }
