@@ -3,7 +3,7 @@
  * team's style), play the next seconds over several random seeds, and compare with the same seeds left alone.
  * Pure and deterministic, like the engine: the same state, intervention and options give the same answer.
  */
-import { buildCandidates, nearestOpponent } from "./decide.js"
+import { buildCandidatesIn, candidateContext, keeperHandsCandidates, nearestOpponent } from "./decide.js"
 import { attackX, clampToPitch, dist, type Side, type Vec2 } from "./geometry.js"
 import { applyOrders, OrderError, STYLE_RANGES, type ManagerOrder } from "./orders.js"
 import { substream } from "./rng.js"
@@ -43,11 +43,24 @@ export const passOptions = (s: MatchState) => {
   const opponents = s.players.filter((p) => p.side !== owner.side && !p.sentOff)
   const near = nearestOpponent(owner.pos, opponents)
   const pressure = near ? Math.max(0, Math.min(1, 1 - (dist(owner.pos, near.pos) - 1) / 4)) : 0
-  return buildCandidates(
-    { period: s.period, owner, teammates: s.players.filter((p) => p.side === owner.side && !p.sentOff), opponents, style: team.style, scoreDiff: 0, minute: 0, restart: null, scriptBias: {}, tick: s.tick },
-    s.config.params,
-    pressure
-  ).sort((a, b) => b.value - a.value)
+  const poss = s.possession as { restart?: unknown; inHands?: boolean }
+  const input = {
+    period: s.period,
+    owner,
+    teammates: s.players.filter((p) => p.side === owner.side && !p.sentOff),
+    opponents,
+    style: team.style,
+    scoreDiff: 0,
+    minute: 0,
+    restart: null,
+    scriptBias: {},
+    tick: s.tick,
+    // The same keeper-hands rule overridePass applies, so the options offered and the overrides accepted agree.
+    keeperHands: poss.inHands === true && (poss.restart ?? null) === null
+  }
+  const ctx = candidateContext(input, s.config.params, pressure)
+  const hands = keeperHandsCandidates(ctx)
+  return (hands ? [...hands.throws, ...hands.punts] : buildCandidatesIn(ctx)).sort((a, b) => b.value - a.value)
 }
 
 export const applyIntervention = (s: MatchState, iv: Intervention): MatchState => {

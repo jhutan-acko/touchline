@@ -223,3 +223,30 @@ describe("what if", () => {
     expect(() => whatIf(end, { kind: "none" })).toThrow(/over/)
   })
 })
+
+describe("pass options for a keeper with the ball in his hands", () => {
+  const inHandsState = () => {
+    for (const s of match.states.values()) {
+      const p = s.possession
+      if (p.kind === "owned" && p.inHands === true && p.restart === null && passOptions(s).some((c) => c.method !== undefined)) return s
+    }
+    throw new Error("no keeper-hands state in the match")
+  }
+
+  it("offer only throws (4-35 m, ground) and punts (high), and every one is accepted as a pass_to override", () => {
+    const s = inHandsState()
+    const opts = passOptions(s)
+    expect(opts.length).toBeGreaterThan(0)
+    for (const c of opts) {
+      expect(c.method === "throw" || c.method === "punt").toBe(true)
+      expect(c.height).toBe(c.method === "throw" ? "ground" : "high")
+      expect(() => applyIntervention(s, { kind: "pass_to", playerId: (s.possession as { playerId: string }).playerId, receiverId: c.receiverId, ...(c.kind ? { passKind: c.kind } : {}) })).not.toThrow()
+    }
+  })
+
+  it("fall back to the foot options once his hold has ended", () => {
+    const s = inHandsState()
+    const feet = passOptions({ ...s, possession: { ...(s.possession as object), inHands: false } as MatchState["possession"] })
+    expect(feet.some((c) => c.method === undefined)).toBe(true)
+  })
+})
