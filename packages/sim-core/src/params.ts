@@ -735,7 +735,7 @@ export const DEFAULT_PARAMS: Params = {
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
   // P4 T2 tackle success (spec item T2; rule 0: the old behaviour).
-  tackle: { rule: 0, base: 0, frontLogit: 0.35, behindLogit: -0.35, frontDeg: 60, behindDeg: 120, supportLogit: 0.4, supportM: 5, supportMax: 2, speedLogit: -0.1, boxLogit: 0.3, headingMinMps: 1 },
+  tackle: { rule: 0, base: 0.25, frontLogit: 0.35, behindLogit: -0.35, frontDeg: 60, behindDeg: 120, supportLogit: 0.4, supportM: 5, supportMax: 2, speedLogit: -0.1, boxLogit: 0.3, headingMinMps: 1 },
   // P4 T3/T4 fouls (spec items T3, T4; rule 0: the old behaviour).
   fouls: { rule: 0, finalThirdU: 17.5, finalThird: 0.4, box: 0.12, side: 1.6, behind: 2.4, attackerShare: 0.05, shieldSpeedMax: 2, takeOnShare: 0.15 },
   // P4 T4 aerial duels (spec item T4; rule 0: the old behaviour).
