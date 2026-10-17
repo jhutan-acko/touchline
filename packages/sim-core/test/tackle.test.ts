@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { bearingOf, supportCount, tackleLogit } from "../src/duel.js"
+import { attackX, dirOf, PITCH } from "../src/geometry.js"
 import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
 import { initMatch, isFinished, step, tackleWinLogit, workAt } from "../src/step.js"
 import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
@@ -9,6 +10,13 @@ import type { MatchState, PlayerState } from "../src/types.js"
 const off: Params = { ...P, tackle: { ...P.tackle, rule: 0 } }
 const on: Params = { ...P, tackle: { ...P.tackle, rule: 1 } }
 const t = on.tackle
+// The in-match test measures T2 alone: every other P4 switch is pinned to 0, so Task 10's switch-on cannot move it.
+const onAlone: Params = {
+  ...on,
+  fouls: { ...on.fouls, rule: 0 }, aerial: { ...on.aerial, rule: 0 }, transition: { ...on.transition, rule: 0 },
+  press: { ...on.press, rule: 0 }, marking: { ...on.marking, rule: 0 },
+  firstTick: { ...on.firstTick, scopeRule: 0 }, release: { ...on.release, rejudge: 0 }
+}
 
 const base = kickoffPlayersFor(makeConfig(1))
 const at = (p: PlayerState, x: number, y: number, vx = 0, vy = 0): PlayerState => ({ ...p, pos: { x, y }, vel: { x: vx, y: vy } })
@@ -66,11 +74,12 @@ describe("T2: the terms", () => {
 })
 
 /** A state with one tackle in prospect: `owner` on the ball at (ox, 0) running (vx, 0), `def` at (dx, dy), optional extra defenders. */
-const oneTackle = (p: Params, o: { period?: MatchState["period"]; ox: number; vx: number; dx: number; dy: number; extra?: ReadonlyArray<[number, number]> }): { s: MatchState; def: PlayerState; owner: PlayerState } => {
+const oneTackle = (p: Params, o: { side?: "home" | "away"; period?: MatchState["period"]; ox: number; vx: number; dx: number; dy: number; extra?: ReadonlyArray<[number, number]> }): { s: MatchState; def: PlayerState; owner: PlayerState } => {
   const s0 = initMatch(makeConfig(3, { params: p }))
   const pls = kickoffPlayersFor(makeConfig(3, { params: p }))
-  const own = at(pls.find((x) => x.side === "home" && x.role === "CM")!, o.ox, 0, o.vx, 0)
-  const defs = pls.filter((x) => x.side === "away" && x.role !== "GK")
+  const cs = o.side ?? "home"
+  const own = at(pls.find((x) => x.side === cs && x.role === "CM")!, o.ox, 0, o.vx, 0)
+  const defs = pls.filter((x) => x.side !== cs && x.role !== "GK")
   const def = at(defs[0]!, o.dx, o.dy)
   const extra = (o.extra ?? []).map(([x, y], i) => at(defs[i + 1]!, x, y))
   const moved = new Map<string, PlayerState>([[own.id, own], [def.id, def], ...extra.map((e) => [e.id, e] as const)])
@@ -78,6 +87,9 @@ const oneTackle = (p: Params, o: { period?: MatchState["period"]; ox: number; vx
   const s: MatchState = { ...s0, period: o.period ?? s0.period, players, possession: { kind: "owned", playerId: own.id, since: 0, restart: null } }
   return { s, def: moved.get(def.id)!, owner: own }
 }
+
+/** The logit without the skill term, so fixtures with different players compare only the situational terms. */
+const situational = (f: { s: MatchState; def: PlayerState; owner: PlayerState }): number => tackleWinLogit(workAt(f.s), f.def, f.owner) - 3 * (f.def.attrs.tackling - f.owner.attrs.dribbling)
 
 describe("T2: the seam", () => {
   it("rule off reproduces the old logit", () => {
@@ -89,16 +101,35 @@ describe("T2: the seam", () => {
     const fix = { ox: 10, vx: 3, dx: 11, dy: 0, extra: [[12, 1], [12, -1]] as Array<[number, number]> }
     const a = oneTackle(off, fix), b = oneTackle(on, fix)
     const oldL = tackleWinLogit(workAt(a.s), a.def, a.owner)
-    // precondition: the fixture has a front tackler, two supporters, speed 3, and the carrier is not in a box
+    // preconditions: a front tackler, two supporters within 5 m, speed 3, and the carrier is not in the box he attacks
+    expect(bearingOf(b.owner.pos, b.owner.vel, dirOf(b.owner.side, "first_half"), b.def.pos, t)).toBe("front")
+    expect(supportCount(b.owner.pos, b.def.id, b.s.players.filter((x) => x.side === b.def.side), t.supportM)).toBe(2)
+    expect(attackX(b.owner.side, b.owner.pos.x, "first_half")).toBeLessThan(PITCH.halfL - PITCH.boxDepth)
     const newL = tackleWinLogit(workAt(b.s), b.def, b.owner)
     expect(newL - oldL).toBeCloseTo(t.base + t.frontLogit + 2 * t.supportLogit + t.speedLogit * 3, 9)
-    // second half: home attacks -x, so the same picture mirrored gives the same logit
+    // second half (moving at 3 m/s, so this checks the mirrored geometry, not the standing-carrier branch): the mirrored picture gives the same logit
     const m = oneTackle(on, { ox: -10, vx: -3, dx: -11, dy: 0, extra: [[-12, 1], [-12, -1]], period: "second_half" })
     expect(tackleWinLogit(workAt(m.s), m.def, m.owner)).toBeCloseTo(newL, 9)
     // box: home in the first half attacking +x from u = 45, |y| < 20
     const inBox = oneTackle(on, { ox: 45, vx: 0, dx: 46, dy: 0 })
     const outBox = oneTackle(on, { ox: 30, vx: 0, dx: 31, dy: 0 })
     expect(tackleWinLogit(workAt(inBox.s), inBox.def, inBox.owner) - tackleWinLogit(workAt(outBox.s), outBox.def, outBox.owner)).toBeCloseTo(t.boxLogit, 9)
+    // an away carrier attacks -x in the first half: the same pictures mirrored give the same terms
+    const away = oneTackle(on, { side: "away", ox: -10, vx: -3, dx: -11, dy: 0, extra: [[-12, 1], [-12, -1]] })
+    expect(away.owner.side).toBe("away")
+    expect(bearingOf(away.owner.pos, away.owner.vel, dirOf("away", "first_half"), away.def.pos, t)).toBe("front")
+    expect(situational(away)).toBeCloseTo(situational(b), 9)
+    const awayBox = oneTackle(on, { side: "away", ox: -45, vx: 0, dx: -46, dy: 0 })
+    const awayOut = oneTackle(on, { side: "away", ox: -30, vx: 0, dx: -31, dy: 0 })
+    expect(attackX("away", awayBox.owner.pos.x, "first_half")).toBeGreaterThan(PITCH.halfL - PITCH.boxDepth)
+    expect(situational(awayBox) - situational(awayOut)).toBeCloseTo(t.boxLogit, 9)
+    expect(situational(awayBox)).toBeCloseTo(situational(inBox), 9)
+    // a standing carrier (0.5 m/s) uses the attack direction: the tackler ahead of him is front, home and away
+    for (const [side, sx, per] of [["home", 1, "first_half"], ["away", -1, "first_half"], ["home", -1, "second_half"]] as const) {
+      const f = oneTackle(on, { side, period: per, ox: 10 * sx, vx: 0.5 * sx, dx: 11 * sx, dy: 0 })
+      const g = oneTackle(on, { side, period: per, ox: 10 * sx, vx: 0.5 * sx, dx: 9 * sx, dy: 0 })
+      expect(situational(f) - situational(g), `${side} ${per}`).toBeCloseTo(t.frontLogit - t.behindLogit, 9)
+    }
     const inBox2 = oneTackle(on, { ox: -45, vx: 0, dx: -46, dy: 0, period: "second_half" })
     const wasBox = tackleWinLogit(workAt(inBox2.s), inBox2.def, inBox2.owner)
     expect(wasBox).toBeCloseTo(tackleWinLogit(workAt(inBox.s), inBox.def, inBox.owner), 9)
@@ -122,7 +153,7 @@ const bins = (p: Params, seed: number, dt: number) => {
       const def = before.players.find((x) => x.id === e.player_id)!
       const owner = before.players.find((x) => x.id === e.attrs.opponent_id)!
       const won = e.outcome === "won" ? 1 : 0
-      const dir = (owner.side === "home") === (before.period === "first_half") ? 1 : -1
+      const dir = dirOf(owner.side, before.period)
       const bearing = bearingOf(owner.pos, owner.vel, dir, def.pos, p.tackle)
       const n = supportCount(owner.pos, def.id, before.players.filter((x) => x.side === def.side && !x.sentOff), p.tackle.supportM)
       const put = (b: Bin) => { b.n++; b.won += won }
@@ -139,15 +170,15 @@ const pool = (rs: ReturnType<typeof bins>[]): ReturnType<typeof bins> => {
 }
 
 describe("T2 in matches", () => {
-  // G6 asked for six seeds; at base 0.25 their support gap was 0.068 (sampling noise, SE about 0.04), the twelve give 0.14 (off: -0.03).
+  // Twelve seeds at dt 0.1 (G6 as amended): six seeds left the support gap too close to its bound for sampling noise.
   it("front beats behind and support helps at dt 0.1 (twelve seeds, 7 to 29)", () => {
-    const r = pool([7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29].map((sd) => bins(on, sd, 0.1)))
+    const r = pool([7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29].map((sd) => bins(onAlone, sd, 0.1)))
     for (const k of ["front", "behind", "support", "alone"] as const) expect(r[k].n, k).toBeGreaterThanOrEqual(30)
     expect(rate(r.front) - rate(r.behind)).toBeGreaterThan(0.05)
     expect(rate(r.support) - rate(r.alone)).toBeGreaterThan(0.1)
   }, 600_000)
   it("the same signs hold at dt 0.04 (seeds 7 and 9, floor 15)", () => {
-    const r = pool([7, 9].map((sd) => bins(on, sd, 0.04)))
+    const r = pool([7, 9].map((sd) => bins(onAlone, sd, 0.04)))
     for (const k of ["front", "behind", "support", "alone"] as const) expect(r[k].n, k).toBeGreaterThanOrEqual(15)
     expect(rate(r.front) - rate(r.behind)).toBeGreaterThan(0)
     expect(rate(r.support) - rate(r.alone)).toBeGreaterThan(0)
