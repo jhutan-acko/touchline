@@ -25,6 +25,13 @@ export const BOOT_WINDOW_S = 0.1
 
 const sigmoid = (z: number): number => 1 / (1 + Math.exp(-z))
 
+/**
+ * T4 (realism v2 P4, aerial.rule 1): the chance that the player who first reaches an aerial contact wins the duel
+ * against its contender, from his heading lead `dHeading` and his reach-slack lead `dSlack` (metres; who arrives better
+ * placed, the "jumping" proxy).
+ */
+export const aerialWinShare = (dHeading: number, dSlack: number, a: Params["aerial"]): number => sigmoid(a.bHeading * dHeading + a.bSlack * dSlack)
+
 /** Where a ball moving from `a` to `b` crosses a goal line, if it does, with interpolated y and z. */
 export const goalLineCrossing = (a: BallState["pos"], b: BallState["pos"]): { x: number; y: number; z: number; inGoal: boolean } | null => {
   for (const line of [PITCH.halfL, -PITCH.halfL]) {
@@ -100,6 +107,9 @@ export const resolveFlight = (
     const bootTick = x1 && (k - 1) * dt < BOOT_WINDOW_S - 1e-9
     const seg = bootTick ? Math.hypot(b2.x - a2.x, b2.y - a2.y) : 0
     const qualifiers: Array<{ pl: PlayerState; slack: number; f: number }> = []
+    // T4 (aerial.rule 1): outfielders who miss this tick's contact, with their (negative) reach slack, as contenders.
+    const contestOn = p.aerial.rule > 0
+    const nearMiss: Array<{ pl: PlayerState; slack: number }> = []
     for (const pl of players) {
       if (pl.sentOff) continue
       if (pl.id === fromId && t < 0.6) continue
@@ -131,6 +141,11 @@ export const resolveFlight = (
       const outright = d <= p.kinematics.reachM && tc <= dt && front
       if (outright) qualifiers.push({ pl, slack: p.kinematics.reachM - d, f })
       else if (front && fromDrift <= radius && withinSpeed) qualifiers.push({ pl, slack: radius - fromDrift, f })
+      else if (contestOn && front && pl.role !== "GK") {
+        // How far his reachable disc (or his top-speed reach) misses the contact.
+        const miss = Math.max(fromDrift - radius, Math.hypot(contact.x - pl.pos.x, contact.y - pl.pos.y) - (p.kinematics.reachM + vmax * tc))
+        if (miss <= p.aerial.contestM) nearMiss.push({ pl, slack: -miss })
+      }
     }
     travelled += seg
     if (qualifiers.length === 0) continue
@@ -140,6 +155,19 @@ export const resolveFlight = (
     })
     const aerialBall = b.pos.z > p.kinematics.controlHeightM
     const sides = new Set<Side>(qualifiers.map((q) => q.pl.side))
+    if (aerialBall && contestOn) {
+      // T4 (aerial.rule 1): no draw here. The first to the contact (the best by slack when both sides reach it, else the
+      // old choice) takes it, and the other side's best outfielder, qualifying or within contestM of his disc, contests
+      // it; the step's aerial seam draws the duel. contest.slack is his slack minus the first's (<= 0 when he qualifies
+      // too, < 0 otherwise). Keepers neither win nor make contests: keeper claims belong to keeperComes (pre-flight G27).
+      const bySlack = [...qualifiers].sort((x, y) => y.slack - x.slack)
+      const intendedQ = sides.size === 1 ? qualifiers.find((q) => q.pl.id === intendedId) : undefined
+      const first = sides.size === 2 ? bySlack[0]! : (intendedQ ?? [...qualifiers].sort((x, y) => x.f - y.f || y.slack - x.slack)[0]!)
+      const rival = (q: { pl: PlayerState }): boolean => q.pl.side !== first.pl.side && q.pl.role !== "GK"
+      const c = first.pl.role === "GK" ? undefined : (bySlack.find(rival) ?? nearMiss.filter(rival).sort((x, y) => y.slack - x.slack)[0])
+      const contest = c ? { contest: { id: c.pl.id, slack: c.slack - first.slack } } : {}
+      return { ticks: k, winnerId: first.pl.id, result: "reached", ball: contactBall(first.f), aerial: null, ...contest }
+    }
     if (aerialBall && sides.size === 2) {
       const best = (s: Side) => qualifiers.filter((q) => q.pl.side === s).sort((x, y) => y.slack - x.slack)[0]!
       const h = best("home")

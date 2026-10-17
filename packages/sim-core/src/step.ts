@@ -79,6 +79,7 @@ import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 // ---- P4 imports, foul seam (plan 8d Task 4 inserts below this line)
 
 // ---- P4 imports, aerial seam (plan 8d Task 5 inserts below this line)
+import { aerialWinShare } from "./resolve.js"
 
 // ---- P4 imports, transition seam (plan 8d Task 6 inserts below this line)
 
@@ -740,10 +741,37 @@ const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { techniq
  * decided at release. rule 0: the resolution unchanged, no foul.
  * @internal
  */
-export const aerialDuel = (_w: Work, res: Resolution, _owner: PlayerState): { res: Resolution; foul: FlightFoul | null } => ({ res, foul: null })
+export const aerialDuel = (w: Work, res: Resolution, _owner: PlayerState): { res: Resolution; foul: FlightFoul | null } => {
+  const a = w.p.aerial
+  if (a.rule <= 0 || !res.contest || !res.winnerId) return { res, foul: null }
+  // The first to the contact against his contender (resolveFlight: contest.slack is the contender's slack minus his).
+  const first = w.player(res.winnerId)
+  const rival = w.player(res.contest.id)
+  const firstWins = w.rng.aerial.chance(aerialWinShare(first.attrs.heading - rival.attrs.heading, -res.contest.slack, a))
+  const winner = firstWins ? first : rival
+  const loser = firstWins ? rival : first
+  // The contact point stays the first qualifier's (ruling 6).
+  const won: Resolution = { ...res, winnerId: winner.id, aerial: { winnerId: winner.id, loserId: loser.id } }
+  // The loser may foul the winner (ruling 7): decided now, given when the flight resolves.
+  const at = { x: res.ball.pos.x, y: res.ball.pos.y }
+  const booked = loser.yellow >= 1 ? w.p.defending.bookedFoulFactor : 1
+  const pFoul = Math.min(1, a.foulShare * foulZone(w, winner, at) * booked * w.mods(loser.side).foul)
+  const foul = w.rng.foul.chance(pFoul) ? { offenderId: loser.id, victimId: winner.id, at, offenderYellow: loser.yellow } : null
+  return { res: won, foul }
+}
 
 /** T4: apply a flight's aerial foul at resolution; true if it was given (the restart is set). rule 0: never. @internal */
-export const applyFlightFoul = (_w: Work, _foul: FlightFoul): boolean => false
+export const applyFlightFoul = (w: Work, foul: FlightFoul): boolean => {
+  if (w.p.aerial.rule <= 0) return false
+  const offender = w.players.find((x) => x.id === foul.offenderId)
+  const victim = w.players.find((x) => x.id === foul.victimId)
+  // Dropped if either has been sent off (or replaced) since release.
+  if (!offender || !victim || offender.sentOff || victim.sentOff) return false
+  // Booked since release: kept only with bookedFoulFactor, so booked players stay as careful as in the tackle (foul stream).
+  if (offender.yellow > foul.offenderYellow && offender.yellow >= 1 && !w.rng.foul.chance(w.p.defending.bookedFoulFactor)) return false
+  foulAndCards(w, offender, victim, "aerial", foul.at)
+  return true
+}
 
 // ================================================================ end of P4 aerial seam
 
