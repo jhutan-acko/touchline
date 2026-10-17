@@ -685,6 +685,9 @@ The plan's rulings ("Rulings on the spec", plan 8b) hold as written, with these 
   - `distM` 14 in the calibrated file.
 
 **Retired knobs:** `long_bias`, `cross_bias`, `pass_pc_weight` and `pass_safety` (inert under D1; rulings 9 and 10).
+In the calibrated file, `pass.pitchControlWeight` 0.8 → 0 and `pass.safetyWeight` 3 → 0, so the logged `xpass` (decision
+records, `options[].xpass`) is now the lane-only model. The advisor and the agents read this value. Sim outcomes are
+unchanged under D1, which reads neither.
 **New knobs:** `long_shift`, `switch_shift`, `cross_shift`, `choice_temp`, `iv_centre`, `support_space` and
 `support_space_att`. There is no knob on D1's fitted distance coefficient (ruling).
 
@@ -903,6 +906,7 @@ Changes made on measurement:
   | Switches | 0.146 | 0.04–0.08 | NOT MET, `it.fails` |
   | Back to the keeper | 0.019 | 0.045–0.08 | NOT MET, `it.fails` |
   | Open-play crosses per match | 7.25 | 12–18 | NOT MET, `it.fails` |
+  | Completion, opponent within 1 m at release | 0.299 (261 passes) | 0.64–0.76 (real 0.70) | NOT MET, `it.fails` (deep report 0.474) |
 
 - **Scenarios** (calibrated params, seeds 1–10): `late_comeback` 9/10 and `keeper_heroics` 10/10. No script nudge was needed.
 - **Manager A/B** (rules against none, 40 seeds, for information): xG difference +0.108 per match (95 % interval −0.061 to

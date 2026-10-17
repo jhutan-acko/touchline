@@ -7,9 +7,9 @@ import type { DomainEvent, MatchState } from "../src/types.js"
 import { makeConfig } from "../src/testing.js"
 
 // The tail is fixed here: Step 4 may move the defaults. Explicit on and off objects (ruling F4): Task 10 switches the defaults on.
-// D2 against the flat timing, on the engine these tests were written for (F4): the other P3 rules pinned off, since Task 10
-// switched them on in the defaults (with D1 on, seed 7 at dt 0.04 has 7 pressed releases with D2 off, under the floor of 10).
-const base: Params = { ...P, firstTick: { ...P.firstTick, rule: 0 }, choice: { ...P.choice, rule: 0 }, cross: { ...P.cross, rule: 0 }, through: { ...P.through, rule: 0 }, distribution: { ...P.distribution, rule: 0 } }
+// D2 against the flat timing, on the engine these tests were written for (F4): the other P3 rules and support rule 1 (Task
+// 10d) pinned off, since Task 10 switched them on in the defaults (with D1 on, seed 7 at dt 0.04 has 7 pressed releases with D2 off, under the floor of 10).
+const base: Params = { ...P, firstTick: { ...P.firstTick, rule: 0 }, choice: { ...P.choice, rule: 0 }, cross: { ...P.cross, rule: 0 }, through: { ...P.through, rule: 0 }, distribution: { ...P.distribution, rule: 0 }, support: { ...P.support, rule: 0 } }
 const on: Params = { ...base, release: { ...P.release, rule: 1, tailShare: 0.25, tailMeanS: 1.5 } }
 const off: Params = { ...base, release: { ...P.release, rule: 0 } }
 const draws = (d: number, n = 4000) => {

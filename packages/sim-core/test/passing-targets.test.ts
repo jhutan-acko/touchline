@@ -11,7 +11,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const params = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
 const SEEDS = [7, 9, 11, 13]
 
-interface M { open: number; bootDeaths: number; switches: number; passes: number; toKeeper: number; crosses: number; punts: number; throws: number; pressed: number[] }
+interface M { near1: number; near1Ok: number; open: number; bootDeaths: number; switches: number; passes: number; toKeeper: number; crosses: number; punts: number; throws: number; pressed: number[] }
 
 const measure = (seed: number): M => {
   const cfg = makeConfig(seed, { params })
@@ -19,17 +19,24 @@ const measure = (seed: number): M => {
   let s = initMatch(cfg)
   const events: DomainEvent[] = []
   const near = new Map<string, number>()
+  // Nearest opponent to the passer at release (the deep report's "Completion, opponent within 1 m at release").
+  const atRelease = new Map<string, number>()
   while (!isFinished(s)) {
+    const before = s
     const r = step(s)
     s = r.state
     for (const e of r.events) {
+      if (e.type === "pass" && !e.attrs.restart) {
+        const me = before.players.find((x) => x.id === e.player_id)!
+        atRelease.set(e.id, Math.min(...before.players.filter((x) => x.side !== me.side && !x.sentOff).map((x) => Math.hypot(x.pos.x - me.pos.x, x.pos.y - me.pos.y))))
+      }
       if (e.type !== "reception" || e.attrs.first_touch !== "controlled") continue
       const me = s.players.find((x) => x.id === e.player_id)!
       near.set(e.id, Math.min(...s.players.filter((x) => x.side !== me.side && !x.sentOff).map((x) => Math.hypot(x.pos.x - me.pos.x, x.pos.y - me.pos.y))))
     }
     events.push(...r.events)
   }
-  const m: M = { open: 0, bootDeaths: 0, switches: 0, passes: 0, toKeeper: 0, crosses: 0, punts: 0, throws: 0, pressed: [] }
+  const m: M = { near1: 0, near1Ok: 0, open: 0, bootDeaths: 0, switches: 0, passes: 0, toKeeper: 0, crosses: 0, punts: 0, throws: 0, pressed: [] }
   let lastSetPiece = -Infinity
   events.forEach((e, i) => {
     if (e.type === "set_piece") lastSetPiece = e.frame_id
@@ -45,6 +52,10 @@ const measure = (seed: number): M => {
     if (typeof to === "string" && role.get(to) === "GK" && role.get(e.player_id!) !== "GK") m.toKeeper++
     if (e.attrs.restart) return
     m.open++
+    if ((atRelease.get(e.id) ?? 99) < 1) {
+      m.near1++
+      if (e.outcome === "successful") m.near1Ok++
+    }
     if (e.outcome === "intercepted" && e.frame_id_end! - e.frame_id <= 1 && Math.hypot(e.x_end! - e.x!, e.y_end! - e.y!) < 1) m.bootDeaths++
     if (e.y_end !== null && Math.abs(e.y_end - e.y!) > 25) m.switches++
     if (e.attrs.kind === "cross" && (e.frame_id - lastSetPiece) * cfg.dt > 10) m.crosses++
@@ -92,6 +103,14 @@ describe("P3 real-data targets on the calibrated parameters (4 matches)", () => 
     const v = sum("punts") / (sum("punts") + sum("throws"))
     expect(v).toBeGreaterThanOrEqual(0.24)
     expect(v).toBeLessThanOrEqual(0.4)
+  }, 600_000)
+  // NOT MET (Task 10 fix round 1, calibrated params): 0.299 of 261 open-play passes released with an opponent within
+  // 1 m complete on these 4 matches (deep report: 0.474 on 64 league matches). The remaining failures are defenders in front of the pass and later
+  // interceptions (Task 3 ruling: the target moved to the P3 exit).
+  it.fails("NOT MET: passes released with an opponent within 1 m complete about 70 % (X1; 0.64-0.76)", () => {
+    const v = sum("near1Ok") / sum("near1")
+    expect(v).toBeGreaterThanOrEqual(0.64)
+    expect(v).toBeLessThanOrEqual(0.76)
   }, 600_000)
   it("pressed receivers release quickly (D2; median 0.2-0.7 s)", () => {
     const v = median(ms().flatMap((m) => m.pressed))

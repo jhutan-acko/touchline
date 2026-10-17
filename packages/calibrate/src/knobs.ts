@@ -116,6 +116,8 @@ export const KNOBS: ReadonlyArray<Knob> = [
   // (spaceAttM never wider than spaceM: each knob clamps the attacking-third value to the general one).
   { name: "support_space", what: "space teammates keep from the carrier (open near options, support within 15 m, pass length)", init: DEFAULT_PARAMS.support.spaceM, min: 12, max: 20, step: 2,
     apply: (p, v) => ({ ...p, support: { ...p.support, spaceM: v, spaceAttM: Math.min(p.support.spaceAttM, v) } }) },
+  // The file records the tuner's value, not the clamped one: with support_space_att above support_space the engine uses
+  // support_space, so the tuner can sit on a flat stretch there (harmless at the calibrated 16 and 11).
   { name: "support_space_att", what: "space teammates keep from the carrier in the attacking third (chances, crosses, support)", init: DEFAULT_PARAMS.support.spaceAttM, min: 7, max: 15, step: 2,
     apply: (p, v) => ({ ...p, support: { ...p.support, spaceAttM: Math.min(v, p.support.spaceM) } }) }
 ]
