@@ -682,15 +682,19 @@ const technique = (a: Action, pl: PlayerState): number =>
 // ================================================================ P3 boot-block seam (plan 8c Task 3; plan 8d Task 9 owns this block)
 
 /** A defender at the passer's boot blocks this open-play pass (X1): who, and where the ball goes. Draws from the boot stream. @internal */
-export const bootBlock = (w: Work, owner: PlayerState, _d: Decision): { blocker: PlayerState; loose: BallState } | null => {
+export const bootBlock = (w: Work, owner: PlayerState, d: Decision): { blocker: PlayerState; loose: BallState } | null => {
   if (w.p.firstTick.rule <= 0) return null
+  // M5a: a keeper's throw or punt from his hands is never boot-blocked.
+  if (w.p.firstTick.scopeRule > 0 && d.candidate?.method !== undefined) return null
   const b = bootBlocker(owner, w.active(other(owner.side)), w.p)
   if (!b || !w.rng.boot.chance(w.p.firstTick.bootBlock)) return null
   return { blocker: b, loose: deflectLoose(b.side, w.period, b.pos, w.rng.boot, [2, 6], [0, 1]) }
 }
 
 /** M5 (P4): the params a kick's flight is resolved with (resolveFlight, keeperLetsRun). firstTick.scopeRule 0: w.p itself. @internal */
-export const flightParams = (w: Work, _isClear: boolean): Params => w.p
+export const flightParams = (w: Work, isClear: boolean): Params =>
+  // M5b: a clearance has no boot block, so its first tick keeps the old rule: a defender in front can charge it down.
+  w.p.firstTick.scopeRule > 0 && isClear && w.p.firstTick.rule > 0 ? { ...w.p, firstTick: { ...w.p.firstTick, rule: 0 } } : w.p
 
 // ================================================================ end of P3 boot-block seam
 
@@ -704,7 +708,22 @@ const releaseDelayTicks = (w: Work, pl: PlayerState): number => {
 }
 
 /** M6 (P4): re-judge the holder's remaining hold once he is pressed (release stream). release.rejudge 0: nothing. @internal */
-export const rejudgeRelease = (_w: Work, _owner: PlayerState): void => {}
+export const rejudgeRelease = (w: Work, owner: PlayerState): void => {
+  const r = w.p.release
+  if (r.rule <= 0 || r.rejudge <= 0) return
+  const poss = w.possession
+  // Never at a restart, and never a keeper with the ball in his hands (he can be pressed, not challenged).
+  if (poss.kind !== "owned" || poss.playerId !== owner.id || poss.restart !== null) return
+  const inHands = w.p.keeper.handsRule > 0 ? poss.inHands === true && inOwnBox(owner.side, w.period, owner.pos) : owner.role === "GK" && inOwnBox(owner.side, w.period, owner.pos)
+  if (inHands) return
+  if (owner.intent.kind !== "hold") return
+  // Once: after the cut the remaining hold is within pressedS[1], so a second re-judge cannot fire.
+  if (owner.intentUntil - w.tick <= Math.round(r.pressedS[1] / w.dt)) return
+  const opp = nearestOpponent(owner.pos, w.active(other(owner.side)))
+  if (!opp || dist(opp.pos, owner.pos) >= r.pressedM) return
+  const ticks = Math.max(1, Math.round(w.rng.release.range(r.pressedS[0], r.pressedS[1]) / w.dt))
+  w.setPlayer({ ...owner, intentUntil: Math.min(owner.intentUntil, w.tick + ticks) })
+}
 
 // ================================================================ end of P3 release seam
 
