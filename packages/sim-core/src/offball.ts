@@ -180,3 +180,26 @@ export const shieldTarget = (pos: Vec2, opponents: ReadonlyArray<PlayerState>, s
   if (!near || nd > shieldM) return null
   return clampToPitch(add(pos, scale(norm(sub(pos, near.pos)), 2)), 1)
 }
+
+/**
+ * A5 zonal marking (P4): the marker goes `weight` of the way from his anchor to a lane spot `laneShare` of the way from the
+ * ball (a pass may be in flight) to the attacker. widthSlackM, when given, clamps y to |anchor.y| + widthSlackM as markTarget does.
+ */
+export const laneMarkTarget = (anchor: Vec2, ball: Vec2, attacker: Vec2, weight: number, laneShare: number, widthSlackM?: number): Vec2 => {
+  const spot = add(ball, scale(sub(attacker, ball), laneShare))
+  const t = add(anchor, scale(sub(spot, anchor), weight))
+  if (widthSlackM === undefined) return t
+  const lim = Math.abs(anchor.y) + widthSlackM
+  return { x: t.x, y: Math.max(-lim, Math.min(lim, t.y)) }
+}
+
+/**
+ * A5: whether a CB (anchor `cbAnchor`, defending as `defSide`) follows `attacker` tightly: he is dropping toward his own goal
+ * faster than dropMps and is at most cbStepM upfield of the anchor. Beyond that the CB releases to the zonal target.
+ */
+export const stepsOut = (cbAnchor: Vec2, attacker: PlayerState, defSide: Side, period: Period, m: Params["marking"]): boolean => {
+  const d = dirOf(defSide, period)
+  const dropMps = attacker.vel.x * d
+  const upfieldM = (attacker.pos.x - cbAnchor.x) * d
+  return dropMps > m.dropMps && upfieldM <= m.cbStepM
+}

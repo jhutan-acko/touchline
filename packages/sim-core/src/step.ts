@@ -25,7 +25,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { assignMarks, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, supportersWanted, supportGate, supportSpot } from "./offball.js"
+import { assignMarks, laneMarkTarget, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, stepsOut, supportersWanted, supportGate, supportSpot } from "./offball.js"
 import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
 import type { Action, Params } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight, type Resolution } from "./resolve.js"
@@ -1469,8 +1469,14 @@ export const noteReception = (_w: Work, _receiver: PlayerState, _f: Flight): voi
 // ================================================================ P4 marking seam (plan 8d Task 8 owns this block)
 
 /** A5: the marking spot for defender `defId` (anchor `anchor`) on `attacker`, the ball at `ballFlat`. rule 0: goal-side marking (markTarget). @internal */
-export const markSpot = (w: Work, defSide: Side, _defId: string, anchor: Vec2, attacker: PlayerState, _ballFlat: Vec2): Vec2 =>
-  markTarget(anchor, attacker.pos, defSide, w.period, w.p.marking.goalSideM, w.p.marking.weight, w.p.marking.widthSlackM)
+export const markSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, attacker: PlayerState, ballFlat: Vec2): Vec2 => {
+  const m = w.p.marking
+  const goalSide = (weight: number) => markTarget(anchor, attacker.pos, defSide, w.period, m.goalSideM, weight, m.widthSlackM)
+  if (m.rule !== 1) return goalSide(m.weight)
+  // Ruling 16: a CB follows a dropping ST or AM tightly (the old goal-side spot at weight 1) while he is within cbStepM of the anchor.
+  if (w.player(defId).role === "CB" && (attacker.role === "ST" || attacker.role === "AM") && stepsOut(anchor, attacker, defSide, w.period, m)) return goalSide(1)
+  return laneMarkTarget(anchor, ballFlat, attacker.pos, m.weight, m.laneShare, m.widthSlackM)
+}
 
 // ================================================================ end of P4 marking seam
 
