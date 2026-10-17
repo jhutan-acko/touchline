@@ -25,7 +25,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { assignMarks, markTarget, shieldTarget, steerCarry, supportSpot } from "./offball.js"
+import { assignMarks, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, supportersWanted, supportSpot } from "./offball.js"
 import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
@@ -1375,15 +1375,37 @@ const moveTarget = (
       return { target, speedCap: vmax }
     }
   }
-  if (pos.kind === "owned" && possSide === pl.side && w.p.support.count > 0) {
+  const sp = w.p.support
+  // Rule 1 (P3 Task 10d): supporters come short only when the carrier is pressed, onto a ring distM out; everyone else
+  // keeps spaceM away from an outfield carrier (real nearest teammates 8.9 / 13.3 / 17.2 m, offball-report T14).
+  if (pos.kind === "owned" && possSide === pl.side && sp.rule > 0) {
+    const owner = w.player(pos.playerId)
+    const opps = w.active(other(pl.side))
+    const n = supportersWanted(owner.pos, opps, sp)
+    if (n > 0) {
+      const supporters = w
+        .active(pl.side)
+        .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+        .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
+        .slice(0, n)
+      if (supporters.some((x) => x.id === pl.id))
+        return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, opps, sp.distM, true), speedCap: vmax * sp.speedShare }
+    }
+    const s = shape()
+    const spaceM = spacingFor(owner.pos, pl.side, w.period, sp)
+    if (spaceM <= 0 || owner.role === "GK") return s
+    const target = spacedTarget(owner.pos, s.target, pl.side, w.period, spaceM)
+    return target === s.target ? s : { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+  }
+  if (pos.kind === "owned" && possSide === pl.side && sp.count > 0) {
     const owner = w.player(pos.playerId)
     const supporters = w
       .active(pl.side)
       .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
-      .slice(0, w.p.support.count)
+      .slice(0, sp.count)
     if (supporters.some((x) => x.id === pl.id))
-      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), w.p.support.distM), speedCap: vmax * w.p.support.speedShare }
+      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), sp.distM), speedCap: vmax * sp.speedShare }
   }
   return shape()
 }

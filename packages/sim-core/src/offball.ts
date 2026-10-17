@@ -1,5 +1,6 @@
 import { defendersInLane } from "./decide.js"
 import { add, clampToPitch, dirOf, dist, len, norm, PITCH, scale, sub, type Period, type Side, type Vec2 } from "./geometry.js"
+import type { Params } from "./params.js"
 import type { PlayerState } from "./types.js"
 
 /** Directions a supporter can offer around the carrier: every 45 degrees. */
@@ -9,13 +10,17 @@ const LANE_PENALTY = 4
 const ANCHOR_PULL = 0.15
 const FORWARD_BONUS = 0.1
 const SOFTMAX_T = 0.5
+/** Start of the attacking third in the team frame (the analysis zones: def < -17.5 <= mid <= 17.5 < att). */
+const ATT_THIRD_U = 17.5
 
 /**
  * Where a supporter offers an angle: a softmax-weighted average of 8 spots `distM` around the carrier, each scored
  * by space from opponents, an open passing lane, closeness to the player's shape anchor and forward gain. The
  * average (rather than the best spot) moves smoothly as players move, so supporters do not flicker between angles.
+ * The average of spots on a circle lies inside it (11 m for distM 14 in play); onRing (support rule 1) puts the
+ * spot back out on the circle in the averaged direction, so distM is the distance actually offered.
  */
-export const supportSpot = (carrier: Vec2, anchor: Vec2, side: Side, period: Period, opponents: ReadonlyArray<PlayerState>, distM: number): Vec2 => {
+export const supportSpot = (carrier: Vec2, anchor: Vec2, side: Side, period: Period, opponents: ReadonlyArray<PlayerState>, distM: number, onRing = false): Vec2 => {
   const d = dirOf(side, period)
   const spots = ANGLES.map((a) => clampToPitch({ x: carrier.x + Math.cos(a) * distM, y: carrier.y + Math.sin(a) * distM }, 1))
   const scores = spots.map((s) => {
@@ -26,8 +31,41 @@ export const supportSpot = (carrier: Vec2, anchor: Vec2, side: Side, period: Per
   const m = Math.max(...scores)
   const w = scores.map((v) => Math.exp((v - m) / SOFTMAX_T))
   const z = w.reduce((a, b) => a + b, 0)
-  return spots.reduce((acc, s, i) => ({ x: acc.x + (s.x * w[i]!) / z, y: acc.y + (s.y * w[i]!) / z }), { x: 0, y: 0 })
+  const mean = spots.reduce((acc, s, i) => ({ x: acc.x + (s.x * w[i]!) / z, y: acc.y + (s.y * w[i]!) / z }), { x: 0, y: 0 })
+  if (!onRing) return mean
+  const off = sub(mean, carrier)
+  const r = len(off)
+  if (r < 1e-6) return spots[scores.indexOf(m)]!
+  return clampToPitch(add(carrier, scale(off, distM / r)), 1)
 }
+
+/**
+ * Support rule 1: how many of the nearest outfielders come short. `count` when an opponent is within pressM of the
+ * carrier, else calmCount. Real near open options rise under pressure (4-10 m: 0.39 per pass under 2 m, 0.38 at
+ * 2-5 m, 0.23 unpressured; carrier-report C1).
+ */
+export const supportersWanted = (carrier: Vec2, opponents: ReadonlyArray<PlayerState>, s: Params["support"]): number => {
+  let near = Infinity
+  for (const o of opponents) if (!o.sentOff) near = Math.min(near, dist(o.pos, carrier))
+  return near <= s.pressM ? s.count : s.calmCount
+}
+
+/**
+ * Support rule 1 spacing: a teammate's target closer than spaceM to the carrier moves straight out to spaceM, so he
+ * does not crowd the ball (the same object back when it is already far enough). A target on the carrier goes back
+ * toward the player's own goal. On the pitch.
+ */
+export const spacedTarget = (carrier: Vec2, target: Vec2, side: Side, period: Period, spaceM: number): Vec2 => {
+  const off = sub(target, carrier)
+  const r = len(off)
+  if (r >= spaceM) return target
+  const dir = r > 1e-6 ? scale(off, 1 / r) : { x: -dirOf(side, period), y: 0 }
+  return clampToPitch(add(carrier, scale(dir, spaceM)), 1)
+}
+
+/** Support rule 1: the spacing around a carrier, spaceAttM once he is in the attacking third (team-frame u > 17.5 m), else spaceM. */
+export const spacingFor = (carrier: Vec2, side: Side, period: Period, s: Params["support"]): number =>
+  dirOf(side, period) * carrier.x > ATT_THIRD_U ? s.spaceAttM : s.spaceM
 
 /** Greedy one-to-one marking: the closest (defender anchor, attacker) pairs within radiusM are taken first; ties by id. */
 export const assignMarks = (

@@ -4,7 +4,9 @@ import { kickoffPlayersFor, makeConfig, STYLES } from "../src/testing.js"
 
 // These cases test the old engine's pass knobs (pitch-control weight, safety lean), which D1 retires from the choice
 // (plan 8c rulings 9 and 10): pinned to choice.rule 0 (ruling F6), since Task 10 switched D1 on in the defaults.
-const OLD: Params = { ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 } }
+// Also pinned to support.rule 0 (the support play its whole-match margin was measured with), since Task 10d switched
+// support rule 1 on.
+const OLD: Params = { ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 }, support: { ...DEFAULT_PARAMS.support, rule: 0 } }
 const withPass = (p: Params, pass: Partial<Params["pass"]>): Params => ({ ...p, pass: { ...p.pass, ...pass } })
 
 /** The home centre-back on the ball at (-20, 0), two midfielders 15 m ahead, one with a defender closing in on him. */
