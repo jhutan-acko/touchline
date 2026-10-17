@@ -67,10 +67,46 @@ const median = (values: ReadonlyArray<number>): number => {
 
 const SET_PIECE: Readonly<Record<string, string>> = { corner: "corner", throw_in: "throw_in", goal_kick: "goal_kick", free_kick: "free_kick", kickoff: "kick_off", penalty: "penalty" }
 
+/**
+ * Events that are not feed events on their own in the real data (receptions, carries, pressure, runs, markers), so they
+ * are never the "next action" a pass is measured to. Everything else the sim emits is an on-ball action.
+ */
+export const NOT_ON_BALL_ACTION: ReadonlySet<string> = new Set([
+  "reception", "carry", "pressure", "off_ball_run", "possession_change", "ball_out", "set_piece", "substitution", "card",
+  "match_start", "period_start", "period_end", "match_end"
+])
+
+/**
+ * Pass length measured the way the real target is: kloppy sets a completed pass's receiver_coordinates to the start of
+ * the next event in the feed, so the length runs from the release point to where the next on-ball action starts
+ * (the receiver's first carry included; carries are not feed events in the real data, so a sim carry is never the end). The next action is the first on-ball event, by start frame, at or after the
+ * pass's reception frame and in the same period. With none, it falls back to the reception point.
+ */
+export const passLengths = (events: ReadonlyArray<DomainEvent>): number[] => {
+  const onBall = events.filter((e) => !NOT_ON_BALL_ACTION.has(e.type) && e.x !== null && e.y !== null).sort((a, b) => a.frame_id - b.frame_id)
+  const out: number[] = []
+  for (const p of events) {
+    if (p.type !== "pass" || p.outcome !== "successful" || p.x_end === null) continue
+    let end: readonly [number, number] = [p.x_end, p.y_end!]
+    if (p.frame_id_end !== null) {
+      let lo = 0, hi = onBall.length
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (onBall[mid]!.frame_id < p.frame_id_end) lo = mid + 1
+        else hi = mid
+      }
+      const next = onBall[lo]
+      if (next && next.period === p.period) end = [next.x!, next.y!]
+    }
+    out.push(Math.hypot(end[0] - p.x!, end[1] - p.y!))
+  }
+  return out
+}
+
 export const eventMetrics = (events: ReadonlyArray<DomainEvent>) => {
   const passes = events.filter((e) => e.type === "pass")
   const complete = passes.filter((e) => e.outcome === "successful")
-  const lengths = complete.filter((e) => e.x_end !== null).map((e) => Math.hypot(e.x_end! - e.x!, e.y_end! - e.y!))
+  const lengths = passLengths(events)
   const shots = events.filter((e) => e.type === "shot")
   const onTarget = shots.filter((e) => e.outcome === "goal" || e.outcome === "saved").length
   const sp = (k: string) => passes.filter((e) => SET_PIECE[String(e.attrs.restart ?? "")] === k).length

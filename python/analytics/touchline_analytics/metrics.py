@@ -11,6 +11,7 @@ test runs both on the same synthetic match.
 
 from __future__ import annotations
 
+import bisect
 import json
 import math
 from collections import defaultdict
@@ -186,22 +187,53 @@ def spatial_metrics(frames: Iterable[tuple], half_length: float = 52.5) -> dict:
 _SET_PIECE = {"corner": "corner", "throw_in": "throw_in", "goal_kick": "goal_kick", "free_kick": "free_kick", "kickoff": "kick_off", "penalty": "penalty"}
 
 
+# Events that are not feed events on their own in the real data (receptions, carries, pressure, runs, markers), so they are never
+# the "next action" a pass is measured to. Everything else the sim emits is an on-ball action. Mirrors NOT_ON_BALL_ACTION in metrics.ts.
+NOT_ON_BALL_ACTION = frozenset({
+    "reception", "carry", "pressure", "off_ball_run", "possession_change", "ball_out", "set_piece", "substitution", "card",
+    "match_start", "period_start", "period_end", "match_end"})
+
+
+def pass_lengths(events: list[dict]) -> list[float | None]:
+    """Length of each domain event: None unless a completed pass, else release point to where the next on-ball action starts.
+
+    Measured the way the real target is: kloppy sets a completed pass's receiver_coordinates to the start of the next
+    event in the feed, so the receiver's first carry is included. The next action is the first on-ball event, by start
+    frame (ties in stream order), at or after the pass's reception frame and in the same period. With none, the
+    reception point. Mirrors passLengths in metrics.ts.
+    """
+    on_ball = sorted((e for e in events if e["type"] not in NOT_ON_BALL_ACTION and e["x"] is not None and e["y"] is not None), key=lambda e: e["frame_id"])
+    frames = [e["frame_id"] for e in on_ball]
+    out: list[float | None] = []
+    for p in events:
+        if p["type"] != "pass" or p["outcome"] != "successful" or p["x_end"] is None:
+            out.append(None)
+            continue
+        ex, ey = p["x_end"], p["y_end"]
+        if p.get("frame_id_end") is not None:
+            i = bisect.bisect_left(frames, p["frame_id_end"])
+            if i < len(on_ball) and on_ball[i]["period"] == p["period"]:
+                ex, ey = on_ball[i]["x"], on_ball[i]["y"]
+        out.append(math.hypot(ex - p["x"], ey - p["y"]))
+    return out
+
+
 def touchline_events(domain_jsonl: Path) -> list[dict]:
     out = []
     with domain_jsonl.open() as fh:
-        for line in fh:
-            e = json.loads(line)
-            t = e["type"]
-            a = e["attrs"]
-            if t == "pass":
-                ok = e["outcome"] == "successful"
-                length = math.hypot(e["x_end"] - e["x"], e["y_end"] - e["y"]) if ok and e["x_end"] is not None else None
-                out.append({"type": "pass", "set_piece": _SET_PIECE.get(a.get("restart") or "", None), "complete": ok, "length": length, "goal": False, "on_target": False})
-            elif t == "shot":
-                sp = "penalty" if a.get("technique") == "penalty" else None
-                out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": e["outcome"] == "goal", "on_target": e["outcome"] in ("goal", "saved"), "blocked": e["outcome"] == "blocked"})
-            elif t in ("foul", "card"):
-                out.append({"type": t, "set_piece": None, "complete": False, "length": None, "goal": False, "on_target": False})
+        raw = [json.loads(line) for line in fh]
+    lengths = pass_lengths(raw)
+    for e, length in zip(raw, lengths):
+        t = e["type"]
+        a = e["attrs"]
+        if t == "pass":
+            ok = e["outcome"] == "successful"
+            out.append({"type": "pass", "set_piece": _SET_PIECE.get(a.get("restart") or "", None), "complete": ok, "length": length, "goal": False, "on_target": False})
+        elif t == "shot":
+            sp = "penalty" if a.get("technique") == "penalty" else None
+            out.append({"type": "shot", "set_piece": sp, "complete": False, "length": None, "goal": e["outcome"] == "goal", "on_target": e["outcome"] in ("goal", "saved"), "blocked": e["outcome"] == "blocked"})
+        elif t in ("foul", "card"):
+            out.append({"type": t, "set_piece": None, "complete": False, "length": None, "goal": False, "on_target": False})
     return out
 
 
