@@ -173,6 +173,12 @@ Expected: PASS with every drift exactly 0 (waves 0–2 change no switch). Then r
 
 Decisions taken while planning, where the spec was silent, ambiguous, or in conflict with the code or data. Task 10 copies them into the results.
 
+**User decisions (2026-10-18), on the planner's open questions:**
+- **Take-on win rate** (defender 0.70 against 0.48 real): report only, as NOT MET. P4 adds take-on fouls but does not change who wins.
+- **Penalties** (0.09 against 0.43): record as NOT MET; box occupancy is P5. Do not inflate box fouls to compensate, and do not widen the box foul factor's knob range for it.
+- **Gate fallback order in Task 10:** if switching everything on fails the gate, diagnose first, then switch off in this order: press (Task 7), transitions (Task 6), aerial (Task 5). Always keep the discipline fix (Task 4). Stop and report to the user before merging anything partial.
+- **Press-run speed** (real peak 5.1 m/s, sim 6.4): out of P4 scope; record it as a gap.
+
 1. **Params names.** The new blocks are `tackle` (T2), `fouls` (T3, ground T4), `aerial` (aerial T4), `transition` (A4) and `press` (A5 pressing). Existing blocks gain fields: `marking` gets `rule`, `laneShare`, `cbStepM` and `dropMps`; `firstTick` gets `scopeRule` (M5); `release` gets `capS` and `rejudge` (M6).
 2. **T2 terms** (tackle attempts in `duels()`; `step.ts:565` today). Under rule 1:
 
