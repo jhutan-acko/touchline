@@ -25,7 +25,7 @@ import {
   type Vec2,
   type Vec3
 } from "./geometry.js"
-import { assignMarks, markTarget, shieldTarget, steerCarry, supportSpot } from "./offball.js"
+import { assignMarks, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, supportersWanted, supportGate, supportSpot } from "./offball.js"
 import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
 import type { Action } from "./params.js"
 import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight } from "./resolve.js"
@@ -56,6 +56,7 @@ import {
   type Role,
   type StepResult,
   type SubsState,
+  type SupportGate,
   type TeamSetup
 } from "./types.js"
 import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, outShare, rowFor, settled, slotGeometry, type Blend, type SlotGeometry } from "./anchor.js"
@@ -195,6 +196,8 @@ class Work {
   anchor: AnchorState | undefined
   /** Recent high-intensity metres per player (P2, F1); absent while fatigue.tiring is 0. */
   load: Record<string, number> | undefined
+  /** Support rule 1 pressure gate (P3 Task 10d); absent while support.rule is 0 or nobody has the ball. */
+  supportGate: SupportGate | undefined
 
   constructor(s: MatchState) {
     this.cfg = s.config
@@ -228,6 +231,7 @@ class Work {
     this.seq = s.eventSeq
     this.anchor = s.anchor
     this.load = s.load ? { ...s.load } : undefined
+    this.supportGate = s.supportGate
   }
 
   get p() {
@@ -335,7 +339,8 @@ class Work {
       ...(this.override ? { override: this.override } : {}),
       ...(Object.values(this.subOrders).some((q) => q.length > 0) ? { subOrders: this.subOrders } : {}),
       ...(this.anchor ? { anchor: this.anchor } : {}),
-      ...(this.load ? { load: { ...this.load } } : {})
+      ...(this.load ? { load: { ...this.load } } : {}),
+      ...(this.supportGate ? { supportGate: this.supportGate } : {})
     }
   }
 }
@@ -453,7 +458,8 @@ const takerFor = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): P
   const team = w.active(r.side)
   if (r.restart === "goal_kick") return team.find((x) => x.role === "GK") ?? team[0]!
   if (r.restart === "kickoff") return team.find((x) => x.role === "ST") ?? team[team.length - 1]!
-  return team.filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, r.at) - dist(b.pos, r.at))[0]!
+  // With every outfielder sent off (only under a scripted red-card storm) the keeper takes it.
+  return team.filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, r.at) - dist(b.pos, r.at))[0] ?? team[0]!
 }
 
 const handleRestart = (w: Work): void => {
@@ -480,11 +486,20 @@ const ownedBy = (w: Work, pl: PlayerState, lastTouch: { readonly side: Side; rea
   return { ...base, inHands: true, holdTicks: Math.round(w.rng.keeper.range(lo, hi) / w.dt) }
 }
 
+/** A keeper who takes the ball in his hands is not pressed (handsRule): a press started on him at his feet ends now. */
+const endPressesOnHands = (w: Work): void => {
+  const pos = w.possession
+  if (pos.kind !== "owned" || pos.inHands !== true) return
+  for (const o of w.players)
+    if (o.intent.kind === "press" && o.intent.targetId === pos.playerId && w.tick < o.intentUntil) w.setPlayer({ ...o, intentUntil: w.tick })
+}
+
 const changePossession = (w: Work, to: PlayerState, reasonEvent: PendingEvent | null): void => {
   const prevSide = w.lastTouch?.side ?? null
   if (reasonEvent) w.emit(reasonEvent)
   if (prevSide !== null && prevSide !== to.side) w.emit(w.pending("possession_change", to, to.pos, { reason: reasonEvent?.type ?? "recovery" }))
   w.possession = ownedBy(w, to, w.lastTouch)
+  endPressesOnHands(w)
   w.lastTouch = { playerId: to.id, side: to.side }
   w.pressedBy = []
   w.setPlayer({ ...w.player(to.id), intent: { kind: "hold" }, intentUntil: w.tick + releaseDelayTicks(w, w.player(to.id)) })
@@ -1048,6 +1063,7 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
   if (f.winnerId) {
     const winner = w.player(f.winnerId)
     w.possession = ownedBy(w, winner, { side: f.side, playerId: f.fromId })
+    endPressesOnHands(w)
     if (w.lastTouch?.side !== winner.side) w.emit(w.pending("possession_change", winner, winner.pos, { reason: f.outcome }))
     w.lastTouch = { playerId: winner.id, side: winner.side }
     w.pressedBy = []
@@ -1287,7 +1303,8 @@ const moveTarget = (
   pl: PlayerState,
   ballFlat: Vec2,
   possSide: Side | null,
-  marks: ReadonlyMap<string, Vec2> | null
+  marks: ReadonlyMap<string, Vec2> | null,
+  sup: SupportTick | null
 ): { target: Vec2; speedCap: number; timeLeft?: number } => {
   const team = teamOf(w.cfg, pl.side)
   const vmax = vmaxFor(pl, pl.energy, w.p)
@@ -1375,15 +1392,28 @@ const moveTarget = (
       return { target, speedCap: vmax }
     }
   }
-  if (pos.kind === "owned" && possSide === pl.side && w.p.support.count > 0) {
+  const sp = w.p.support
+  // Rule 1 (P3 Task 10d): supporters come short only while the carrier is pressed, onto a ring distM out; everyone else
+  // keeps the spacing from an outfield carrier (real nearest teammates 8.9 / 13.3 / 17.2 m, offball-report T14). The gate,
+  // the supporters and the forward-line cap are judged once per tick before anyone moves (supportTick).
+  if (sup && possSide === pl.side) {
+    if (sup.supporters.has(pl.id))
+      return { target: supportSpot(sup.owner.pos, shape().target, pl.side, w.period, sup.opps, sp.distM, true), speedCap: vmax * sp.speedShare }
+    const s = shape()
+    const spaceM = spacingFor(sup.owner.pos, pl.side, w.period, sp)
+    if (spaceM <= 0 || sup.owner.role === "GK") return s
+    const target = spacedTarget(sup.owner.pos, s.target, pl.side, w.period, spaceM, sup.capU)
+    return target === s.target ? s : { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+  }
+  if (pos.kind === "owned" && possSide === pl.side && sp.count > 0) {
     const owner = w.player(pos.playerId)
     const supporters = w
       .active(pl.side)
       .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
-      .slice(0, w.p.support.count)
+      .slice(0, sp.count)
     if (supporters.some((x) => x.id === pl.id))
-      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), w.p.support.distM), speedCap: vmax * w.p.support.speedShare }
+      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), sp.distM), speedCap: vmax * sp.speedShare }
   }
   return shape()
 }
@@ -1403,15 +1433,49 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   return out
 }
 
+/** Support rule 1, judged once per tick before anyone moves: the carrier, the pressure gate, who comes short, the forward-line cap. */
+interface SupportTick {
+  readonly owner: PlayerState
+  readonly opps: ReadonlyArray<PlayerState>
+  readonly supporters: ReadonlySet<string>
+  /** Team-frame u that spacing may not push a teammate past: the opponents' last outfield defender minus lineCapM. */
+  readonly capU: number
+}
+
+/** The support rule 1 context for this tick, updating the gate's hysteresis state; null (and no gate) when the rule is off or nobody has the ball. */
+const supportTick = (w: Work): SupportTick | null => {
+  const sp = w.p.support
+  if (sp.rule <= 0 || w.possession.kind !== "owned") {
+    w.supportGate = undefined
+    return null
+  }
+  const owner = w.player(w.possession.playerId)
+  const opps = w.active(other(owner.side))
+  w.supportGate = supportGate(w.supportGate, owner.id, owner.pos, opps, sp, w.tick, w.dt)
+  const n = supportersWanted(w.supportGate.pressed, sp)
+  const supporters = new Set(
+    n > 0
+      ? w
+          .active(owner.side)
+          .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+          .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
+          .slice(0, n)
+          .map((x) => x.id)
+      : []
+  )
+  return { owner, opps, supporters, capU: lastDefenderAttackX(owner.side, w.period, opps) - w.p.positioning.lineCapM }
+}
+
 const moveAll = (w: Work): void => {
   const ballFlat = { x: w.ball.pos.x, y: w.ball.pos.y }
   const possSide =
     w.possession.kind === "owned" ? w.player(w.possession.playerId).side : w.possession.kind === "in_flight" ? w.possession.flight.side : null
   const marks = possSide !== null && w.p.marking.weight > 0 ? marksFor(w, other(possSide), ballFlat) : null
+  const sup = supportTick(w)
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, marks)
+    const { target, speedCap, timeLeft } = moveTarget(w, pl, ballFlat, possSide, marks, sup)
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)

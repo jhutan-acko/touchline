@@ -271,8 +271,15 @@ export interface Params {
   readonly runs: { readonly runInBehindRatePerS: number }
   /** D4 (P3): a teammate on a run gets the ball into the space where he will be when it arrives (at most leadMaxM along his run); nobody else gets a through target. rule 0: the old 8 m lead for anyone near the last defender. */
   readonly through: { readonly rule: number; readonly ballSpeed: number; readonly runSpeed: number; readonly leadMaxM: number }
-  /** Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off). */
-  readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number }
+  /**
+   * Support play: the `count` outfielders nearest the carrier offer an angle `distM` away, at `speedShare` of top speed (count 0 = off).
+   * rule 1 (P3 Task 10d): `count` come short only while the carrier is pressed (calmCount otherwise): an opponent within
+   * pressM (released when none is within pressExitM), judged once per tick, each decision held at least gateHoldS;
+   * their spot is on the distM circle, and every other teammate's target stays at least spaceM from an outfield carrier
+   * (easing to spaceAttM in the attacking third; 0 = no spacing), never pushed past the forward-line cap (positioning.lineCapM
+   * below the last defender). rule 0: the 2-nearest softmax spot at every moment of possession, no spacing.
+   */
+  readonly support: { readonly count: number; readonly distM: number; readonly speedShare: number; readonly rule: number; readonly pressM: number; readonly calmCount: number; readonly spaceM: number; readonly spaceAttM: number; readonly pressExitM: number; readonly gateHoldS: number }
   /** Marking: defenders pair with the nearest attacker within radiusM of their anchor and move `weight` of the way to goalSideM goal-side of them (weight 0 = off). */
   readonly marking: { readonly weight: number; readonly radiusM: number; readonly goalSideM: number; /** metres a marker may follow an attacker outside its own anchor's width */ readonly widthSlackM: number }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
@@ -583,7 +590,10 @@ export const DEFAULT_PARAMS: Params = {
   runs: { runInBehindRatePerS: 0.12 },
   // P3 D4 (plan 8c Task 6 may change the values, not rule).
   through: { rule: 1, ballSpeed: 14, runSpeed: 7, leadMaxM: 15 },
-  support: { count: 2, distM: 12, speedShare: 0.8 },
+  // P3 Task 10d. Real nearest non-carrier teammates in possession 8.9 / 13.3 / 17.2 m (offball-report T14); pressM is
+  // the carrier-report pressure bucket (5 m). Real teams crowd the ball more in the attacking third (nearest-3 mean
+  // 7.1-8.9 m there against 10.5-13.0 m in the defensive third, fit-report section 3), hence spaceAttM < spaceM.
+  support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
   marking: { weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4 },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
   shape: { width: 1, depth: 1, defDepth: 1 },
@@ -722,11 +732,20 @@ const checkRanges = (v: unknown, path: string): void => {
   if (v < 0) throw new ParamsError(`params field ${path} must not be negative (got ${v})`)
 }
 
+/** Support play (P3 Task 10d): whole numbers of supporters, a known rule, a release no tighter than the trigger, attacking-third spacing no wider. */
+const checkSupport = (s: Params["support"]): void => {
+  for (const k of ["count", "calmCount"] as const) if (!Number.isInteger(s[k])) throw new ParamsError(`params field support.${k} must be a whole number (got ${s[k]})`)
+  if (s.rule !== 0 && s.rule !== 1) throw new ParamsError(`params field support.rule must be 0 or 1 (got ${s.rule})`)
+  if (s.pressExitM < s.pressM) throw new ParamsError(`params field support.pressExitM must be at least support.pressM (got ${s.pressExitM} < ${s.pressM})`)
+  if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
   const merged = mergeInto(DEFAULT_PARAMS, json, "params") as Params
   const { provenance: _, ...values } = merged
   checkRanges(values, "")
+  checkSupport(merged.support)
   return merged
 }
