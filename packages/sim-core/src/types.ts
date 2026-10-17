@@ -384,6 +384,16 @@ export interface MatchState {
   readonly anchor?: AnchorState
   /** Recent high-intensity metres per player (fatigue.tiring); absent while it is 0. */
   readonly load?: Readonly<Record<string, number>>
+  /** Support rule 1 pressure gate for the current carrier (hysteresis); absent while support.rule is 0 or nobody has the ball. */
+  readonly supportGate?: SupportGate
+}
+
+/** Whether support rule 1 counts the carrier as pressed, and for which carrier that was judged. */
+export interface SupportGate {
+  readonly carrierId: string
+  readonly pressed: boolean
+  /** Tick the gate last changed (or was judged afresh for this carrier): it holds for support.gateHoldS after that. */
+  readonly sinceTick: number
 }
 
 export interface StepResult {

@@ -1,7 +1,7 @@
 import { defendersInLane } from "./decide.js"
 import { add, clampToPitch, dirOf, dist, len, norm, PITCH, scale, sub, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { Params } from "./params.js"
-import type { PlayerState } from "./types.js"
+import type { PlayerState, SupportGate } from "./types.js"
 
 /** Directions a supporter can offer around the carrier: every 45 degrees. */
 const ANGLES = Array.from({ length: 8 }, (_, i) => (i * Math.PI) / 4)
@@ -12,6 +12,10 @@ const FORWARD_BONUS = 0.1
 const SOFTMAX_T = 0.5
 /** Start of the attacking third in the team frame (the analysis zones: def < -17.5 <= mid <= 17.5 < att). */
 const ATT_THIRD_U = 17.5
+/** The spacing eases from spaceM to spaceAttM over this many metres of carrier u, centred on ATT_THIRD_U. */
+const ATT_BLEND_M = 10
+/** Below this distance from the carrier the push direction blends toward the player's own goal (a stable direction). */
+const SPACE_DIR_BLEND_M = 1
 
 /**
  * Where a supporter offers an angle: a softmax-weighted average of 8 spots `distM` around the carrier, each scored
@@ -40,32 +44,75 @@ export const supportSpot = (carrier: Vec2, anchor: Vec2, side: Side, period: Per
 }
 
 /**
- * Support rule 1: how many of the nearest outfielders come short. `count` when an opponent is within pressM of the
- * carrier, else calmCount. Real near open options rise under pressure (4-10 m: 0.39 per pass under 2 m, 0.38 at
- * 2-5 m, 0.23 unpressured; carrier-report C1).
+ * Support rule 1 pressure gate, judged once per tick before anyone moves, so a presser hovering around pressM does not
+ * flip the supporters every tick. Two dampers: a decision holds for gateHoldS (either way) before it may change, and a
+ * pressed carrier is released only when no opponent is within pressExitM (pressExitM = pressM: no band). A new
+ * carrier is judged afresh against pressM.
  */
-export const supportersWanted = (carrier: Vec2, opponents: ReadonlyArray<PlayerState>, s: Params["support"]): number => {
+export const supportGate = (
+  prev: SupportGate | undefined,
+  carrierId: string,
+  carrier: Vec2,
+  opponents: ReadonlyArray<PlayerState>,
+  s: Params["support"],
+  tick: number,
+  dt: number
+): SupportGate => {
   let near = Infinity
   for (const o of opponents) if (!o.sentOff) near = Math.min(near, dist(o.pos, carrier))
-  return near <= s.pressM ? s.count : s.calmCount
+  if (prev === undefined || prev.carrierId !== carrierId) return { carrierId, pressed: near <= s.pressM, sinceTick: tick }
+  if ((tick - prev.sinceTick) * dt < s.gateHoldS - 1e-9) return prev
+  const pressed = near <= (prev.pressed ? s.pressExitM : s.pressM)
+  return pressed === prev.pressed ? prev : { carrierId, pressed, sinceTick: tick }
 }
 
 /**
- * Support rule 1 spacing: a teammate's target closer than spaceM to the carrier moves straight out to spaceM, so he
- * does not crowd the ball (the same object back when it is already far enough). A target on the carrier goes back
- * toward the player's own goal. On the pitch.
+ * Support rule 1: how many of the nearest outfielders come short: `count` while the carrier is pressed, else
+ * calmCount. Real near open options rise under pressure (4-10 m: 0.39 per pass under 2 m, 0.38 at 2-5 m, 0.23
+ * unpressured; carrier-report C1).
  */
-export const spacedTarget = (carrier: Vec2, target: Vec2, side: Side, period: Period, spaceM: number): Vec2 => {
+export const supportersWanted = (pressed: boolean, s: Params["support"]): number => (pressed ? s.count : s.calmCount)
+
+/**
+ * Support rule 1 spacing: a teammate's target closer than spaceM to the carrier moves radially out to spaceM, so he
+ * does not crowd the ball (the same object back when it is already far enough). It is a projection, not a one-sided
+ * clamp: a teammate behind the carrier is pushed further back. Within 1 m of the carrier the direction blends toward
+ * the player's own goal, so it does not swing with centimetres of movement; a target on the carrier goes straight back.
+ * capU (team-frame u, e.g. the forward-line cap: last defender minus lineCapM): the push never takes a target past
+ * max(its own u, capU); the spot then slides sideways along the spaceM circle instead. On the pitch.
+ */
+export const spacedTarget = (carrier: Vec2, target: Vec2, side: Side, period: Period, spaceM: number, capU = Infinity): Vec2 => {
   const off = sub(target, carrier)
   const r = len(off)
   if (r >= spaceM) return target
-  const dir = r > 1e-6 ? scale(off, 1 / r) : { x: -dirOf(side, period), y: 0 }
-  return clampToPitch(add(carrier, scale(dir, spaceM)), 1)
+  const d = dirOf(side, period)
+  const back = { x: -d, y: 0 }
+  const k = Math.min(1, r / SPACE_DIR_BLEND_M)
+  const raw = r > 1e-9 ? add(scale(off, k / r), scale(back, 1 - k)) : back
+  const dir = len(raw) > 1e-6 ? norm(raw) : back
+  let p = add(carrier, scale(dir, spaceM))
+  const tu = d * target.x
+  const pu = d * p.x
+  if (pu > tu && pu > capU) {
+    const u = Math.max(tu, capU)
+    const du = u - d * carrier.x
+    const dy = Math.sqrt(Math.max(0, spaceM * spaceM - du * du))
+    const side0 = p.y - carrier.y
+    const sgn = Math.abs(side0) > 1e-9 ? Math.sign(side0) : target.y !== carrier.y ? Math.sign(target.y - carrier.y) : carrier.y > 0 ? -1 : 1
+    p = { x: d * u, y: carrier.y + sgn * dy }
+  }
+  return clampToPitch(p, 1)
 }
 
-/** Support rule 1: the spacing around a carrier, spaceAttM once he is in the attacking third (team-frame u > 17.5 m), else spaceM. */
-export const spacingFor = (carrier: Vec2, side: Side, period: Period, s: Params["support"]): number =>
-  dirOf(side, period) * carrier.x > ATT_THIRD_U ? s.spaceAttM : s.spaceM
+/**
+ * Support rule 1: the spacing around a carrier: spaceM in his own half of the pitch, spaceAttM in the attacking third,
+ * eased linearly over carrier u 12.5-22.5 m (team frame) so it does not jump at the line.
+ */
+export const spacingFor = (carrier: Vec2, side: Side, period: Period, s: Params["support"]): number => {
+  const u = dirOf(side, period) * carrier.x
+  const t = Math.max(0, Math.min(1, (u - (ATT_THIRD_U - ATT_BLEND_M / 2)) / ATT_BLEND_M))
+  return s.spaceM + (s.spaceAttM - s.spaceM) * t
+}
 
 /** Greedy one-to-one marking: the closest (defender anchor, attacker) pairs within radiusM are taken first; ties by id. */
 export const assignMarks = (

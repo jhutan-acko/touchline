@@ -51,10 +51,10 @@ describe("states and forks", () => {
   it("drop forced outcomes whose window has ended, so a state taken inside a forced window plays on like the main run", () => {
     // A goal forced for the home side in minutes 0-2 that never came: from a state inside the window, it must lapse at minute 2.
     const script: Script = { name: "t", entries: [{ window: [0, 2], team: "home", effect: "goal", count: 9 }] }
-    // Seed 13: no goal in the first two minutes (a goal would use the entry up before its window ends). Re-picked for P3
-    // Task 10d (support rule 1), the first that qualifies (scan of seeds 1-30: 13, 16, 20, 26, 27, 28; none in 1-12.
-    // Task 10 had 3, 5 and 8; Task 8b had 1, 2, 3, 6, 10 and 11).
-    let s: MatchState = { ...initMatch(makeConfig(13, { script })), forced: [script.entries[0]!] }
+    // Seed 1: no goal in the first two minutes (a goal would use the entry up before its window ends). Re-picked for P3
+    // Task 10d fix round 1 (support gate held 1 s), the first that qualifies (scan of seeds 1-30: 1, 2, 5, 8, 10, 16, 18,
+    // 26, 27, 28. Task 10d had 13; Task 10 had 3, 5 and 8; Task 8b had 1, 2, 3, 6, 10 and 11).
+    let s: MatchState = { ...initMatch(makeConfig(1, { script })), forced: [script.entries[0]!] }
     const minute = (st: MatchState) => (st.period === "first_half" ? 0 : 45) + (st.periodTick * st.config.dt) / 60
     while (minute(s) < 2) s = step(s).state
     expect(s.forced.length).toBeGreaterThan(0)
