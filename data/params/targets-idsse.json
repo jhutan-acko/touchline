@@ -251,13 +251,14 @@
   }
  },
  "duels": {
-  "source": "realism v2 analysis 2026-10-13 (tackles-report.md, transitions-report.md, finalthird-report.md B2, carrier-report.md C1); spec P4 for defender, attacker and aerial fouls; IDSSE, 7 matches; aggregates only. Bands are plan 8d rulings.",
+  "source": "realism v2 analysis 2026-10-13 (tackles-report.md, transitions-report.md, finalthird-report.md B2, carrier-report.md C1); spec P4 for defender, attacker and aerial fouls; IDSSE, 7 matches; aggregates only. Support rows: tackles.json real.defender_win_by_n3 (defenders within 3 m of the carrier, tackler included): none = 0.36 (n 326, info); exactly 1 = 0.51 (n 599); 2 or more = 0.60 (n 142 x 0.61 + 16 x 0.50). Bands are plan 8d rulings.",
   "rows": {
    "tackle_win": {"label": "Tackle attempts won by the defender", "real": 0.48, "lo": 0.43, "hi": 0.53, "fmt": "{:.3f}"},
    "tackle_win_front": {"label": "Tackle attempts won, approach from the front", "real": 0.54, "lo": 0.49, "hi": 0.59, "fmt": "{:.3f}"},
-   "tackle_win_behind": {"label": "Tackle attempts won, approach from behind", "real": 0.45, "lo": 0.4, "hi": 0.5, "fmt": "{:.3f}"},
-   "tackle_win_alone": {"label": "Tackle attempts won, no supporting defender within 5 m", "real": 0.36, "lo": 0.31, "hi": 0.41, "fmt": "{:.3f}"},
-   "tackle_win_support": {"label": "Tackle attempts won, a supporting defender within 5 m", "real": 0.6, "lo": 0.55, "hi": 0.65, "fmt": "{:.3f}"},
+   "tackle_win_behind": {"label": "Tackle attempts won, approach from the side or behind (60° or more)", "real": 0.45, "lo": 0.4, "hi": 0.5, "fmt": "{:.3f}"},
+   "tackle_win_none_3m": {"label": "Tackle attempts won, no defender within 3 m, tackler included (info; no sim analogue)", "real": 0.36, "lo": null, "hi": null, "fmt": "{:.3f}"},
+   "tackle_win_alone": {"label": "Tackle attempts won, tackler the only defender within 3 m", "real": 0.51, "lo": 0.45, "hi": 0.57, "fmt": "{:.3f}"},
+   "tackle_win_supported": {"label": "Tackle attempts won, 2 or more defenders within 3 m (tackler included)", "real": 0.60, "lo": 0.54, "hi": 0.66, "fmt": "{:.3f}"},
    "take_on_def_win": {"label": "Take-ons won by the defender (info)", "real": null, "lo": null, "hi": null, "fmt": "{:.3f}"},
    "ground_duel_def_win": {"label": "Ground duels (tackle attempts and take-ons) won by the defender (info)", "real": null, "lo": null, "hi": null, "fmt": "{:.3f}"},
    "ground_duels_per_match": {"label": "Ground duels per match (tackle attempts and take-ons)", "real": 154.7, "lo": 135, "hi": 175, "fmt": "{:.1f}"},

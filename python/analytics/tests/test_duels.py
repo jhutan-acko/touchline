@@ -47,10 +47,10 @@ def _write(tmp_path, sub, n, layout, events, period_of=lambda f: "first_half"):
 
 
 def _tackles(tmp_path):
-    """Home carrier h5 standing at the origin; a5 tackles four times (frames 10, 20, 30, 40); a6 supports at 4 m only at 30."""
+    """Home carrier h5 standing at the origin; a5 tackles four times (frames 10, 20, 30, 40); a6 supports at 2.5 m only at 30."""
     def layout(f):
         tackler = (1.5, 0.0) if f < 25 else (-1.5, 0.0)
-        support = (0.0, 4.0) if 25 <= f < 35 else (0.0, 20.0)
+        support = (0.0, 2.5) if 25 <= f < 35 else (0.0, 20.0)
         return {**HOME_REST, "h5": (0.0, 0.0)}, {**AWAY_REST, "a5": tackler, "a6": support}, (0.0, 0.0), True, "H"
 
     events = [_ev("tackle", 10, "a5", "A", outcome="won", opponent_id="h5", ball="won"),
@@ -64,12 +64,12 @@ def test_tackle_win_split_by_bearing_and_support(tmp_path):
     s = summarize([match_duels(_tackles(tmp_path), ROLES)])
     assert s["tackle_win"] == 0.5
     assert s["tackle_win_front"] == 0.5 and s["tackle_win_behind"] == 0.5
-    assert math.isclose(s["tackle_win_alone"], 1 / 3) and s["tackle_win_support"] == 1.0
+    assert math.isclose(s["tackle_win_alone"], 1 / 3) and s["tackle_win_supported"] == 1.0
     assert s["ground_duels_per_match"] == 4
 
 
 def test_take_on_tackle_is_not_a_tackle_attempt(tmp_path):
-    # A lost take-on also emits a won tackle by the beaten-for-the-ball defender (step.ts take_on): one ground duel, not two.
+    # A lost take-on also emits a won tackle with no `ball` attr (step.ts take_on): one ground duel, not two (tk_analysis.py).
     def layout(f):
         return {**HOME_REST, "h5": (0.0, 0.0)}, {**AWAY_REST, "a5": (1.5, 0.0)}, (0.0, 0.0), True, "H"
 
@@ -91,6 +91,16 @@ def test_standing_carrier_uses_attack_direction(tmp_path):
         assert s["tackle_win_front"] == 1.0 and math.isnan(s["tackle_win_behind"])
     # The same spot in the second half is behind him.
     s = run("wrong", "second_half", 1)
+    assert s["tackle_win_behind"] == 1.0 and math.isnan(s["tackle_win_front"])
+
+
+def test_side_approach_pools_with_behind(tmp_path):
+    # A tackler level with a standing carrier (90 deg from his attack direction) counts as behind, as in the real 0.45.
+    def layout(f):
+        return {**HOME_REST, "h5": (0.0, 0.0)}, {**AWAY_REST, "a5": (0.0, 1.5)}, (0.0, 0.0), True, "H"
+
+    events = [_ev("tackle", 10, "a5", "A", outcome="won", opponent_id="h5", ball="won")]
+    s = summarize([match_duels(_write(tmp_path, "m", 20, layout, events), ROLES)])
     assert s["tackle_win_behind"] == 1.0 and math.isnan(s["tackle_win_front"])
 
 
@@ -166,3 +176,18 @@ def test_duels_rows_have_targets(tmp_path):
     md = "\n".join(duels_section(ms, t))
     assert "| Tackle attempts won by the defender | 0.480 | 0.500 | 0.430–0.530 | MET |" in md
     assert "≥ 64 matches" in md
+
+
+def test_support_counts_defenders_within_3m_tackler_included(tmp_path):
+    # A second defender at 4 m does not count; one at 2.5 m does (the keeper counts too, as in tk_real_events.py n3).
+    def run(sub, at, who):
+        def layout(f):
+            return {**HOME_REST, "h5": (0.0, 0.0)}, {**AWAY_REST, "a5": (1.5, 0.0), who: at}, (0.0, 0.0), True, "H"
+
+        events = [_ev("tackle", 10, "a5", "A", outcome="won", opponent_id="h5", ball="won")]
+        return summarize([match_duels(_write(tmp_path, sub, 20, layout, events), ROLES)])
+
+    s = run("far", (0.0, 4.0), "a6")
+    assert s["tackle_win_alone"] == 1.0 and math.isnan(s["tackle_win_supported"])
+    s = run("near", (0.0, 2.5), "a0")
+    assert s["tackle_win_supported"] == 1.0 and math.isnan(s["tackle_win_alone"])

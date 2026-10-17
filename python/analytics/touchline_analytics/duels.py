@@ -4,11 +4,13 @@ Definitions are ported from the 2026-10-13 analysis scripts (tk_analysis.py, tra
 carrier-report C1); only aggregates are committed. Keys and real values: targets-idsse.json "duels". Events and tracking
 frames are read as passing.py reads them: an event's positions are the tracking frame with its period and period frame id.
 
-- Tackle attempts: `tackle` events with outcome won, lost or foul; the defender wins on won. The won tackle that step.ts
-  emits for a lost take-on (same frame, same defender) is the take-on's record, not a tackle attempt (as tk_analysis.py).
-  Approach: the tackler's bearing from the carrier against the carrier's velocity (frames +-1 tick), or against his attack
-  direction below 1 m/s; front under 60 deg, behind from 120 deg. Support: the tackler's outfield teammates within 5 m of
-  the carrier (plan 8d ruling 2). A ground duel is a tackle attempt or a `take_on`.
+- Tackle attempts, as tk_analysis.py: `tackle` events with outcome lost or foul, or won with `attrs.ball` (the won tackle
+  step.ts emits for a lost take-on has no `ball`: it is the take-on's record). The defender wins on won.
+  Approach, as tk_sim_events.ts / tk_real_events.py: the tackler's bearing from the carrier against the carrier's velocity
+  (frames +-1 tick) when he moves faster than 1 m/s, else against his attack direction; front under 60 deg, behind
+  (side and behind pooled, as the real 0.45) from 60 deg. Support, as tk_real_events.py n3: the carrier's
+  opponents within 3 m of him, the tackler and keepers included; alone = exactly 1, supported = 2 or more (fix round 1;
+  the real 0-within-3-m bin has no sim analogue). A ground duel is a tackle attempt or a `take_on`.
 - Fouls by `attrs.kind`: defender = tackle or take_on, attacker = shielding, aerial = aerial. Free kicks within 30 m: a
   `set_piece` free kick whose spot is within 30 m of the goal its side attacks, outside the box (as the real count).
   Penalties as report.balance(). Yellows: yellow or second_yellow; sent off: second_yellow or red. Cards per foul: cards
@@ -47,7 +49,7 @@ from .metrics import tracking_metrics
 from .passing import _attack, _cell, options
 
 GRID_S = 0.2
-FRONT_DEG, BEHIND_DEG, HEADING_MIN_MPS, SUPPORT_M = 60.0, 120.0, 1.0, 5.0
+FRONT_DEG, HEADING_MIN_MPS, SUPPORT_M = 60.0, 1.0, 3.0
 BOX_U, BOX_W, HALF_L, THIRD = 36.0, 20.16, 52.5, 17.5
 PREV_MIN_S, REGAIN_S, RESTART_EXCL_S = 5.0, 5.0, 10.0
 JOIN_BINS = ((0, 5), (5, 10), (10, 15), (15, 20), (20, 30))
@@ -58,16 +60,16 @@ PERIODS = {"first_half": 1, "second_half": 2}
 
 
 def _bearing_bin(rx: float, ry: float, vx: float, vy: float, attack: int) -> str | None:
-    """front / side / behind: the tackler at (rx, ry) from the carrier, against the carrier's velocity or, below 1 m/s, his attack direction."""
+    """front / behind: the tackler at (rx, ry) from the carrier, against the carrier's velocity or, at 1 m/s or less, his attack direction."""
     if not all(map(math.isfinite, (rx, ry))) or math.hypot(rx, ry) < 1e-9:
         return None
-    if math.isfinite(vx) and math.isfinite(vy) and math.hypot(vx, vy) >= HEADING_MIN_MPS:
+    if math.isfinite(vx) and math.isfinite(vy) and math.hypot(vx, vy) > HEADING_MIN_MPS:
         ref = (vx, vy)
     else:
         ref = (float(attack), 0.0)
     c = (rx * ref[0] + ry * ref[1]) / (math.hypot(rx, ry) * math.hypot(*ref))
     deg = math.degrees(math.acos(max(-1.0, min(1.0, c))))
-    return "front" if deg < FRONT_DEG else "behind" if deg >= BEHIND_DEG else "side"
+    return "front" if deg < FRONT_DEG else "behind"
 
 
 def _read_tracking(run: Path, home: str):
@@ -117,18 +119,14 @@ def _vel_native(T: dict, i: int, j: int, fps: float) -> tuple[float, float]:
     return (T["X"][hi, j] - T["X"][lo, j]) * k, (T["Y"][hi, j] - T["Y"][lo, j]) * k
 
 
-def _duel_events(m: dict, events: list[dict], T: dict, row: dict, roles: dict[str, str], side_of, fps: float) -> None:
+def _duel_events(m: dict, events: list[dict], T: dict, row: dict, side_of, fps: float) -> None:
     """Tackle attempts, take-ons, fouls, cards and restarts into m."""
     cols = T["cols"]
-    lost_take_ons = {(e["period"], e["period_frame_id"], e["attrs"].get("defender_id")) for e in events
-                     if e["type"] == "take_on" and e["attrs"].get("outcome") == "lost"}
     for e in events:
         t, a = e["type"], e["attrs"]
         if t == "take_on":
             m["take_ons"].append(a.get("outcome") == "lost")
-        elif t == "tackle" and a.get("outcome") in ("won", "lost", "foul"):
-            if a.get("outcome") == "won" and (e["period"], e["period_frame_id"], e["player_id"]) in lost_take_ons:
-                continue
+        elif t == "tackle" and (a.get("outcome") in ("lost", "foul") or (a.get("outcome") == "won" and "ball" in a)):
             won = a["outcome"] == "won"
             i = row.get((PERIODS[e["period"]], e["period_frame_id"]))
             jt, jc = cols.get(e["player_id"]), cols.get(a.get("opponent_id"))
@@ -140,8 +138,7 @@ def _duel_events(m: dict, events: list[dict], T: dict, row: dict, roles: dict[st
             attack = _attack("home" if T["side"][jc] == 0 else "away", e["period"])
             b = _bearing_bin(T["X"][i, jt] - cx, T["Y"][i, jt] - cy, vx, vy, attack)
             d = np.hypot(T["X"][i] - cx, T["Y"][i] - cy)
-            mates = (T["side"] == T["side"][jt]) & np.isfinite(d) & (d <= SUPPORT_M) & (np.arange(len(d)) != jt)
-            n = sum(1 for j in np.where(mates)[0] if roles.get(T["ids"][j]) != "GK")
+            n = int(((T["side"] == T["side"][jt]) & np.isfinite(d) & (d <= SUPPORT_M)).sum())
             m["tackles"].append((won, b, n))
         elif t == "foul":
             m["fouls"][a.get("kind")] += 1
@@ -383,7 +380,7 @@ def match_duels(run: Path, roles: dict[str, str]) -> dict:
     m = {"tackles": [], "take_ons": [], "fouls": Counter(), "yellows": 0, "sent_off": 0, "foul_cards": 0, "aerials": 0, "penalties": 0, "fk30": 0,
          "opts": [], "regain": [], "join": [], "reach5": [], "cp_speed": [], "back4": (np.zeros(len(K)), np.zeros(len(K))),
          "speed": (np.zeros(len(K)), np.zeros(len(K))), "press_eps": [], "press_base": Counter(), "press_runs": [], "open_s": 0.0}
-    _duel_events(m, events, T, row, roles, side_of, fps)
+    _duel_events(m, events, T, row, side_of, fps)
     _options(m, events, T, row, roles)
     G = _grid(T, fps, roles)
     _losses(m, G)
@@ -433,8 +430,9 @@ def summarize(ms: list[dict]) -> dict:
             "tackle_win": win(tk),
             "tackle_win_front": win([r for r in tk if r[1] == "front"]),
             "tackle_win_behind": win([r for r in tk if r[1] == "behind"]),
-            "tackle_win_alone": win([r for r in tk if r[2] == 0]),
-            "tackle_win_support": win([r for r in tk if r[2] is not None and r[2] >= 1]),
+            "tackle_win_none_3m": win([r for r in tk if r[2] == 0]),
+            "tackle_win_alone": win([r for r in tk if r[2] == 1]),
+            "tackle_win_supported": win([r for r in tk if r[2] is not None and r[2] >= 2]),
             "take_on_def_win": _mean(take_ons),
             "ground_duel_def_win": _mean([w for w, _, _ in tk] + take_ons),
             "ground_duels_per_match": (len(tk) + len(take_ons)) / n,

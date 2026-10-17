@@ -2,7 +2,7 @@
 
 16 synthetic matches (calib-2026-10-17; held-out seeds 2000–2015).
 
-Note: the P3 engine, before any P4 change (`pnpm realism --matches 16 --only duels`). Aerial duels read 8.1 per match here; the plan's figure of about 19 comes from the 2026-10-13 analysis on the parameters of that date. Support counts the tackler's outfield teammates within 5 m of the carrier (plan 8d ruling 2); the real split it is compared with counted opponents within 3 m.
+Note: the P3 engine, before any P4 change (`pnpm realism --matches 16 --only duels`). Aerial duels read 8.1 per match here; the plan's figure of about 19 comes from the 2026-10-13 analysis on the parameters of that date. Support rows count the carrier's opponents within 3 m, tackler included, as the real data (tk_real_events.py n3); the real no-defender-within-3-m bin (0.36) has no sim analogue and is shown for information. "Side or behind" pools every approach of 60° or more, as the real 0.45 does.
 
 ## Duels, transitions and pressing (realism v2, P4)
 
@@ -10,9 +10,10 @@ Note: the P3 engine, before any P4 change (`pnpm realism --matches 16 --only due
 |---|---|---|---|---|
 | Tackle attempts won by the defender | 0.480 | 0.517 | 0.430–0.530 | MET |
 | Tackle attempts won, approach from the front | 0.540 | 0.566 | 0.490–0.590 | MET |
-| Tackle attempts won, approach from behind | 0.450 | 0.485 | 0.400–0.500 | MET |
-| Tackle attempts won, no supporting defender within 5 m | 0.360 | 0.517 | 0.310–0.410 | NOT MET |
-| Tackle attempts won, a supporting defender within 5 m | 0.600 | 0.528 | 0.550–0.650 | NOT MET |
+| Tackle attempts won, approach from the side or behind (60° or more) | 0.450 | 0.510 | 0.400–0.500 | NOT MET |
+| Tackle attempts won, no defender within 3 m, tackler included (info; no sim analogue) | 0.360 | n/a | — | — |
+| Tackle attempts won, tackler the only defender within 3 m | 0.510 | 0.519 | 0.450–0.570 | MET |
+| Tackle attempts won, 2 or more defenders within 3 m (tackler included) | 0.600 | 0.523 | 0.540–0.660 | NOT MET |
 | Take-ons won by the defender (info) | — | 0.706 | — | — |
 | Ground duels (tackle attempts and take-ons) won by the defender (info) | — | 0.593 | — | — |
 | Ground duels per match (tackle attempts and take-ons) | 154.7 | 150.9 | 135.0–175.0 | MET |
