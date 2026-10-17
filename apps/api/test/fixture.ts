@@ -19,8 +19,10 @@ export const league = JSON.parse(readFileSync(join(root, "data/league/league.jso
 // ball, 2026-10-10). It also gives three goals; the cue cache needs two. Seed 19 since realism v2 P1 (2026-10-14: keeper in
 // hands, conduct cautions, stronger goal nudge): first goal 20:46, the second at 46:15, after the half-time recap. The
 // evidence test needs five minutes of play before the first goal. Seed 2 since realism v2 P2 (2026-10-15: rule-table
-// positioning, recalibrated, goal nudge 2): the first of 1-30 that fits, first goal 31:41, the second at 64:48.
-const SEED = 2
+// positioning, recalibrated, goal nudge 2): the first of 1-30 that fits, first goal 31:41, the second at 64:48. Seed 5 since
+// realism v2 P3 (2026-10-17: pass choice, release timing, support rule 1; seed 2's first goal moved to 02:24): the first of
+// 1-30 that fits, first goal 39:50 (50 s into its minute), the second at 55:48.
+const SEED = 5
 export const MATCH_ID = `lib-err-${SEED}`
 const fixture = (f: string) => (JSON.parse(readFileSync(join(root, "packages/schema/fixtures/agents/valid", f), "utf8")) as { value: unknown }).value
 
