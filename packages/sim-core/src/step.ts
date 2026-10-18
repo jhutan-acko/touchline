@@ -86,6 +86,7 @@ import { aerialWinShare } from "./resolve.js"
 import { joinChance, pauseTarget, recoverRate, windowTicks } from "./transition.js"
 
 // ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
+import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "./press.js"
 
 // ---- P4 imports, marking seam (plan 8d Task 8 inserts below this line)
 
@@ -1631,9 +1632,14 @@ export const transitionMove = (w: Work, pl: PlayerState, base: MoveTarget, possS
 /**
  * A5: an out-of-possession outfielder's press on `owner` (movement stream): a live press carries on, else the nearest
  * defender (two in a scripted surge) may start one at the hazard. Null when he does not press. rule 0: the old press.
+ * Rule 1 (rulings 13-15, G28): the presser is the best by presserScore within 18 m (the top two within 25 m in a
+ * surge); the hazard gains rateScale x pressLift (back to goal, own third); a live first presser within secondM may
+ * bring a second presser (press stream, once per first press), who takes the cover-shadow spot. The caller never
+ * calls it for a keeper with the ball in his hands or for a side in its counter-press window.
  * @internal
  */
 export const teamPressMove = (w: Work, pl: PlayerState, owner: PlayerState, vmax: number, keeperFactor: number): MoveTarget | null => {
+  if (w.p.press.rule > 0) return teamPressMoveA5(w, pl, owner, vmax, keeperFactor)
   if (pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id)
     return { target: interceptPoint(pl.pos, vmax, owner.pos, owner.vel), speedCap: vmax }
   const defenders = w.active(pl.side).filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
@@ -1651,8 +1657,79 @@ export const teamPressMove = (w: Work, pl: PlayerState, owner: PlayerState, vmax
   return null
 }
 
-/** A5: `receiver` has just received a completed pass from flight `f` (the back-to-goal trigger). rule 0: nothing. @internal */
-export const noteReception = (_w: Work, _receiver: PlayerState, _f: Flight): void => {}
+const NO_PRESS: PressState = { reception: null, secondFor: null, secondId: null }
+
+/** A5 rule 1: teamPressMove's body (see there). */
+const teamPressMoveA5 = (w: Work, pl: PlayerState, owner: PlayerState, vmax: number, keeperFactor: number): MoveTarget | null => {
+  const pr = w.p.press
+  const ps = w.press ?? NO_PRESS
+  const intercept = (x: PlayerState): MoveTarget => ({ target: interceptPoint(x.pos, vmax, owner.pos, owner.vel), speedCap: vmax })
+  const pressing = (x: PlayerState): boolean => x.intent.kind === "press" && w.tick < x.intentUntil && x.intent.targetId === owner.id
+  const live = pressing(pl)
+  // Outfielders ranked by presserScore (distance / roleWeight); the ranking makes no draw. `free`: only those not already pressing him.
+  const ranked = (radiusM: number, free: boolean): PlayerState[] =>
+    w
+      .active(pl.side)
+      .filter((x) => x.role !== "GK" && !(free && pressing(x)) && dist(x.pos, owner.pos) < radiusM)
+      .map((x) => ({ x, s: presserScore(dist(x.pos, owner.pos), x.role, pr) }))
+      .sort((a, b) => a.s - b.s)
+      .map((e) => e.x)
+  if (live && ps.secondId === pl.id) {
+    // The second presser: the cover shadow toward the carrier's nearest teammate.
+    const mate = w.active(owner.side).filter((x) => x.id !== owner.id).sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))[0]
+    return mate ? { target: shadowSpot(owner.pos, mate.pos, pr.shadowM), speedCap: vmax } : intercept(pl)
+  }
+  // The current first press's second-presser draw is settled while the presser it was drawn for still presses him
+  // (secondFor: whose draw it was; null: not drawn yet). Several live first pressers (a surge, or a rank change during
+  // a press) share one draw: whoever is first within secondM makes it, and nobody draws again until that press ends.
+  const drawnFor = ps.secondFor !== null ? w.players.find((x) => x.id === ps.secondFor) : undefined
+  const settled = drawnFor !== undefined && pressing(drawnFor)
+  // A live first presser within secondM: one press draw for the next-best within secondRadiusM who is not pressing yet.
+  const second = (first: PlayerState, from: PressState): void => {
+    if (dist(first.pos, owner.pos) > pr.secondM) return
+    const next = ranked(pr.secondRadiusM, true).find((x) => x.id !== first.id)
+    let secondId: string | null = null
+    if (next && w.rng.press.chance(pr.secondShare)) {
+      secondId = next.id
+      w.setPlayer({ ...next, intent: { kind: "press", targetId: owner.id }, intentUntil: first.intentUntil })
+    }
+    w.press = { ...from, secondFor: first.id, secondId }
+  }
+  if (live) {
+    if (!settled) second(pl, ps)
+    return intercept(pl)
+  }
+  // The best by score presses; in a scripted press surge the top two do, from further away (G28).
+  const surge = w.mods(pl.side).surge
+  const presser = ranked(surge ? 25 : 18, false)
+    .slice(0, surge ? 2 : 1)
+    .some((x) => x.id === pl.id)
+  if (!presser) return null
+  const style = teamOf(w.cfg, pl.side).style
+  const urgency = 1 + w.p.defending.boxIntensity * danger(pl.side, w.period, owner.pos)
+  const lift = pressLift(backToGoalHolds(ps.reception, owner.id, w.tick, w.dt, pr), inOwnThird(w.ball.pos, pl.side, w.period, pr), pr)
+  const rate = w.p.defending.pressRatePerS * (0.4 + 1.2 * style.pressIntensity) * urgency * w.mods(pl.side).press * keeperFactor * triggerFactor(w, pl) * pr.rateScale * lift
+  if (!w.rng.movement.chance(hazard(rate, w.dt))) return null
+  const first = { ...pl, intent: { kind: "press" as const, targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) }
+  w.setPlayer(first)
+  // A new first press: its second-presser draw comes now if he is within secondM, else once a first presser gets there.
+  // While an earlier first press's draw is settled (a surge's second starter, or a rank change), it is not redrawn.
+  if (!settled) {
+    w.press = { ...ps, secondFor: null, secondId: null }
+    second(first, w.press)
+  }
+  return intercept(pl)
+}
+
+/**
+ * A5: `receiver` has just received a completed pass from flight `f` (the back-to-goal trigger): the ball's speed toward
+ * the opponents' goal as it arrives is noted. rule 0: nothing. @internal
+ */
+export const noteReception = (w: Work, receiver: PlayerState, f: Flight): void => {
+  if (w.p.press.rule <= 0 || f.kind !== "pass") return
+  const ballMps = w.ball.vel.x * dirOf(receiver.side, w.period)
+  w.press = { ...(w.press ?? NO_PRESS), reception: { playerId: receiver.id, tick: w.tick, ballMps } }
+}
 
 // ================================================================ end of P4 team-press seam
 
