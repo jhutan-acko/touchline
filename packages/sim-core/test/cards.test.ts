@@ -71,4 +71,41 @@ describe("cards", () => {
     }
     expect(later.filter((e) => e.player_id === ownerId)).toEqual([])
   })
+
+  it("a free kick with every outfielder sent off is taken by the keeper", () => {
+    // Deferred P3 test (P4 ruling 22). distribution.rule 1, so a keeper's distribution would be labelled if it were one.
+    const p: Params = { ...P, distribution: { ...P.distribution, rule: 1 } }
+    const s0 = initMatch(makeConfig(7, { params: p }))
+    const gk = s0.players.find((x) => x.side === "home" && x.role === "GK")!
+    const players = s0.players.map((x) => (x.side === "home" && x.role !== "GK" ? { ...x, sentOff: true } : x))
+    // precondition: home has no active outfielder
+    expect(players.filter((x) => x.side === "home" && x.role !== "GK" && !x.sentOff)).toHaveLength(0)
+    const fk = { x: gk.pos.x + 3, y: gk.pos.y + 2 }
+    let s: MatchState = {
+      ...s0, players, tick: 50, periodTick: 50,
+      phase: { kind: "restart", restart: "free_kick", side: "home", at: fk, resumeTick: 51 },
+      possession: { kind: "dead" }, ball: { pos: { ...fk, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
+    }
+    const events: DomainEvent[] = []
+    let setPiece: DomainEvent | undefined
+    for (let i = 0; i < 300 && !setPiece; i++) {
+      const r = step(s)
+      s = r.state
+      events.push(...r.events)
+      setPiece = r.events.find((e) => e.type === "set_piece")
+    }
+    expect(setPiece).toBeDefined()
+    expect(setPiece!.attrs.kind).toBe("free_kick")
+    expect(setPiece!.player_id).toBe(gk.id)
+    // G17: he takes it as a free kick, not a distribution: play on until he kicks it (alone, he clears it), and no keeper_distribution is emitted
+    let released = false
+    for (let i = 0; i < 300 && !released; i++) {
+      const r = step(s)
+      s = r.state
+      events.push(...r.events)
+      released = r.events.some((e) => e.player_id === gk.id && ["pass", "clearance", "shot"].includes(e.type))
+    }
+    expect(released).toBe(true)
+    expect(events.filter((e) => e.type === "keeper_distribution")).toEqual([])
+  })
 })

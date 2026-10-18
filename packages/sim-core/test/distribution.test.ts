@@ -51,6 +51,16 @@ describe("G5: from the keeper's hands", () => {
     expect(decide(input({ restart: "goal_kick" }), on, r).candidate?.method).toBeUndefined()
     expect(decide(input({}), off, r).candidate?.method).toBeUndefined()
   })
+  it("a keeper taking a free kick has no throw or punt", () => {
+    // Deferred P3 test (P4 ruling 22, G17): a free kick taken by the keeper in his own half, like the goal-kick case.
+    expect(keeper.pos.x).toBeLessThan(0)
+    const r = new Rng(seedRng(9))
+    for (let i = 0; i < 50; i++) {
+      const d = decide(input({ restart: "free_kick" }), on, r)
+      expect(d.candidate).toBeDefined()
+      expect(d.candidate?.method).toBeUndefined()
+    }
+  })
   it("records action probabilities by each option's classified action, summing to 1, with the chosen action among them", () => {
     const r = new Rng(seedRng(11))
     const seen = new Set<string>()
