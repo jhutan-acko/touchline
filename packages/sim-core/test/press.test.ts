@@ -5,6 +5,7 @@ import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
 import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "../src/press.js"
 import { initMatch, isFinished, noteReception, step, teamPressMove, workAt } from "../src/step.js"
 import { makeConfig } from "../src/testing.js"
+import type { Script } from "../src/script.js"
 import type { Flight, MatchState, PlayerState, Possession, Role, TransitionState } from "../src/types.js"
 
 // Explicit on and off (F4): Task 10 flips the defaults. The keeper-hands rule is pinned on (the keeper test needs it),
@@ -12,8 +13,10 @@ import type { Flight, MatchState, PlayerState, Possession, Role, TransitionState
 // Role weights are pinned here (G19): Task 7 Step 3 retunes the defaults, and these tests must not read tuned values.
 const WEIGHTS: Params["press"]["roleWeight"] = { CB: 0.6, FB: 0.9, DM: 1, CM: 1, AM: 0.8, W: 1, ST: 0.7 }
 const base: Params = { ...P, keeper: { ...P.keeper, handsRule: 1 }, transition: { ...P.transition, rule: 0 } }
-const off: Params = { ...base, press: { ...P.press, rule: 0, roleWeight: WEIGHTS } }
-const on: Params = { ...base, press: { ...P.press, rule: 1, roleWeight: WEIGHTS } }
+// rateScale and secondShare are pinned at the plan's start values too, so no case rests on Task 7's tuned ones.
+const PINNED = { roleWeight: WEIGHTS, rateScale: 1, secondShare: 0.45 }
+const off: Params = { ...base, press: { ...P.press, rule: 0, ...PINNED } }
+const on: Params = { ...base, press: { ...P.press, rule: 1, ...PINNED } }
 /** The hazard forced (under either rule): a chosen presser starts on the first tick. */
 const forced = (p: Params, press: Partial<Params["press"]> = {}): Params => ({ ...p, defending: { ...p.defending, pressRatePerS: 1e6 }, press: { ...p.press, ...press } })
 const PR = on.press
@@ -30,9 +33,9 @@ interface Place {
  */
 const fixture = (
   p: Params,
-  o: { place: Record<string, Place>; carrier: string; dt?: number; period?: Period; inHands?: boolean; ballVel?: Vec2; transition?: TransitionState; intents?: Record<string, Pick<PlayerState, "intent" | "intentUntil">> }
+  o: { place: Record<string, Place>; carrier: string; dt?: number; period?: Period; inHands?: boolean; ballVel?: Vec2; transition?: TransitionState; intents?: Record<string, Pick<PlayerState, "intent" | "intentUntil">>; script?: Script }
 ): MatchState => {
-  const s0 = initMatch(makeConfig(7, { params: p, dt: o.dt ?? 0.1 }))
+  const s0 = initMatch(makeConfig(7, { params: p, dt: o.dt ?? 0.1, ...(o.script ? { script: o.script } : {}) }))
   const players = s0.players.map((pl, i): PlayerState => {
     const q = o.place[pl.id]
     const far = { x: pl.side === "home" ? -50 + i : 50 - i, y: -33 }
@@ -195,8 +198,6 @@ describe("A5 team pressing: the second presser", () => {
 
     // secondShare 0: nobody joins.
     expect(livePressOn(join({ ...on, press: { ...on.press, secondShare: 0 } }, 10), ACM).map((x) => x.id)).toEqual([HCM])
-    // The first presser at 14 m (beyond secondM 12): nobody joins.
-    expect(livePressOn(join({ ...on, press: { ...on.press, secondShare: 1 } }, 14), ACM).map((x) => x.id)).toEqual([HCM])
     // rule 0: nobody joins.
     expect(livePressOn(join({ ...off, press: { ...off.press, secondShare: 1 } }, 10), ACM).map((x) => x.id)).toEqual([HCM])
   })
@@ -209,6 +210,76 @@ describe("A5 team pressing: the second presser", () => {
     // Precondition: the first press is still live over these ticks.
     expect(livePressOn(s, ACM).map((x) => x.id)).toContain(HCM)
     expect(s.rng.press).toEqual(after1)
+  })
+
+  it("no second presser while the first is beyond secondM; he is drawn once the first gets within it", () => {
+    // The first presser starts 14 m away and runs in: on every tick he ends more than 12 m away, nobody joins and the
+    // press stream is not drawn; the draw comes on the tick he is first within 12 m (secondShare 1: the W joins).
+    let s = scene({ ...on, press: { ...on.press, secondShare: 1 } }, 14)
+    let beyond = 0
+    let joined = false
+    for (let k = 0; k < 30 && !joined; k++) {
+      const before = s
+      s = step(s).state
+      const first = s.players.find((x) => x.id === HCM)!
+      // Precondition: the first presser is still pressing.
+      expect(livePressOn(s, ACM).map((x) => x.id)).toContain(HCM)
+      if (dist(first.pos, s.players.find((x) => x.id === ACM)!.pos) > PR.secondM) {
+        beyond++
+        expect(livePressOn(s, ACM).map((x) => x.id)).toEqual([HCM])
+        expect(s.rng.press).toEqual(before.rng.press)
+      } else joined = livePressOn(s, ACM).some((x) => x.id === HW)
+    }
+    expect(beyond).toBeGreaterThan(0)
+    expect(joined).toBe(true)
+  })
+
+  /** Two first pressers already live on the away CM (home CM at 10 m, home W at 9 m); a free home CB 7 m off; the carrier's nearest teammate the away CB. */
+  const twoLive = (share: number): MatchState =>
+    fixture(forced({ ...on, press: { ...on.press, secondShare: share } }), {
+      carrier: ACM,
+      place: { [ACM]: { pos: { x: 0, y: 0 } }, [HCM]: { pos: { x: -10, y: 0 } }, [HW]: { pos: { x: 0, y: -9 } }, [HCB]: { pos: { x: -5, y: -5 } }, [ACB]: { pos: { x: 0, y: 8 } } },
+      intents: { [HCM]: { intent: { kind: "press", targetId: ACM }, intentUntil: T0 + 30 }, [HW]: { intent: { kind: "press", targetId: ACM }, intentUntil: T0 + 25 } }
+    })
+
+  it("two live first pressers share one second-presser draw", () => {
+    let s = twoLive(0)
+    let draws = 0
+    for (let k = 0; k < 12; k++) {
+      const before = s.rng.press
+      s = step(s).state
+      // Precondition: both are still pressing.
+      expect(livePressOn(s, ACM).map((x) => x.id).sort()).toEqual([HCM, HW].sort())
+      if (JSON.stringify(s.rng.press) !== JSON.stringify(before)) draws++
+    }
+    // secondShare 0: one draw for the pair (it fails), never one per tick.
+    expect(draws).toBe(1)
+  })
+
+  it("with two live first pressers, the second presser is a new player and no live press is extended", () => {
+    const s0 = twoLive(1)
+    let s = s0
+    for (let k = 0; k < 5; k++) s = step(s).state
+    const live = livePressOn(s, ACM)
+    expect(live.map((x) => x.id).sort()).toEqual([HCM, HW, HCB].sort())
+    expect(s.press?.secondId).toBe(HCB)
+    // The first pressers keep their own ends.
+    expect(s.players.find((x) => x.id === HCM)!.intentUntil).toBe(T0 + 30)
+    expect(s.players.find((x) => x.id === HW)!.intentUntil).toBe(T0 + 25)
+  })
+
+  it("in a press surge the top two by score within 25 m press (G28)", () => {
+    // CB 8 m (8 / 0.6 = 13.3), W 12 m (12), CM 13 m (13): the nearest two are CB and W, the best two by score W and CM.
+    const surge: Script = { name: "surge", entries: [{ window: [0, 45], team: "home", effect: "press_surge" }] }
+    const place = { [ACM]: { pos: { x: 0, y: 0 } }, [HCB]: { pos: { x: -8, y: 0 } }, [HW]: { pos: { x: 0, y: 12 } }, [HCM]: { pos: { x: 0, y: -13 } } }
+    const starters = (p: Params, script?: Script): string[] =>
+      livePressOn(step(fixture(forced(p, { secondShare: 0 }), { carrier: ACM, place, ...(script ? { script } : {}) })).state, ACM)
+        .map((x) => x.id)
+        .sort()
+    // Preconditions: rule 0's surge takes the nearest two; without a surge only the best by score presses.
+    expect(starters(off, surge)).toEqual([HCB, HW].sort())
+    expect(starters(on)).toEqual([HW])
+    expect(starters(on, surge)).toEqual([HW, HCM].sort())
   })
 
   it("no team press, first or second, for a side in its counter-press window", () => {

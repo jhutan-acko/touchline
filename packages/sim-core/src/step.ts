@@ -1632,12 +1632,13 @@ const teamPressMoveA5 = (w: Work, pl: PlayerState, owner: PlayerState, vmax: num
   const pr = w.p.press
   const ps = w.press ?? NO_PRESS
   const intercept = (x: PlayerState): MoveTarget => ({ target: interceptPoint(x.pos, vmax, owner.pos, owner.vel), speedCap: vmax })
-  const live = pl.intent.kind === "press" && w.tick < pl.intentUntil && pl.intent.targetId === owner.id
-  // Outfielders ranked by presserScore (distance / roleWeight); the ranking makes no draw.
-  const ranked = (radiusM: number, except: string | null): PlayerState[] =>
+  const pressing = (x: PlayerState): boolean => x.intent.kind === "press" && w.tick < x.intentUntil && x.intent.targetId === owner.id
+  const live = pressing(pl)
+  // Outfielders ranked by presserScore (distance / roleWeight); the ranking makes no draw. `free`: only those not already pressing him.
+  const ranked = (radiusM: number, free: boolean): PlayerState[] =>
     w
       .active(pl.side)
-      .filter((x) => x.role !== "GK" && x.id !== except && dist(x.pos, owner.pos) < radiusM)
+      .filter((x) => x.role !== "GK" && !(free && pressing(x)) && dist(x.pos, owner.pos) < radiusM)
       .map((x) => ({ x, s: presserScore(dist(x.pos, owner.pos), x.role, pr) }))
       .sort((a, b) => a.s - b.s)
       .map((e) => e.x)
@@ -1646,10 +1647,15 @@ const teamPressMoveA5 = (w: Work, pl: PlayerState, owner: PlayerState, vmax: num
     const mate = w.active(owner.side).filter((x) => x.id !== owner.id).sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))[0]
     return mate ? { target: shadowSpot(owner.pos, mate.pos, pr.shadowM), speedCap: vmax } : intercept(pl)
   }
-  // A live first presser within secondM: one press draw per first press for the next-best within secondRadiusM.
+  // The current first press's second-presser draw is settled while the presser it was drawn for still presses him
+  // (secondFor: whose draw it was; null: not drawn yet). Several live first pressers (a surge, or a rank change during
+  // a press) share one draw: whoever is first within secondM makes it, and nobody draws again until that press ends.
+  const drawnFor = ps.secondFor !== null ? w.players.find((x) => x.id === ps.secondFor) : undefined
+  const settled = drawnFor !== undefined && pressing(drawnFor)
+  // A live first presser within secondM: one press draw for the next-best within secondRadiusM who is not pressing yet.
   const second = (first: PlayerState, from: PressState): void => {
-    if (from.secondFor === first.id || dist(first.pos, owner.pos) > pr.secondM) return
-    const next = ranked(pr.secondRadiusM, first.id)[0]
+    if (dist(first.pos, owner.pos) > pr.secondM) return
+    const next = ranked(pr.secondRadiusM, true).find((x) => x.id !== first.id)
     let secondId: string | null = null
     if (next && w.rng.press.chance(pr.secondShare)) {
       secondId = next.id
@@ -1658,12 +1664,12 @@ const teamPressMoveA5 = (w: Work, pl: PlayerState, owner: PlayerState, vmax: num
     w.press = { ...from, secondFor: first.id, secondId }
   }
   if (live) {
-    second(pl, ps)
+    if (!settled) second(pl, ps)
     return intercept(pl)
   }
   // The best by score presses; in a scripted press surge the top two do, from further away (G28).
   const surge = w.mods(pl.side).surge
-  const presser = ranked(surge ? 25 : 18, null)
+  const presser = ranked(surge ? 25 : 18, false)
     .slice(0, surge ? 2 : 1)
     .some((x) => x.id === pl.id)
   if (!presser) return null
@@ -1674,9 +1680,12 @@ const teamPressMoveA5 = (w: Work, pl: PlayerState, owner: PlayerState, vmax: num
   if (!w.rng.movement.chance(hazard(rate, w.dt))) return null
   const first = { ...pl, intent: { kind: "press" as const, targetId: owner.id }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 4) / w.dt) }
   w.setPlayer(first)
-  // A new first press: its second-presser draw comes now if he is within secondM, else once he gets there.
-  w.press = { ...ps, secondFor: null, secondId: null }
-  second(first, w.press)
+  // A new first press: its second-presser draw comes now if he is within secondM, else once a first presser gets there.
+  // While an earlier first press's draw is settled (a surge's second starter, or a rank change), it is not redrawn.
+  if (!settled) {
+    w.press = { ...ps, secondFor: null, secondId: null }
+    second(first, w.press)
+  }
   return intercept(pl)
 }
 
