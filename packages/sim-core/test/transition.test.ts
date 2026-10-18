@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
 import { attackX, dist, type Period, type Vec2 } from "../src/geometry.js"
 import { vmaxFor } from "../src/kinematics.js"
@@ -38,6 +39,8 @@ const fixture = (
     tick?: number
     period?: Period
     inHands?: boolean
+    /** The ball loose (no owner) instead of at the carrier's feet. */
+    loose?: boolean
     transition?: TransitionState
     seed?: number
   }
@@ -50,7 +53,7 @@ const fixture = (
     const far = { x: pl.side === "home" ? -50 + i : 50 - i, y: -33 }
     return { ...pl, pos: q?.pos ?? far, vel: q?.vel ?? { x: 0, y: 0 }, sentOff: q?.sentOff ?? false }
   })
-  const possession: Possession = { kind: "owned", playerId: o.carrier, since: tick, restart: null, ...(o.inHands ? { inHands: true, holdTicks: 100 } : {}) }
+  const possession: Possession = o.loose ? { kind: "loose" } : { kind: "owned", playerId: o.carrier, since: tick, restart: null, ...(o.inHands ? { inHands: true, holdTicks: 100 } : {}) }
   const carrier = players.find((x) => x.id === o.carrier)!
   return {
     ...s0,
@@ -293,6 +296,32 @@ describe("A4 transitions: the seam", () => {
     })
   }
 
+  it("a loser chasing a loose ball keeps chasing it: no recovery run starts or carries on (forced rate 50 at 5.5 s)", () => {
+    const forced: Params = { ...on, transition: { ...on.transition, recoverRatePerS: 50 } }
+    // The ST 2 m upfield of the ball: home's nearest to it, so one of moveTarget's two loose-ball chasers.
+    const place = { [ACM]: { pos: { x: -6, y: 0 } }, [HST]: { pos: { x: 2, y: 0 } } }
+    const tr: TransitionState = { loser: "home", tick: T0, at: { x: 0, y: 0 }, joiners: [] }
+    const at = (loose: boolean, seed: number) =>
+      workAt(fixture(forced, 0.1, { place, carrier: ACM, ball: { x: 0, y: 0 }, tick: T0 + 55, transition: tr, loose, seed }))
+    let owned = 0
+    for (let seed = 1; seed <= 20; seed++) {
+      // Precondition: with the ball at the opponent's feet the same player starts a run (hazard 0.993 a tick).
+      const wo = at(false, seed)
+      transitionMove(wo, wo.player(HST), BASE, "away")
+      if (wo.player(HST).intent.kind === "recover") owned++
+      // Loose: he keeps chasing (base), and no run starts.
+      const wl = at(true, seed)
+      expect(transitionMove(wl, wl.player(HST), BASE, null)).toBe(BASE)
+      expect(wl.player(HST).intent.kind).not.toBe("recover")
+    }
+    expect(owned).toBeGreaterThanOrEqual(18)
+    // A run already under way ends when he becomes a chaser.
+    const wr = at(true, 1)
+    wr.setPlayer({ ...wr.player(HST), intent: { kind: "recover", target: { x: -30, y: 0 } }, intentUntil: wr.tick + 20 })
+    expect(transitionMove(wr, wr.player(HST), BASE, null)).toBe(BASE)
+    expect(wr.player(HST).intentUntil).toBe(wr.tick)
+  })
+
   it("rule off returns base unchanged", () => {
     const tr: TransitionState = { loser: "home", tick: T0, at: { x: 0, y: 0 }, joiners: [HCB] }
     const place = { [ACM]: { pos: { x: 0, y: 0 } }, [HCB]: { pos: { x: -4, y: 0 } }, [HCM]: { pos: { x: 20, y: 0 }, vel: { x: 3, y: 0 } } }
@@ -307,6 +336,33 @@ describe("A4 transitions: the seam", () => {
 })
 
 describe("A4 transitions in a match", () => {
+  it("rule 0 is inert: a match is identical whatever the other transition values (seed 7, 1500 ticks)", () => {
+    const perturbed: Params = {
+      ...P,
+      transition: {
+        rule: 0, windowS: 10, joinM: [10, 20, 30, 40, 50], joinP: [1, 1, 1, 1, 1], speed: 1, pauseS: 10, pauseShare: 0.1, pauseRadiusM: 1,
+        recoverFromS: 0, recoverPeakS: [0.5, 1], recoverToS: 20, recoverRatePerS: 50, recoverBehindFactor: 1, recoverUpfieldM: 5, recoverS: [5, 6], recoverSpeedShare: 0.2
+      }
+    }
+    const hash = (p: Params): { h: string; losses: number } => {
+      const md = createHash("sha256")
+      let s: MatchState = initMatch(makeConfig(7, { params: p }))
+      let losses = 0
+      for (let i = 0; i < 1500 && !isFinished(s); i++) {
+        const r = step(s)
+        s = r.state
+        md.update(JSON.stringify(r.frame)).update(JSON.stringify(r.events))
+        losses += r.events.filter((e) => e.type === "possession_change").length
+        expect(s.transition).toBeUndefined()
+      }
+      return { h: md.digest("hex"), losses }
+    }
+    const a = hash(off)
+    // Non-vacuous: live-play losses happen in the window (each would draw joiners under rule 1).
+    expect(a.losses).toBeGreaterThan(10)
+    expect(hash(perturbed).h).toBe(a.h)
+  })
+
   for (const dt of [0.1, 0.04]) {
     it(`losses draw about two joiners (seed 7, dt ${dt}); no counter-presser targets a keeper holding the ball`, () => {
       let s: MatchState = initMatch(makeConfig(7, { params: on, dt }))
