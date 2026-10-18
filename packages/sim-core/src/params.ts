@@ -745,10 +745,13 @@ export const DEFAULT_PARAMS: Params = {
     rule: 0, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
     recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.05, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9
   },
-  // P4 A5 team pressing (spec item A5; rule 0: the old behaviour).
+  // P4 A5 team pressing (spec item A5; rule 0: the old behaviour). Task 7 tuned rateScale and roleWeight with tackle,
+  // transition, marking and press on (16 held-out matches): press episodes 428/90 (real 405), >=3 engaged 0.060 (0.049);
+  // team-press starts (counter-press joiners excluded) CM .334 W .216 FB .151 AM .060 ST .123 CB .116 (real .37/.19/.13/.11/.11/.10).
+  // secondShare stays 0.45 (offball-report B2): 0.35 left the >=3 engaged share unchanged.
   press: {
-    rule: 0, rateScale: 1, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
-    roleWeight: { CB: 0.6, FB: 0.9, DM: 1, CM: 1, AM: 0.8, W: 1, ST: 0.7 }, secondM: 12, secondRadiusM: 15, secondShare: 0.45, shadowM: 4
+    rule: 0, rateScale: 0.1, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
+    roleWeight: { CB: 0.6, FB: 0.8, DM: 1, CM: 0.9, AM: 1.6, W: 1.4, ST: 0.55 }, secondM: 12, secondRadiusM: 15, secondShare: 0.45, shadowM: 4
   },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
