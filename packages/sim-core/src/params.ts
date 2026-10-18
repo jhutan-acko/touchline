@@ -743,7 +743,7 @@ export const DEFAULT_PARAMS: Params = {
   // P4 A4 transitions (spec item A4; rule 0: the old behaviour).
   transition: {
     rule: 0, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
-    recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.1, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9
+    recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.05, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9
   },
   // P4 A5 team pressing (spec item A5; rule 0: the old behaviour).
   press: {

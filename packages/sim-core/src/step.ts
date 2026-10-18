@@ -82,6 +82,7 @@ import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 import { aerialWinShare } from "./resolve.js"
 
 // ---- P4 imports, transition seam (plan 8d Task 6 inserts below this line)
+import { joinChance, pauseTarget, recoverRate, windowTicks } from "./transition.js"
 
 // ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
 
@@ -1481,14 +1482,115 @@ export interface MoveTarget {
 
 // ================================================================ P4 transition seam (plan 8d Task 6 owns this block)
 
-/** A4: `loser` has just lost the ball in live play, the ball at `at` (counter stream for the joins). rule 0: nothing. @internal */
-export const noteLoss = (_w: Work, _loser: Side, _at: Vec2): void => {}
+/**
+ * Whether the ball is a keeper's, in his hands (A4: nobody counter-presses him). The same condition as moveTarget's
+ * `keeperHolding` (outside this seam, so not shared): handsRule on, a GK owner, inHands, in his own box.
+ */
+const keeperHasItInHands = (w: Work): boolean => {
+  const pos = w.possession
+  if (w.p.keeper.handsRule <= 0 || pos.kind !== "owned" || pos.inHands !== true) return false
+  const owner = w.player(pos.playerId)
+  return owner.role === "GK" && inOwnBox(owner.side, w.period, owner.pos)
+}
+
+/**
+ * A4: `loser` has just lost the ball in live play, the ball at `at` (counter stream for the joins). rule 0: nothing.
+ * Rule 1 (rulings 9, 10): the last transition's joiners stop pressing; each active losing outfielder joins the
+ * counter-press with joinChance(distance to `at`), one counter draw each in player order; joiners carry a press intent
+ * on the winner (the opponent at `at`) until the window ends, unless he has the ball in his hands (G8).
+ * @internal
+ */
+export const noteLoss = (w: Work, loser: Side, at: Vec2): void => {
+  const t = w.p.transition
+  if (t.rule <= 0) return
+  const prev = w.transition
+  // A joiner substituted off since has left the player list (his place has the new id): skip him.
+  if (prev)
+    for (const id of prev.joiners) {
+      const x = w.players.find((p) => p.id === id)
+      if (x && x.intent.kind === "press" && w.tick < x.intentUntil) w.setPlayer({ ...x, intentUntil: w.tick })
+    }
+  const joiners: string[] = []
+  for (const pl of w.active(loser)) {
+    if (pl.role === "GK") continue
+    const p = joinChance(dist(pl.pos, at), t)
+    if (p > 0 && w.rng.counter.chance(p)) joiners.push(pl.id)
+  }
+  w.transition = { loser, tick: w.tick, at, joiners }
+  const winner = w.active(other(loser)).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0]
+  if (!winner) return
+  const pos = w.possession
+  // At an interception the winner already owns the ball; a keeper's catch is not pressed (G8). In changePossession the
+  // possession is still the old one, and endPressesOnHands ends these intents if he takes it in his hands.
+  if (pos.kind === "owned" && pos.playerId === winner.id && pos.inHands === true) return
+  const until = w.tick + windowTicks(t.windowS, w.dt)
+  for (const id of joiners) w.setPlayer({ ...w.player(id), intent: { kind: "press", targetId: winner.id }, intentUntil: until })
+}
 
 /** A4: whether `side` is counter-pressing now (its hazard-started team press is off). rule 0: never. @internal */
-export const inCounterWindow = (_w: Work, _side: Side): boolean => false
+export const inCounterWindow = (w: Work, side: Side): boolean => {
+  const t = w.transition
+  return w.p.transition.rule > 0 && t !== undefined && t.loser === side && w.tick - t.tick < windowTicks(w.p.transition.windowS, w.dt)
+}
 
-/** A4: a losing player's movement in a transition (counter-press, reaction pause, recovery run) over `base`. rule 0: `base` itself. @internal */
-export const transitionMove = (_w: Work, _pl: PlayerState, base: MoveTarget, _possSide: Side | null): MoveTarget => base
+/**
+ * Whether `pl` chases the loose ball in moveTarget: one of the two on his side nearest it, keeper never. The same rule as
+ * moveTarget's loose-ball branch (outside this seam, so not shared): the keeper counts among the two nearest there too,
+ * but does not chase.
+ */
+const chasesLooseBall = (w: Work, pl: PlayerState, ballFlat: Vec2): boolean =>
+  pl.role !== "GK" && w.active(pl.side).sort((a, b) => dist(a.pos, ballFlat) - dist(b.pos, ballFlat)).slice(0, 2).some((c) => c.id === pl.id)
+
+/**
+ * A4: a losing player's movement in a transition (counter-press, reaction pause, recovery run) over `base`. rule 0: `base` itself.
+ * Rule 1 (rulings 10-12): `base` during restarts, for the ball owner, for timeLeft chases, for keepers and for
+ * loose-ball chasers (who also end any recovery run); a recovery run under way carries on while the ball is lost; a
+ * joiner in the window counter-presses (at transition.speed); a non-joiner beyond pauseRadiusM holds course for pauseS;
+ * from recoverFromS to recoverToS others may start a recovery run (counter stream).
+ * @internal
+ */
+export const transitionMove = (w: Work, pl: PlayerState, base: MoveTarget, possSide: Side | null): MoveTarget => {
+  const t = w.p.transition
+  if (t.rule <= 0) return base
+  const pos = w.possession
+  if (w.phase.kind === "restart" || pl.role === "GK" || base.timeLeft !== undefined || (pos.kind === "owned" && pos.playerId === pl.id)) return base
+  const cur = w.player(pl.id)
+  const vmax = vmaxFor(cur, cur.energy, w.p)
+  const run = cur.intent.kind === "recover" && w.tick < cur.intentUntil ? cur.intent : null
+  const ballFlat = { x: w.ball.pos.x, y: w.ball.pos.y }
+  // His side has the ball back, or he is one of its loose-ball chasers: transition moves (a recovery run too) are over.
+  if (possSide === pl.side || (pos.kind === "loose" && chasesLooseBall(w, cur, ballFlat))) {
+    if (run) w.setPlayer({ ...cur, intentUntil: w.tick })
+    return base
+  }
+  if (run) return { target: run.target, speedCap: t.recoverSpeedShare * vmax }
+  const tr = w.transition
+  if (!tr || tr.loser !== pl.side) return base
+  const sinceTicks = w.tick - tr.tick
+  const joiner = tr.joiners.includes(pl.id)
+  const pressing = joiner && sinceTicks < windowTicks(t.windowS, w.dt)
+  if (pressing) {
+    if (pos.kind === "owned") {
+      if (keeperHasItInHands(w)) return base
+      const owner = w.player(pos.playerId)
+      return { target: interceptPoint(cur.pos, Math.min(t.speed, vmax), owner.pos, owner.vel), speedCap: t.speed }
+    }
+    // Loose-ball chasers returned base above.
+    if (pos.kind === "loose")
+      return { target: interceptPoint(cur.pos, Math.min(t.speed, vmax), ballFlat, { x: w.ball.vel.x, y: w.ball.vel.y }), speedCap: t.speed }
+    return base
+  }
+  if (!joiner && sinceTicks < windowTicks(t.pauseS, w.dt) && dist(cur.pos, ballFlat) > t.pauseRadiusM) return pauseTarget(cur.pos, cur.vel, vmax, t)
+  // A recovery run: not while counter-pressing or on a live press, and only while the ball is still lost.
+  if (cur.intent.kind === "press" && w.tick < cur.intentUntil) return base
+  const uRel = attackX(pl.side, cur.pos.x, w.period) - attackX(pl.side, ballFlat.x, w.period)
+  const rate = recoverRate(sinceTicks * w.dt, uRel, t)
+  if (rate <= 0 || !w.rng.counter.chance(hazard(rate, w.dt))) return base
+  const target = shapeTarget(w, cur, ballFlat, false)
+  const until = w.tick + Math.max(1, windowTicks(w.rng.counter.range(t.recoverS[0], t.recoverS[1]), w.dt))
+  w.setPlayer({ ...cur, intent: { kind: "recover", target }, intentUntil: until })
+  return { target, speedCap: t.recoverSpeedShare * vmax }
+}
 
 // ================================================================ end of P4 transition seam
 
