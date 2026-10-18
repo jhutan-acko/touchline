@@ -77,6 +77,7 @@ import { releaseDelayS } from "./release.js"
 import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 
 // ---- P4 imports, foul seam (plan 8d Task 4 inserts below this line)
+import { angleFactor, zoneFactor } from "./fouls.js"
 
 // ---- P4 imports, aerial seam (plan 8d Task 5 inserts below this line)
 import { aerialWinShare } from "./resolve.js"
@@ -606,21 +607,52 @@ export const tackleWinLogit = (w: Work, def: PlayerState, owner: PlayerState): n
 
 // ================================================================ P4 foul seam (plan 8d Task 4 owns this block)
 
-/** T3: the chance that `def`, having lost his tackle on `owner`, fouls him (one referee draw). rule 0: the flat rate, x boxFoulFactor in the box. @internal */
+/** Whether `at` is in the box that `side` attacks. */
+const inAttackedBox = (side: Side, at: Vec2, period: Period): boolean =>
+  attackX(side, at.x, period) > PITCH.halfL - PITCH.boxDepth && Math.abs(at.y) < PITCH.boxHalfWidth
+
+/** A player's foul chance multiplier for being booked (bookedFoulFactor once he has a yellow). */
+const bookedFoul = (w: Work, pl: PlayerState): number => (pl.yellow >= 1 ? w.p.defending.bookedFoulFactor : 1)
+
+/** T3 (rule 1): the zone x angle factor of `def`'s challenge on `victim`, measured in the victim's frame at his position. */
+const challengeFactor = (w: Work, def: PlayerState, victim: PlayerState): number =>
+  foulZone(w, victim, victim.pos) * angleFactor(bearingOf(victim.pos, victim.vel, dirOf(victim.side, w.period), def.pos, w.p.tackle), w.p.fouls)
+
+/**
+ * T3: the chance that `def`, having lost his tackle on `owner`, fouls him (one referee draw). rule 1: foulPerTackle x zone
+ * x angle. rule 0: the flat rate, x boxFoulFactor in the box. Both x mods.foul x booked.
+ * @internal
+ */
 export const foulChance = (w: Work, def: PlayerState, owner: PlayerState): number => {
-  const victimInBox = attackX(owner.side, owner.pos.x, w.period) > PITCH.halfL - PITCH.boxDepth && Math.abs(owner.pos.y) < PITCH.boxHalfWidth
-  const booked = def.yellow >= 1 ? w.p.defending.bookedFoulFactor : 1
-  return Math.min(1, w.p.defending.foulPerTackle * (victimInBox ? w.p.defending.boxFoulFactor : 1) * w.mods(def.side).foul * booked)
+  const where = w.p.fouls.rule === 1 ? challengeFactor(w, def, owner) : inAttackedBox(owner.side, owner.pos, w.period) ? w.p.defending.boxFoulFactor : 1
+  return Math.min(1, w.p.defending.foulPerTackle * where * w.mods(def.side).foul * bookedFoul(w, def))
 }
 
-/** T4: whether the carrier `owner` fouls the tackler `def` (shielding or holding; foul stream). rule 0: never, no draw. @internal */
-export const shieldingFoul = (_w: Work, _def: PlayerState, _owner: PlayerState): boolean => false
+/**
+ * T4: whether the carrier `owner` fouls the tackler `def` (shielding or holding): only a carrier slower than
+ * shieldSpeedMax, with chance attackerShare x his booked factor x his side's mods.foul (foul stream, drawn only then).
+ * rule 0: never, no draw.
+ * @internal
+ */
+export const shieldingFoul = (w: Work, _def: PlayerState, owner: PlayerState): boolean => {
+  const f = w.p.fouls
+  if (f.rule !== 1 || Math.hypot(owner.vel.x, owner.vel.y) >= f.shieldSpeedMax) return false
+  return w.rng.foul.chance(Math.min(1, f.attackerShare * bookedFoul(w, owner) * w.mods(owner.side).foul))
+}
 
-/** T3: whether the beaten defender `def` fouls `owner`, who has just won a take-on (foul stream). rule 0: never, no draw. @internal */
-export const takeOnFoul = (_w: Work, _owner: PlayerState, _def: PlayerState): boolean => false
+/**
+ * T3: whether the beaten defender `def` fouls `owner`, who has just won a take-on: takeOnShare x zone x angle x booked x
+ * mods.foul (foul stream). rule 0: never, no draw.
+ * @internal
+ */
+export const takeOnFoul = (w: Work, owner: PlayerState, def: PlayerState): boolean => {
+  if (w.p.fouls.rule !== 1) return false
+  return w.rng.foul.chance(Math.min(1, w.p.fouls.takeOnShare * challengeFactor(w, def, owner) * bookedFoul(w, def) * w.mods(def.side).foul))
+}
 
 /** T3: the foul-zone factor for `victim` fouled at `at`, in his attacking frame. rule 0: 1. @internal */
-export const foulZone = (_w: Work, _victim: PlayerState, _at: Vec2): number => 1
+export const foulZone = (w: Work, victim: PlayerState, at: Vec2): number =>
+  w.p.fouls.rule === 1 ? zoneFactor(attackX(victim.side, at.x, w.period), inAttackedBox(victim.side, at, w.period), w.p.fouls) : 1
 
 // ================================================================ end of P4 foul seam
 
