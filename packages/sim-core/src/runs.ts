@@ -17,13 +17,24 @@ const MID_THIRD_U = -17.5
 const sideSign = (y: number): 1 | -1 => (y < 0 ? -1 : 1)
 
 /**
- * A runner's target: `holdM` short of the last defender (u `lastDefU`, the runner's frame), at `y`, or, when `wide`,
- * at least WIDE_LANE_Y out on the side `y` is on. Re-aimed each tick while the run lives.
+ * Where a runner holds until the pass: `holdM` short of the last defender (u `lastDefU`, the runner's frame), at `y`,
+ * or, when `wide`, at least WIDE_LANE_Y out on the side `y` is on. Re-aimed each tick while the run lives.
  */
 export const holdLineTarget = (lastDefU: number, y: number, wide: boolean, side: Side, period: Period, r: Params["roleMoves"]["run"]): Vec2 => {
   const ty = wide ? sideSign(y) * Math.max(Math.abs(y), WIDE_LANE_Y) : y
   return clampToPitch({ x: dirOf(side, period) * (lastDefU - r.holdM), y: ty }, 2)
 }
+
+/** How far behind the last defender a run breaks to once the pass is played (the old run target, lastDef + 6). */
+const BREAK_M = 6
+
+/**
+ * A run's break point: BREAK_M behind the last defender (u `lastDefU`, the runner's frame), at most 6 m from the goal
+ * line, at `y`. It is the run intent's target (through balls lead toward it); the runner holds at holdLineTarget until
+ * the pass. Re-aimed each tick while the run lives.
+ */
+export const breakTarget = (lastDefU: number, y: number, side: Side, period: Period): Vec2 =>
+  clampToPitch({ x: dirOf(side, period) * Math.min(lastDefU + BREAK_M, PITCH.halfL - BREAK_M), y }, 2)
 
 /** An overlap's target: `outsideM` outside the carrier (kept 1.5 m inside the touchline) and `aheadM` beyond him. */
 export const overlapTarget = (carrier: Vec2, side: Side, period: Period, o: Params["roleMoves"]["overlap"]): Vec2 => {

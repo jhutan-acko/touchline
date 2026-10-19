@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 import { lastDefenderAttackX } from "../src/decide.js"
 import { clampToPitch, dirOf } from "../src/geometry.js"
 import { DEFAULT_PARAMS, type Params } from "../src/params.js"
-import { tiringFactor } from "../src/kinematics.js"
+import { buildCandidates } from "../src/decide.js"
+import { tiringFactor, vmaxFor } from "../src/kinematics.js"
 import { hazard, Rng } from "../src/rng.js"
 import { holdLineTarget, overlapEligible, overlapTarget } from "../src/runs.js"
 import { initMatch, isFinished, runMove, step, workAt, type Work } from "../src/step.js"
@@ -111,7 +112,9 @@ describe("A6 role-run seam (runMove)", () => {
       const runner = w.player(runnerId)
       expect(runner.intent.kind).toBe("run_in_behind")
       expect("overlap" in runner.intent).toBe(false)
-      // the last defender steps back from u 20 to 24, one metre a tick: the run's target follows (x 19 -> 23)
+      // the intent's target is the break point 6 m behind the line (through balls lead toward it)
+      expect((runner.intent as { target: Vec2 }).target.x).toBeCloseTo(26, 9)
+      // the last defender steps back from u 20 to 24, one metre a tick: the hold spot follows (x 19 -> 23)
       const lastDefId = w.active("away").filter((x) => x.role !== "GK").find((x) => x.pos.x === 20)!.id
       const xs: number[] = []
       for (let u = 21; u <= 24; u++) {
@@ -120,12 +123,78 @@ describe("A6 role-run seam (runMove)", () => {
         expect(lastDefenderAttackX("home", "first_half", w.active("away"))).toBe(u)
         const m = runMove(w, w.player(runnerId), w.player(carrierId))!
         xs.push(m.target.x)
-        // the stored intent is re-aimed too (through balls read it)
+        // the stored break point is re-aimed too (through balls read it)
         const it = w.player(runnerId).intent
-        expect(it.kind === "run_in_behind" && it.target.x).toBeCloseTo(u - 1, 9)
+        expect(it.kind === "run_in_behind" && it.target.x).toBeCloseTo(u + 6, 9)
       }
       expect(xs.map((x) => Math.round(x * 1e6) / 1e6)).toEqual([20, 21, 22, 23])
       expect(lastRun(w).attrs.kind).toBe("in_behind")
+    }
+  })
+
+  it("a runner holds at the line until a pass travels to him, then breaks to the target", () => {
+    const { w, carrierId, runnerId } = fixture(forcedRuns(on), 3, CM_FWD, ST, 20)
+    const vmax = vmaxFor(w.player(runnerId), w.player(runnerId).energy, w.p)
+    expect(runMove(w, w.player(runnerId), w.player(carrierId))!.target.x).toBeCloseTo(19, 9)
+    w.tick += 1
+    // before the pass: his goal is lastDef - 1 while the intent's target is behind the line
+    const hold = runMove(w, w.player(runnerId), w.player(carrierId))!
+    expect(hold.target.x).toBeCloseTo(19, 9)
+    const it0 = w.player(runnerId).intent as { target: Vec2 }
+    expect(it0.target.x).toBeGreaterThan(20)
+    // a pass released toward him (he wins it, or it was meant for him): he goes to the intent's target at full speed
+    const flight = (winnerId: string | null, intended: string | null) =>
+      ({ kind: "in_flight", flight: { kind: "pass", fromId: carrierId, side: "home", releaseTick: w.tick, resolveTick: w.tick + 10, winnerId, pending: { attrs: { intended_receiver_id: intended } } } }) as unknown as Work["possession"]
+    for (const [winner, intended] of [[runnerId, runnerId], [null, runnerId], [runnerId, null]] as const) {
+      w.possession = flight(winner, intended)
+      w.tick += 1
+      const brk = runMove(w, w.player(runnerId), w.player(carrierId))!
+      expect(brk.target).toEqual((w.player(runnerId).intent as { target: Vec2 }).target)
+      expect(brk.target.x).toBeCloseTo(26, 9)
+      expect(brk.speedCap).toBe(vmax)
+    }
+    // a pass to someone else: he keeps holding
+    w.possession = flight(carrierId, carrierId)
+    w.tick += 1
+    expect(runMove(w, w.player(runnerId), w.player(carrierId))!.target.x).toBeCloseTo(19, 9)
+  })
+
+  it("a through ball to a holding runner leads beyond the line", () => {
+    const { w, carrierId, runnerId } = fixture(forcedRuns(on), 3, CM_FWD, ST, 20)
+    runMove(w, w.player(runnerId), w.player(carrierId))
+    // he has arrived at his hold spot, lastDef - 1
+    w.setPlayer({ ...w.player(runnerId), pos: { x: 19, y: 5 }, vel: { x: 0, y: 0 } })
+    expect(w.p.through.rule).toBe(1)
+    const owner = w.player(carrierId)
+    const cands = buildCandidates(
+      { period: "first_half", owner, teammates: w.active("home"), opponents: w.active("away"), style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {}, tick: w.tick },
+      w.p,
+      0
+    )
+    const thr = cands.filter((c) => c.receiverId === runnerId && (c.kind === "through" || c.kind === "lofted_through"))
+    expect(thr.length).toBeGreaterThan(0)
+    for (const c of thr) expect(c.target.x).toBeGreaterThan(20)
+  })
+
+  it("a live rotation is never overwritten by a new run or overlap", () => {
+    const both: Params = { ...on, runs: { ...on.runs, runInBehindRatePerS: 1e4 }, roleMoves: { ...on.roleMoves, overlap: { ...on.roleMoves.overlap, ratePerS: 1e4 } } }
+    const WC: Spot = { role: "W", at: { x: 10, y: 25 } }
+    const FB: Spot = { role: "FB", at: { x: 2, y: 22 } }
+    for (let seed = 1; seed <= 50; seed++) {
+      const { w, carrierId, runnerId } = fixture(both, seed, WC, FB, 30)
+      const rot = { kind: "rotate" as const, target: { x: 2, y: 12 } }
+      w.setPlayer({ ...w.player(runnerId), intent: rot, intentUntil: w.tick + 10 })
+      const roles = w.rng.roles.state
+      expect(runMove(w, w.player(runnerId), w.player(carrierId))).toBeNull()
+      expect(w.player(runnerId).intent).toEqual(rot)
+      expect(w.rng.roles.state).toEqual(roles)
+      // an FB run in behind (CM carrier moving forward) is not started either
+      const f = fixture(both, seed, CM_FWD, FB, 30)
+      f.w.setPlayer({ ...f.w.player(f.runnerId), intent: rot, intentUntil: f.w.tick + 10 })
+      expect(runMove(f.w, f.w.player(f.runnerId), f.w.player(f.carrierId))).toBeNull()
+      // once the rotation has expired, the overlap starts
+      w.tick += 10
+      expect(tryStart(w, carrierId, runnerId)).toBe(true)
     }
   })
 
@@ -137,7 +206,7 @@ describe("A6 role-run seam (runMove)", () => {
       if (!tryStart(w, carrierId, runnerId)) continue
       n++
       const t = (w.player(runnerId).intent as { target: Vec2 }).target
-      expect(t.x).toBeCloseTo(29, 9)
+      expect(t.x).toBeCloseTo(36, 9)
       if (t.y <= -14) wide++
       else expect(t.y).toBe(-5)
     }
@@ -196,9 +265,11 @@ describe("A6 role-run seam (runMove)", () => {
     // 4-3-3 home: the first W and the first FB are both on the +y side
     const { w, carrierId, runnerId } = fixture(forcedOverlaps(on), 5, WC, FB, 30)
     expect(overlapEligible(w.player(runnerId), w.player(carrierId), "first_half", O)).toBe(true)
+    const cap = Math.min(vmaxFor(w.player(runnerId), w.player(runnerId).energy, w.p), O.speed)
+    expect(cap).toBe(O.speed)
     const mt = runMove(w, w.player(runnerId), w.player(carrierId))!
     expect(mt.target).toEqual({ x: 16, y: 28 })
-    expect(mt.speedCap).toBeLessThanOrEqual(5)
+    expect(mt.speedCap).toBe(cap)
     const fb = w.player(runnerId)
     expect(fb.intent).toEqual({ kind: "run_in_behind", target: { x: 16, y: 28 }, overlap: true })
     const durTicks = fb.intentUntil - w.tick
@@ -211,7 +282,7 @@ describe("A6 role-run seam (runMove)", () => {
     w.tick += 1
     const next = runMove(w, w.player(runnerId), w.player(carrierId))!
     expect(next.target).toEqual({ x: 16, y: 28 })
-    expect(next.speedCap).toBeLessThanOrEqual(5)
+    expect(next.speedCap).toBe(cap)
     expect(w.events.filter((e) => e.type === "off_ball_run").length).toBe(1)
 
     const never = (carrier: Spot, fbSpot: Spot, formation: FormationName = "4-3-3"): void => {

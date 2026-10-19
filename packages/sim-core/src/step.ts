@@ -104,7 +104,7 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 // ---- P5 imports, keeper-restart seam (plan 8e Task 7 inserts below this line)
 
 // ---- P5 imports, role-run seam (plan 8e Task 9 inserts below this line)
-import { holdLineTarget, overlapEligible, overlapTarget } from "./runs.js"
+import { breakTarget, holdLineTarget, overlapEligible, overlapTarget } from "./runs.js"
 
 // ---- P5 imports, rotation seam (plan 8e Task 10 inserts below this line)
 
@@ -1888,10 +1888,12 @@ const RUN_ROLES: ReadonlySet<string> = new Set(["ST", "W", "AM", "FB"])
 const RUN_CARRIERS: ReadonlySet<string> = new Set(["CM", "DM", "AM"])
 
 /**
- * A6 rule 1 (plan 8e ruling 15; roles stream). A live run is re-aimed each tick to holdM short of the last defender
- * (an overlap keeps its target at up to overlap.speed). An FB overlaps his same-side W or CM at overlap.ratePerS; ST, W,
- * AM and FB run at runInBehindRatePerS x roleWeight while a CM, DM or AM carrier beyond u -20 moves forward with
- * spaceBehindM behind the line, holding the line, in the wide lane with chance wideShare.
+ * A6 rule 1 (plan 8e ruling 15; roles stream). A run's intent target is its break point behind the line (breakTarget,
+ * which through balls lead toward); until a pass is travelling to him the runner holds holdM short of the last defender
+ * (holdLineTarget), and once one is he breaks to the target at full speed. Both are re-aimed each tick. An overlap keeps
+ * its target at up to overlap.speed. An FB overlaps his same-side W or CM at overlap.ratePerS; ST, W, AM and FB run at
+ * runInBehindRatePerS x roleWeight while a CM, DM or AM carrier beyond u -20 moves forward with spaceBehindM behind the
+ * line, in the wide lane with chance wideShare.
  */
 const roleRun = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarget | null => {
   const rm = w.p.roleMoves
@@ -1900,10 +1902,14 @@ const roleRun = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarget | nul
   const lastDef = () => lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
   if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) {
     if (pl.intent.overlap) return { target: pl.intent.target, speedCap: overlapCap }
-    const target = holdLineTarget(lastDef(), pl.intent.target.y, false, pl.side, w.period, rm.run)
+    const line = lastDef()
+    const target = breakTarget(line, pl.intent.target.y, pl.side, w.period)
     if (target.x !== pl.intent.target.x || target.y !== pl.intent.target.y) w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target } })
-    return { target, speedCap: vmax }
+    if (passTravellingTo(w, pl.id)) return { target, speedCap: vmax }
+    return { target: holdLineTarget(line, target.y, false, pl.side, w.period, rm.run), speedCap: vmax }
   }
+  // A live rotation (rotation seam, run after this one) is never overwritten by a new run or overlap.
+  if (pl.intent.kind === "rotate" && w.tick < pl.intentUntil) return null
   if (overlapEligible(pl, owner, w.period, rm.overlap) && w.rng.roles.chance(hazard(rm.overlap.ratePerS * triggerFactor(w, pl), w.dt))) {
     const target = overlapTarget(owner.pos, pl.side, w.period, rm.overlap)
     const until = w.tick + Math.round(w.rng.roles.range(rm.overlap.durS[0], rm.overlap.durS[1]) / w.dt)
@@ -1919,10 +1925,20 @@ const roleRun = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarget | nul
   const weight = rm.run.roleWeight[pl.role as "ST" | "W" | "AM" | "FB"]
   if (!w.rng.roles.chance(hazard(w.p.runs.runInBehindRatePerS * weight * triggerFactor(w, pl), w.dt))) return null
   const wide = w.rng.roles.chance(rm.run.wideShare)
-  const target = holdLineTarget(line, pl.pos.y, wide, pl.side, w.period, rm.run)
+  const hold = holdLineTarget(line, pl.pos.y, wide, pl.side, w.period, rm.run)
+  const target = breakTarget(line, hold.y, pl.side, w.period)
   w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.roles.range(2, 3) / w.dt) })
   w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
-  return { target, speedCap: vmax }
+  return { target: hold, speedCap: vmax }
+}
+
+/**
+ * Is a pass travelling to `id` (he wins it, or it was meant for him)? Note: moveTarget calls the role-run seam only while
+ * his side owns the ball, so in play a released pass reaches him through the chase intent (to where it lands) instead.
+ */
+const passTravellingTo = (w: Work, id: string): boolean => {
+  const pos = w.possession
+  return pos.kind === "in_flight" && pos.flight.kind === "pass" && (pos.flight.winnerId === id || pos.flight.pending.attrs.intended_receiver_id === id)
 }
 
 // ================================================================ end of P5 role-run seam
