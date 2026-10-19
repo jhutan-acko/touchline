@@ -1,29 +1,32 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
+import { DEFAULT_PARAMS as P, paramsFromJson, type Params } from "../src/params.js"
 import { initMatch, step } from "../src/step.js"
 import type { MatchState } from "../src/types.js"
 import { makeConfig } from "../src/testing.js"
 
 // Deferred P3 case (plan 8e ruling 24): with a P3 rule at 0 the rule's other fields are never read, so perturbing them gives the
-// same engine bit for bit. Every other P3 rule stays at its default; only the rule under test is switched off and perturbed.
+// same engine bit for bit. Every other rule stays at its default; only the block under test is switched and perturbed.
 type Block = "firstTick" | "choice" | "release" | "cross" | "through" | "distribution"
 
-/** A block with its rule at 0 and every other numeric field (and numeric array entry) moved, within what validation accepts. */
-const perturb = (b: object): object => {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(b)) {
-    if (k === "rule") out[k] = 0
-    else if (typeof v === "number") out[k] = v === 0 ? 0.3 : v * 1.07
-    else if (Array.isArray(v)) out[k] = v.map((x) => (typeof x === "number" ? (x === 0 ? 0.3 : x * 1.07) : x))
-    else out[k] = v
-  }
-  return out
+/** Ticks per run. Short runs have no cross or keeper distribution (300 ticks of seed 3: neither), so the sensitivity check below needs this many. */
+const TICKS = 1500
+
+/** A switch (rule, scopeRule, rejudge, ...): its value is 0 or 1 and is never perturbed. */
+const isSwitch = (k: string): boolean => /(^|[a-z])Rule$/.test(k) || k === "rule" || k === "rejudge"
+
+/** The value with every numeric field (nested objects and arrays included) moved, switches kept. */
+const perturb = (v: unknown, key = ""): unknown => {
+  if (typeof v === "number") return isSwitch(key) ? v : v === 0 ? 0.3 : v * 1.07
+  if (Array.isArray(v)) return v.map((x) => perturb(x, key))
+  if (v !== null && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, perturb(x, k)]))
+  return v
 }
 
-const withBlock = (block: Block, perturbed: boolean): Params => {
+/** Params with the block at the given rule, perturbed or not. Built through paramsFromJson, so they are valid by the real validation. */
+const withBlock = (block: Block, rule: 0 | 1, perturbed: boolean): Params => {
   const cur = P[block] as object
-  const off = { ...cur, rule: 0 }
-  return { ...P, [block]: perturbed ? perturb(cur) : off } as Params
+  const b = { ...(perturbed ? (perturb(cur) as object) : cur), rule }
+  return paramsFromJson({ ...P, [block]: b })
 }
 
 /** Everything the engine produced: each tick's events and frame, and the final state without its config (which holds the params). */
@@ -41,14 +44,19 @@ const run = (p: Params, ticks: number): string => {
 }
 
 describe("P3 rules at 0 are the pre-P3 engine", () => {
+  it("perturbed fixtures keep their switches and pass the real validation", () => {
+    const moved = withBlock("choice", 0, true)
+    expect(moved.release.freeRule).toBe(P.release.freeRule)
+    expect(moved.firstTick.scopeRule).toBe(P.firstTick.scopeRule)
+    expect(withBlock("release", 0, true).release.rejudge).toBe(P.release.rejudge)
+  })
   for (const block of ["firstTick", "choice", "release", "cross", "through", "distribution"] as const) {
     it(`every P3 rule at 0 gives the pre-P3 engine bit for bit at unit level: ${block}`, () => {
-      const plain = withBlock(block, false)
-      const moved = withBlock(block, true)
-      // The precondition: the perturbation changed fields, or the comparison proves nothing.
-      expect(JSON.stringify(moved[block])).not.toBe(JSON.stringify(plain[block]))
-      expect((moved[block] as { rule: number }).rule).toBe(0)
-      expect(run(moved, 300)).toBe(run(plain, 300))
-    }, 60_000)
+      // The precondition: the run notices the perturbation when the rule is 1, so a rule-0 match proves the fields are not read.
+      expect(JSON.stringify(withBlock(block, 1, true)[block])).not.toBe(JSON.stringify(withBlock(block, 1, false)[block]))
+      expect(run(withBlock(block, 1, true), TICKS), `${block} perturbation is invisible at rule 1`).not.toBe(run(withBlock(block, 1, false), TICKS))
+      expect(withBlock(block, 0, true)[block].rule).toBe(0)
+      expect(run(withBlock(block, 0, true), TICKS)).toBe(run(withBlock(block, 0, false), TICKS))
+    }, 240_000)
   }
 })

@@ -18,10 +18,17 @@ describe("release.freeRule (P5, plan 8e ruling 22)", () => {
     expect(v[0]!).toBeGreaterThanOrEqual(0.5)
     expect(v[v.length - 1]!).toBeLessThanOrEqual(1.5)
     expect(Math.abs(v[v.length >> 1]! - 1.0)).toBeLessThan(0.03)
-    // The precondition: the old range is not freeS, so rule 1 changed something.
-    expect(P.timing.decisionMinS).not.toBe(0.5)
+    // The precondition: rule 1 draws differ from rule 0's for the same rng, so the rule changed something.
+    expect(draws(on, 8, 200)).not.toEqual(draws(off, 8, 200))
   })
   it("freeRule 0 draws today's base range, the same for the same rng", () => {
+    // Today's draw, on a twin rng: base from the timing range, then the tail chance draw (never taken at tailShare 0), no cap.
+    const twin = new Rng(seedRng(5))
+    expect(draws(off, 8, 2000)).toEqual(Array.from({ length: 2000 }, () => {
+      const base = twin.range(P.timing.decisionMinS, P.timing.decisionMaxS)
+      twin.chance(0)
+      return base
+    }))
     const a = draws(off, 8, 2000)
     const b = draws({ ...off, release: { ...off.release, freeS: [3, 4] } }, 8, 2000)
     expect(a).toEqual(b)

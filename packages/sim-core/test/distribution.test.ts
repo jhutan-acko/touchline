@@ -190,6 +190,12 @@ describe("G5 deferred cases (P5 Task 13)", () => {
       expect(c.receiverId).not.toBe(close.id)
       expect(Math.hypot(c.target.x - keeper.pos.x, c.target.y - keeper.pos.y)).toBeGreaterThanOrEqual(4)
     }
+    // Positive control: the same teammate 5 m away is a valid throw target, so the 4 m bound (not low utility) kept him out at 2 m.
+    const fine = teammates.map((t) => (t.id === close.id ? at(close, keeper.pos.x + 5, 0) : t))
+    const r2 = new Rng(seedRng(19))
+    let picked = 0
+    for (let i = 0; i < 300; i++) if (decide(input({ teammates: fine }), withLogit(-50), r2).candidate!.receiverId === close.id) picked++
+    expect(picked).toBeGreaterThan(0)
     // (puntLogit 50 below: at the default a seed-7 match can pass without a single punt, as M10 records.)
     // In a match every punt is followed by a pass struck by foot, and every throw by hands.
     let s = initMatch(makeConfig(7, { params: withLogit(50) }))
@@ -204,8 +210,8 @@ describe("G5 deferred cases (P5 Task 13)", () => {
       if (e.type !== "keeper_distribution" || e.attrs.method !== "punt") return
       punts++
       const pass = events.slice(i + 1).find((g) => g.type === "pass")!
-      expect(pass.attrs.technique).not.toBe("throw")
-      expect(pass.attrs.body_part).not.toBe("hands")
+      expect(pass.attrs.technique).toBe("foot")
+      expect(String(pass.attrs.body_part)).toMatch(/_foot$/)
     })
     expect(punts).toBeGreaterThan(0)
   }, 120_000)

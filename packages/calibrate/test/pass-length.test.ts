@@ -44,7 +44,10 @@ describe("pass length is measured to the receiver's next action", () => {
   })
 })
 
-/** The members of `export type EventType = | "a" | "b" ...`: every union line, blank or comment lines inside it included, up to the first other line. */
+/**
+ * The members of the `export type EventType =` union, written one `| "name"` member per line after the declaration line:
+ * blank and comment lines inside the union are skipped, and the first other line ends it.
+ */
 const eventTypes = (src: string): string[] => {
   const start = src.indexOf("export type EventType =")
   if (start < 0) return []

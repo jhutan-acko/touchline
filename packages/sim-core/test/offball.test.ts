@@ -362,33 +362,41 @@ describe("on the ball", () => {
 })
 
 describe("support rule 1 hold across ticks (P3 deferred, P5 Task 13)", () => {
-  // The gate keeps its state while the same carrier has the ball: sinceTick holds, and a flip waits gateHoldS, at either tick rate.
+  // The gate keeps its state while the same carrier has the ball, and a flip waits gateHoldS, at either tick rate. 600 s of
+  // football per rate is enough for flips and for raw flips the hold suppressed.
   for (const dt of [0.1, 0.04]) {
     it(`the support hold carries across ticks for the same carrier at dt ${dt}`, () => {
-      const cfg = makeConfig(5, { params: DEFAULT_PARAMS })
-      let s = initMatch({ ...cfg, dt })
-      const hold = DEFAULT_PARAMS.support.gateHoldS
-      expect(DEFAULT_PARAMS.support.rule).toBe(1)
-      let prev = s.supportGate
-      let carried = 0, flips = 0
-      for (let i = 0; i < Math.round(1800 / dt); i++) {
+      const sp = DEFAULT_PARAMS.support
+      expect(sp.rule).toBe(1)
+      let s = initMatch({ ...makeConfig(5, { params: DEFAULT_PARAMS }), dt })
+      let prev = s
+      let carried = 0, flips = 0, suppressed = 0
+      for (let i = 0; i < Math.round(600 / dt); i++) {
         s = step(s).state
-        const g = s.supportGate
-        if (prev && g && prev.carrierId === g.carrierId) {
-          if (g.sinceTick === prev.sinceTick) {
-            expect(g.pressed).toBe(prev.pressed)
+        const g = s.supportGate, pg = prev.supportGate
+        if (pg && g && pg.carrierId === g.carrierId) {
+          if (g.sinceTick === pg.sinceTick) {
+            expect(g.pressed).toBe(pg.pressed)
             carried++
+            // Inside the hold (a tick of slack at each end): the raw pressure test, on the positions the gate saw, disagrees with
+            // the held value, yet the gate did not flip. That is the hold doing its work.
+            const carrier = prev.players.find((p) => p.id === g.carrierId)
+            if (carrier && (s.tick - g.sinceTick + 2) * dt < sp.gateHoldS) {
+              const near = Math.min(...prev.players.filter((p) => p.side !== carrier.side && !p.sentOff).map((p) => dist(p.pos, carrier.pos)))
+              if ((near <= (g.pressed ? sp.pressExitM : sp.pressM)) !== g.pressed) suppressed++
+            }
           } else {
             flips++
-            expect(g.pressed).not.toBe(prev.pressed)
-            expect((g.sinceTick - prev.sinceTick) * dt).toBeGreaterThanOrEqual(hold - 1e-9)
+            expect(g.pressed).not.toBe(pg.pressed)
+            expect((g.sinceTick - pg.sinceTick) * dt).toBeGreaterThanOrEqual(sp.gateHoldS - 1e-9)
           }
         }
-        prev = g
+        prev = s
       }
-      // Not vacuous: the gate was carried over many ticks, and flipped at least once in a half of football.
+      // Not vacuous: the gate was carried over many ticks, flipped, and the hold suppressed raw flips.
       expect(carried).toBeGreaterThan(100)
       expect(flips).toBeGreaterThan(0)
+      expect(suppressed).toBeGreaterThan(0)
     }, 120_000)
   }
 })
