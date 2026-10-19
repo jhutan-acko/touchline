@@ -177,4 +177,15 @@ describe("realism v2 P6 params", () => {
     expect(() => paramsFromJson({ provenance: cc, header: { zMin: 2.5 } })).toThrow(/header\.zMin/)
     expect(paramsFromJson({ provenance: cc, shotModel: { xg: { b0: -2 } } }).shotModel.xg.b0).toBe(-2)
   })
+  it.each(["header", "saveGeo", "execFatigue", "shotModel"])("reject %s.rule other than 0 or 1", (block) => {
+    expect(() => paramsFromJson({ provenance: cc, [block]: { rule: 0.5 } })).toThrow(new RegExp(`${block}\\.rule must be 0 or 1`))
+    expect(paramsFromJson({ provenance: cc, [block]: { rule: 1 } })[block as "header"].rule).toBe(1)
+  })
+  it("reject an execution-fatigue threshold outside 0..1 and an exponent not above 0", () => {
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: 1 } })).toThrow(/execFatigue\.ref/)
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: 1.5 } })).toThrow(/execFatigue\.ref/)
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: -0.1 } })).toThrow(ParamsError)
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { power: 0 } })).toThrow(/execFatigue\.power/)
+    expect(paramsFromJson({ provenance: cc, execFatigue: { ref: 0.5, power: 2 } }).execFatigue.ref).toBe(0.5)
+  })
 })

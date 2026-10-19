@@ -67,7 +67,8 @@ describe("contact.ts", () => {
       return out
     }
     const plain = draws({})
-    const hooked = draws({ aimY: 1, aimZ: 1, mishit: 1, speed: 1 })
+    // The value-replacing hooks given the values they replace: his finishing, and the old 0.2 m strike height.
+    const hooked = draws({ aimY: 1, aimZ: 1, mishit: 1, speed: 1, skill: shooter.attrs.finishing, fromZ: 0.2 })
     expect(plain.length).toBe(2000)
     // The fixture exercises every branch the hooks touch: mis-hits, on-target shots and blocks.
     expect(plain.filter((s) => s.execution !== "clean").length).toBeGreaterThan(20)

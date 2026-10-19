@@ -1232,6 +1232,8 @@ export const contactPlan = (w: Work, f: Flight): { receiver: PlayerState; plan: 
  * through releaseKick (unchanged) with first_time: true added to the new pass event. Nobody is pressing him any more.
  */
 export const executeContact = (w: Work, _f: Flight, receiver: PlayerState, plan: ContactPlan): void => {
+  // He touched it: the shot or lay-off is his, whatever happens to the release.
+  w.lastTouch = { playerId: receiver.id, side: receiver.side }
   if (plan.kind === "shot") releaseShot(w, receiver, plan.decision, null, plan.how)
   else if (plan.kind === "layoff") {
     releaseKick(w, receiver, plan.decision, null)
