@@ -405,6 +405,8 @@ class Work {
 type RestartAt = { readonly restart: RestartKind; readonly side: Side; readonly at: Vec2 }
 /** The restart phase (a restart being set up). */
 type RestartPhase = Extract<Phase, { kind: "restart" }>
+/** A seam's part of a restart's plan: any field but `kind`, which startRestart sets. */
+type PlanPart = Partial<Omit<RestartPlan, "kind">>
 
 const restartFromOut = (lastSide: Side | null, at: Vec3, period: Period): { restart: RestartKind; side: Side; at: Vec2 } => {
   const last = lastSide ?? "home"
@@ -435,7 +437,7 @@ const startRestart = (w: Work, r: RestartAt): void => {
   w.restartPlan = { ...w.restartPlan, ...planKeeper(w, r, kind) }
   w.restartPlan = { ...w.restartPlan, ...planAttack(w, r, kind) }
   w.restartPlan = { ...w.restartPlan, ...planDefend(w, r, kind) }
-  if (Object.keys(w.restartPlan).length === 1) w.restartPlan = undefined
+  if (Object.values(w.restartPlan).filter((v) => v !== undefined).length === 1) w.restartPlan = undefined
 }
 
 // ---------------------------------------------------------------- substitutions
@@ -527,7 +529,7 @@ const orderedSubs = (w: Work, side: Side): void => {
 // ================================================================ P5 attacking set-piece seam (plan 8e Task 3 owns this block)
 
 /** S1/S4: the attacking side's part of a restart's plan (rest defence; setpiece stream). rule 0: nothing, no draw. @internal */
-export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): Partial<RestartPlan> => ({})
+export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
 
 /** S1/S4: a restarting-side player's spot while the restart is set up; null falls through to shapeSpot. rule 0: null. @internal */
 export const attackSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
@@ -543,7 +545,7 @@ export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget 
 // ================================================================ P5 defending set-piece seam (plan 8e Task 4 owns this block)
 
 /** S2/S3: the defending side's part of a restart's plan (wall, jitter, outlet; setpiece stream). rule 0: nothing, no draw. @internal */
-export const planDefend = (w: Work, r: RestartAt, kind: SetPieceKind): Partial<RestartPlan> => ({})
+export const planDefend = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
 
 /** S2/S3: a defending player's spot while the restart is set up; null falls through to shapeSpot. rule 0: null. @internal */
 export const defendSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
@@ -563,7 +565,7 @@ export const shapeSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | nu
 export const restartDelayTicks = (w: Work, r: RestartAt): number => Math.round((w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)) / w.dt)
 
 /** S8: the dead-ball part of a restart's plan (walk speeds, settle ticks, taker pause; dead stream). rule 0: nothing, no draw. @internal */
-export const planDead = (w: Work, r: RestartAt, kind: SetPieceKind, resumeTick: number): Partial<RestartPlan> => ({})
+export const planDead = (w: Work, r: RestartAt, kind: SetPieceKind, resumeTick: number): PlanPart => ({})
 
 /** S8: a player's movement while the ball is dead, over the restart dispatcher's `mt` (walking pace). rule 0: `mt` itself. @internal */
 export const deadMove = (w: Work, pl: PlayerState, mt: MoveTarget): MoveTarget => mt
@@ -887,7 +889,7 @@ const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { techniq
 // ================================================================ P5 keeper-restart seam (plan 8e Task 7 owns this block)
 
 /** G3: the keeper-restart part of a restart's plan (whether the keeper takes an own-third free kick; dead stream). rule 0: nothing, no draw. @internal */
-export const planKeeper = (w: Work, r: RestartAt, kind: SetPieceKind): Partial<RestartPlan> => ({})
+export const planKeeper = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
 
 /** G3: whether the keeper takes this free kick (reads the plan's keeperTaker; no draw). rule 0: never. @internal */
 export const keeperTakes = (w: Work, r: RestartAt): boolean => false
@@ -1970,9 +1972,10 @@ const moveTarget = (
   if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax) }
   // A6 (P5): runs in behind and overlaps (role-run seam), then rotations (rotation seam).
   if (pos.kind === "owned" && possSide === pl.side) {
-    const rm = runMove(w, pl, w.player(pos.playerId))
+    const owner = w.player(pos.playerId)
+    const rm = runMove(w, pl, owner)
     if (rm) return rm
-    const ro = rotateMove(w, pl, w.player(pos.playerId), shape)
+    const ro = rotateMove(w, pl, owner, shape)
     if (ro) return ro
   }
   const sp = w.p.support

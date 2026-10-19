@@ -49,8 +49,8 @@ export const deadKey = (kind: SetPieceKind): keyof Params["deadBall"]["medianS"]
 
 /** Pitch coordinates of the point (u, y) in `side`'s set-piece frame this period: x = u x dirOf(side, period), y as given. */
 export const framePoint = (side: Side, period: Period, u: number, y: number): Vec2 =>
-  // `|| 0` keeps a zero coordinate +0 (u 0 times a direction of -1 would give -0).
-  ({ x: u * dirOf(side, period) || 0, y: y || 0 })
+  // `+ 0` turns a zero coordinate's -0 into +0 (u 0 times a direction of -1); a NaN stays NaN.
+  ({ x: u * dirOf(side, period) + 0, y: y + 0 })
 
 /**
  * A role's spot from a set-piece table: u in the restarting side's (`frameSide`) frame, and |y| on the player's own side

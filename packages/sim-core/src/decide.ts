@@ -549,14 +549,14 @@ export interface RestartShot {
  * S9: the shot at a central attacking-third free kick (goalDist from goal, ax the owner's team-frame u); null leaves the
  * shot as it is. rule 0: null.
  */
-export const restartShot = (input: DecisionInput, p: Params, goalDist: number, ax: number): RestartShot | null => null
+export const restartShot = (_input: DecisionInput, _p: Params, _goalDist: number, _ax: number): RestartShot | null => null
 
 // ================================================================ end of P5 direct-free-kick seam
 
 // ================================================================ P5 goal-kick seam (plan 8e Task 7 owns this block)
 
 /** G3: the logit shift of action `a` at a goal kick or keeper free kick (keeperRestarts.longShift on long passes). rule 0: 0. */
-export const restartKindShift = (input: DecisionInput, a: Action, p: Params): number => 0
+export const restartKindShift = (_input: DecisionInput, _a: Action, _p: Params): number => 0
 
 // ================================================================ end of P5 goal-kick seam
 

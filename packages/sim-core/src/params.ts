@@ -980,7 +980,7 @@ const PROBABILITIES = new Set([
   "firstTick.bootBlock", "release.tailShare",
   "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare",
   // P5 (plan 8e)
-  "setDefend.outletShare", "setDefend.wallWideShare", "keeperRestarts.fkShare", "roleMoves.run.wideShare", "setAttack.runSpeedShare", "transition.pauseDip"
+  "setDefend.outletShare", "setDefend.wallWideShare", "keeperRestarts.fkShare", "roleMoves.run.wideShare", "setAttack.runSpeedShare", "transition.pauseDip", "setShapes.throwMarkWeight"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
@@ -1064,6 +1064,20 @@ const checkPairs = (v: Params): void => {
   for (const [path, [lo, hi]] of pairs) if (lo > hi) throw new ParamsError(`params field ${path} must be [lo, hi] with lo <= hi (got ${lo}, ${hi})`)
 }
 
+/** P5 (plan 8e): wall sizes and the throw-in's short supporters are whole numbers of players; delay medians and spreads are positive. */
+const checkP5Counts = (v: Params): void => {
+  const counts: ReadonlyArray<readonly [string, number]> = [
+    ["setDefend.wallCentral[0]", v.setDefend.wallCentral[0]],
+    ["setDefend.wallCentral[1]", v.setDefend.wallCentral[1]],
+    ["setDefend.wallWide[0]", v.setDefend.wallWide[0]],
+    ["setDefend.wallWide[1]", v.setDefend.wallWide[1]],
+    ["setShapes.throwShort", v.setShapes.throwShort]
+  ]
+  for (const [path, x] of counts) if (!Number.isInteger(x)) throw new ParamsError(`params field ${path} must be a whole number (got ${x})`)
+  for (const block of ["medianS", "sigma"] as const)
+    for (const [k, x] of Object.entries(v.deadBall[block])) if (!(x > 0)) throw new ParamsError(`params field deadBall.${block}.${k} must be positive (got ${x})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
@@ -1074,5 +1088,6 @@ export const paramsFromJson = (json: unknown): Params => {
   checkRuleSwitches(merged)
   checkTransition(merged.transition)
   checkPairs(merged)
+  checkP5Counts(merged)
   return merged
 }

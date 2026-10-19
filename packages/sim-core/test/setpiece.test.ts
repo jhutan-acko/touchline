@@ -43,6 +43,9 @@ describe("setpiece.ts", () => {
     expect(framePoint("home", "first_half", 47, -5.5)).toEqual({ x: 47, y: -5.5 })
     expect(framePoint("home", "second_half", 47, -5.5)).toEqual({ x: -47, y: -5.5 })
     expect(framePoint("away", "first_half", 0, 0)).toEqual({ x: 0, y: 0 })
+    expect(Object.is(framePoint("away", "first_half", 0, -0).y, 0)).toBe(true)
+    // A NaN in a table shows through (it is not turned into 0).
+    expect(framePoint("home", "first_half", Number.NaN, 4).x).toBeNaN()
   })
 })
 

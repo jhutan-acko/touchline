@@ -184,4 +184,13 @@ describe("realism v2 P5 params", () => {
     expect(() => paramsFromJson({ provenance: cc, cross: { zones: [{ ...z!, u: -5 }, ...rest] } })).toThrow(/cross\.zones\.u must not be negative/)   // the narrowed SIGNED regex
     expect(paramsFromJson({ provenance: cc, cross: { zones: [{ ...z!, s: -3 }, ...rest] } }).cross.zones[0]!.s).toBe(-3)
   })
+  it("reject a fractional wall or throw-in count, a throw mark weight above 1, and a delay median or spread that is not positive", () => {
+    expect(() => paramsFromJson({ provenance: cc, setDefend: { wallCentral: [3, 3.5] } })).toThrow(/setDefend\.wallCentral\[1\] must be a whole number/)
+    expect(() => paramsFromJson({ provenance: cc, setDefend: { wallWide: [0.5, 2] } })).toThrow(/setDefend\.wallWide\[0\] must be a whole number/)
+    expect(() => paramsFromJson({ provenance: cc, setShapes: { throwShort: 2.5 } })).toThrow(/setShapes\.throwShort must be a whole number/)
+    expect(() => paramsFromJson({ provenance: cc, setShapes: { throwMarkWeight: 1.2 } })).toThrow(/setShapes\.throwMarkWeight must be between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, deadBall: { medianS: { corner: 0 } } })).toThrow(/deadBall\.medianS\.corner must be positive/)
+    expect(() => paramsFromJson({ provenance: cc, deadBall: { sigma: { kickoff: 0 } } })).toThrow(/deadBall\.sigma\.kickoff must be positive/)
+    expect(paramsFromJson({ provenance: cc, setDefend: { wallCentral: [2, 5] }, setShapes: { throwShort: 2 } }).setDefend.wallCentral).toEqual([2, 5])
+  })
 })
