@@ -2,7 +2,7 @@ import json
 import math
 from pathlib import Path
 
-from touchline_analytics.setpieces import match_setpieces, setpieces_section, summarize
+from touchline_analytics.setpieces import match_setpieces, set_piece_kind, setpieces_section, summarize
 
 TARGETS = Path(__file__).resolve().parents[3] / "data/params/targets-idsse.json"
 OUTFIELD = ["CB", "CB", "FB", "FB", "CM", "CM", "AM", "W", "W", "ST"]
@@ -24,7 +24,7 @@ AWAY_REST = {pid: (45.0 - i, 30.0) for i, pid in enumerate(A)}
 
 def _ev(t, f, pid, team, period="first_half", **attrs):
     return {"type": t, "frame_id": f, "period_frame_id": f, "period": period, "team_id": team, "player_id": pid,
-            "x": attrs.pop("x", None), "y": attrs.pop("y", None), "x_end": None, "y_end": None, "frame_id_end": None,
+            "x": attrs.pop("x", None), "y": attrs.pop("y", None), "x_end": attrs.pop("x_end", None), "y_end": attrs.pop("y_end", None), "frame_id_end": None,
             "outcome": attrs.pop("outcome", None), "attrs": attrs}
 
 
@@ -91,8 +91,9 @@ def test_wall_counts_players_in_the_cone(tmp_path):
 
 
 def test_goal_kick_first_contact_long_and_completion(tmp_path):
-    # Home goal kicks from (-47, 3) at frames 20 and 120, the ball at 20 m/s along y = 3: the first is met by h5 40 m out,
-    # the second by h6 12 m out.
+    # Home goal kicks from (-47, 3) at frames 20 and 120, the ball at 20 m/s along y = 3: the first is met by h5 40 m out
+    # (a completed 40 m pass), the second by away a5 12 m out (an incomplete 12 m pass). Completion counts long kicks only:
+    # over all goal kicks it would read 0.5.
     spot = (-47.0, 3.0)
 
     def ball(f):
@@ -102,12 +103,16 @@ def test_goal_kick_first_contact_long_and_completion(tmp_path):
         return spot
 
     def layout(f):
-        home = {**HOME_REST, "h0": spot, "h5": (-7.0, 3.0) if f < 120 else (-7.0, -20.0), "h6": (-35.0, 3.0) if f >= 120 else (-35.0, -20.0)}
-        return home, AWAY_REST, ball(f), f >= 20, "H"
+        home = {**HOME_REST, "h0": spot, "h5": (-7.0, 3.0) if f < 120 else (-7.0, -20.0)}
+        return home, {**AWAY_REST, "a5": (-35.0, 3.0) if f >= 120 else (-35.0, -20.0)}, ball(f), f >= 20, "H"
 
     events = [_ev("set_piece", 20, "h0", "H", kind="goal_kick", x=spot[0], y=spot[1]),
-              _ev("set_piece", 120, "h0", "H", kind="goal_kick", x=spot[0], y=spot[1])]
-    s = summarize([match_setpieces(_write(tmp_path, "m", 200, layout, events), ROLES)])
+              _ev("pass", 20, "h0", "H", outcome="successful", restart="goal_kick", x=spot[0], y=spot[1], x_end=-7.0, y_end=3.0),
+              _ev("set_piece", 120, "h0", "H", kind="goal_kick", x=spot[0], y=spot[1]),
+              _ev("pass", 120, "h0", "H", outcome="unsuccessful", restart="goal_kick", x=spot[0], y=spot[1], x_end=-35.0, y_end=3.0)]
+    m = match_setpieces(_write(tmp_path, "m", 200, layout, events), ROLES)
+    assert [r["fc"]["att"] for r in m["restarts"]] == [True, False]
+    s = summarize([m])
     assert s["gk_long_share"] == 0.5 and s["gk_long_completion"] == 1.0
 
 
@@ -152,6 +157,61 @@ def test_overlap_episode_needs_fb_outside_and_beyond_the_w(tmp_path):
     outside = run("outside", 25.0)
     assert outside["moves"]["fb_overlap"] == 1 and summarize([outside])["fb_overlap"] == 0.5
     assert run("inside", 15.0)["moves"]["fb_overlap"] == 0
+
+
+def _possession(tmp_path, sub, n, home_at, ball_at, roles=ROLES):
+    """Home in possession the whole match, first half; home_at(f) -> the home players that move; ball_at(f) -> ball."""
+    return match_setpieces(_write(tmp_path, sub, n, lambda f: ({**HOME_REST, **home_at(f)}, AWAY_REST, ball_at(f), True, "H"), []), roles)
+
+
+def test_run_in_behind_counts_runs_reaching_the_line_with_wide_and_beyond_shares(tmp_path):
+    # AM h7 on the ball at (0, 20) (a wide lane). From 5 s, at 5 m/s: ST h10 runs 30 -> 47 m (past the away line, the second-
+    # deepest away player at u 44), W h8 28 -> 44 m (within 2 m of it), W h9 0 -> 15 m (nowhere near it).
+    run = lambda x0, x1, f: x0 + min(0.5 * max(f - 50, 0), x1 - x0)  # noqa: E731
+    m = _possession(tmp_path, "m", 120, lambda f: {"h7": (0.0, 20.0), "h10": (run(30, 47, f), 0.0), "h8": (run(28, 44, f), 5.0),
+                                                   "h9": (run(0, 15, f), -5.0)}, lambda f: (0.0, 20.0))
+    assert m["moves"]["run_in_behind"] == 2
+    s = summarize([m])
+    assert s["run_in_behind"] == 1 and s["run_beyond_share"] == 0.5 and s["run_wide_share"] == 1
+
+
+def test_w_comes_inside_needs_one_second_inside_with_the_ball_in_the_attacking_third(tmp_path):
+    # ST h10 on the ball at (25, 0). W h8 stands at y 20, comes inside to y 5 for 4 s, and again for 0.4 s (too short).
+    def w(f):
+        return 5.0 if 20 <= f < 60 or 80 <= f < 84 else 20.0
+
+    m = _possession(tmp_path, "m", 120, lambda f: {"h10": (25.0, 0.0), "h8": (20.0, w(f))}, lambda f: (25.0, 0.0))
+    assert m["moves"]["w_comes_inside"] == 1 and summarize([m])["w_inside"] == 0.5
+
+
+def test_cm_drop_between_the_cbs_counts_a_dm(tmp_path):
+    # CB h1 on the ball at (-30, -5) in the own third, CB h2 at (-30, 5). DM h5 drops between them (u -29, y 0) for 4 s.
+    def dm(f):
+        return (-29.0, 0.0) if 20 <= f < 60 else (-10.0, 0.0)
+
+    home_at = lambda f: {"h1": (-30.0, -5.0), "h2": (-30.0, 5.0), "h5": dm(f)}  # noqa: E731
+    assert _possession(tmp_path, "dm", 120, home_at, lambda f: (-30.0, -5.0), {**ROLES, "h5": "DM"})["moves"]["cm_drops_into_back_line"] == 1
+    assert _possession(tmp_path, "st", 120, home_at, lambda f: (-30.0, -5.0), {**ROLES, "h5": "ST"})["moves"]["cm_drops_into_back_line"] == 0
+
+
+def test_free_kick_kinds_in_the_taking_sides_frame(tmp_path):
+    assert [set_piece_kind("free_kick", u, y) for u, y in ((30, 25), (30, 5), (10, 5), (30, -25))] == ["fk_wide", "fk_central", "fk_other", "fk_wide"]
+    # Home free kicks: first half at (30, 25), (30, 5), (10, 5); second half (home attacking -x) at (-30, -5): central.
+    period = lambda f: "first_half" if f < 100 else "second_half"  # noqa: E731
+    events = [_ev("set_piece", 20, "h5", "H", kind="free_kick", x=30.0, y=25.0), _ev("set_piece", 40, "h5", "H", kind="free_kick", x=30.0, y=5.0),
+              _ev("set_piece", 60, "h5", "H", kind="free_kick", x=10.0, y=5.0),
+              _ev("set_piece", 120, "h5", "H", period="second_half", kind="free_kick", x=-30.0, y=-5.0)]
+    m = match_setpieces(_write(tmp_path, "m", 150, lambda f: (HOME_REST, AWAY_REST, (0.0, 0.0), True, "H"), events, period_of=period), ROLES)
+    assert m["kinds"] == {"fk_wide": 1, "fk_central": 2, "fk_other": 1}
+
+
+def test_direct_free_kick_share_counts_free_kick_shots_at_central_free_kicks(tmp_path):
+    # Central free kicks at 2 s (shot directly) and 6 s (an ordinary shot after it); a wide free kick shot directly at 10 s.
+    events = [_ev("set_piece", 20, "h5", "H", kind="free_kick", x=30.0, y=5.0), _ev("shot", 20, "h5", "H", technique="free_kick"),
+              _ev("set_piece", 60, "h5", "H", kind="free_kick", x=30.0, y=-5.0), _ev("shot", 62, "h6", "H", technique="normal"),
+              _ev("set_piece", 100, "h5", "H", kind="free_kick", x=30.0, y=25.0), _ev("shot", 100, "h5", "H", technique="free_kick")]
+    s = summarize([match_setpieces(_write(tmp_path, "m", 120, lambda f: (HOME_REST, AWAY_REST, (0.0, 0.0), True, "H"), events), ROLES)])
+    assert s["fk_central_shot_share"] == 0.5
 
 
 def test_setpieces_rows_have_targets(tmp_path):

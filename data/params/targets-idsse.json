@@ -304,7 +304,7 @@
   }
  },
  "setpieces": {
-  "source": "realism v2 analysis 2026-10-13 (setpieces-report.md, offball-report.md T4/T5, gk-report.md G3, spec P5); IDSSE, 7 matches; aggregates only. Bands are plan 8e rulings.",
+  "source": "realism v2 analysis 2026-10-13 (setpieces-report.md, offball-report.md T4/T5, gk-report.md G3, spec P5); IDSSE, 7 matches; aggregates only. Bands are plan 8e rulings. dead_speed_mps pools both sides; the analysis reported each side separately (attackers 0.8-1.5, defenders 0.7-1.6 m/s by restart type), so 1.2 is a pooled reading.",
   "rows": {
    "corner_att_box": {"label": "Corners: attackers in the box, taker excluded", "real": 5.49, "lo": 4.8, "hi": 6.2, "fmt": "{:.2f}"},
    "corner_att_six": {"label": "Corners: attackers in the six-yard box", "real": 1.07, "lo": 0.7, "hi": 1.4, "fmt": "{:.2f}"},
@@ -325,11 +325,11 @@
    "gk_opp_box": {"label": "Goal kicks: opponents deeper than the box line (u < -36)", "real": 0.18, "lo": 0, "hi": 0.4, "fmt": "{:.2f}"},
    "gk_opp_def_third": {"label": "Goal kicks: opponents in the kicking side's defensive third", "real": 2.64, "lo": 2.0, "hi": 3.2, "fmt": "{:.2f}"},
    "gk_cb_u": {"label": "Goal kicks: kicking side's CBs, mean u (m)", "real": -31.4, "lo": -34, "hi": -28, "fmt": "{:.1f}"},
-   "throw_mates_10m": {"label": "Throw-ins: team-mates within 10 m of the ball", "real": 0.94, "lo": 0.7, "hi": 1.2, "fmt": "{:.2f}"},
-   "throw_first_contact_m": {"label": "Throw-ins: first-contact distance, median (m)", "real": 9.5, "lo": 8, "hi": 11, "fmt": "{:.1f}"},
+   "throw_mates_10m": {"label": "Middle-third throw-ins: team-mates within 10 m of the ball", "real": 0.94, "lo": 0.7, "hi": 1.2, "fmt": "{:.2f}"},
+   "throw_first_contact_m": {"label": "Throw-ins: first-contact distance, median (m)", "real": 9.6, "lo": 8.1, "hi": 11.1, "fmt": "{:.1f}"},
    "kickoff_nearest_opp_m": {"label": "Kickoffs: nearest opponent to the ball (m)", "real": 8.6, "lo": 8.0, "hi": 10, "fmt": "{:.1f}"},
    "gk_long_share": {"label": "Goal kicks: first contact beyond 32 m, share", "real": 0.48, "lo": 0.4, "hi": 0.56, "fmt": "{:.2f}"},
-   "gk_long_completion": {"label": "Long goal kicks: first contact by the kicking side, share", "real": 0.49, "lo": 0.4, "hi": 0.58, "fmt": "{:.2f}"},
+   "gk_long_completion": {"label": "Long goal kicks (32 m or more): restart pass completed, share", "real": 0.49, "lo": 0.4, "hi": 0.58, "fmt": "{:.2f}"},
    "gk_shots_against_per100": {"label": "Goal kicks: opponents' shots within 10 s, per 100", "real": 0.9, "lo": 0, "hi": 4, "fmt": "{:.1f}"},
    "keeper_fk_per_team": {"label": "Free kicks taken by the keeper, per team-match", "real": 3.0, "lo": 2.3, "hi": 3.7, "fmt": "{:.2f}"},
    "fk_central_shot_share": {"label": "Central attacking free kicks shot directly, share", "real": 0.36, "lo": 0.2, "hi": 0.5, "fmt": "{:.2f}"},
@@ -340,7 +340,7 @@
    "dead_fk_att_s": {"label": "Dead time before attacking-third free kicks, median (s)", "real": 42, "lo": 37, "hi": 47, "fmt": "{:.1f}"},
    "dead_fk_other_s": {"label": "Dead time before other free kicks, median (s)", "real": 28, "lo": 24, "hi": 32, "fmt": "{:.1f}"},
    "dead_kickoff_s": {"label": "Dead time before kickoffs after a goal, median (s)", "real": 70, "lo": 62, "hi": 78, "fmt": "{:.1f}"},
-   "dead_speed_mps": {"label": "Outfielders' mean speed while the ball is dead, median over restarts (m/s)", "real": 1.2, "lo": 0.9, "hi": 1.5, "fmt": "{:.2f}"},
+   "dead_speed_mps": {"label": "Outfielders' mean speed while the ball is dead, median over restarts (m/s)", "real": 1.2, "lo": 1.0, "hi": 1.5, "fmt": "{:.2f}"},
    "fb_overlap": {"label": "FB overlaps per team-match", "real": 13.9, "lo": 11, "hi": 17, "fmt": "{:.1f}"},
    "w_inside": {"label": "Wingers coming inside per team-match", "real": 61.9, "lo": 52, "hi": 72, "fmt": "{:.1f}"},
    "fb_invert": {"label": "FB underlaps and inversions per team-match", "real": 36.4, "lo": 30, "hi": 43, "fmt": "{:.1f}"},

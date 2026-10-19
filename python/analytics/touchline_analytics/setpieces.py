@@ -16,11 +16,14 @@ passing.py reads them: an event's positions are the tracking frame with its peri
   - Wall: defending outfielders 6-11.5 m from the ball within 25 deg of the ball->goal-centre bearing; present when at least
     one; the wall's distance is its nearest member's (median over central free kicks with a wall).
   - Goal kicks: the other side's outfielders at u < -36 (the analysis's line, no width test) and u < -17.5; the mean u of
-    the kicking side's CBs (2 or more). Throw-ins: the thrower's outfield team-mates within 10 m of the ball. Kickoffs: the
-    nearest opposing outfielder to the ball.
+    the kicking side's CBs (2 or more). Middle-third throw-ins (|u| <= 17.5; the real 0.94 is sp_analysis ti_mid.mates_10):
+    the thrower's outfield team-mates within 10 m of the ball. Kickoffs: the nearest opposing outfielder to the ball.
 - First contact: on a 0.05 s grid with ball and players linearly interpolated, the first player (the taker excluded for
-  1 s) within 1.5 m of the ball 0.3-5 s after the kick, same period. Long: more than 32 m from the spot; completed: met by
-  the kicking side. Throw-in distance: the median over throw-ins.
+  1 s) within 1.5 m of the ball 0.3-5 s after the kick, same period. Goal kicks' long share: first contact more than 32 m
+  from the spot (sp_analysis fc_long_share). Throw-in distance: the median over all throw-ins.
+- Long goal-kick completion covers long kicks only, measured as the real 0.49 was (gk_analysis.py goal_kick_long_ge32): the
+  goal kick's restart pass (attrs.restart "goal_kick") of 32 m or more from its release (x, y) to its end (x_end, y_end),
+  completed when its outcome is successful; the share over those passes.
 - Corner delivery completed: the restart pass at the corner's frame (attrs.restart "corner") has outcome successful.
 - Shots within 10 s: shots from 0.3 s before to 10 s after the restart, by the kicking side (corners) or the other side
   (goal kicks), per 100 restarts. Direct free kicks: a shot by the kicking side with technique free_kick within 1 s of a
@@ -169,7 +172,8 @@ def match_setpieces(run: Path, roles: dict[str, str]) -> dict:
     role = np.array([roles.get(pid, "") for pid in T["ids"]])
     gk = role == "GK"
     shots = [(PERIODS[e["period"]], e["period_frame_id"] / fps, side_of(e["team_id"]), e["attrs"].get("technique")) for e in events if e["type"] == "shot"]
-    restart_pass = {(PERIODS[e["period"]], e["period_frame_id"], side_of(e["team_id"]), e["attrs"]["restart"]): e.get("outcome")
+    restart_pass = {(PERIODS[e["period"]], e["period_frame_id"], side_of(e["team_id"]), e["attrs"]["restart"]):
+                    (e.get("outcome"), math.hypot(e["x_end"] - e["x"], e["y_end"] - e["y"]) if None not in (e["x"], e["y"], e["x_end"], e["y_end"]) else None)
                     for e in events if e["type"] == "pass" and e["attrs"].get("restart")}
     m = {"restarts": [], "kinds": Counter(), "keeper_fk": 0, "offsides": 0}
     after_goal = False
@@ -230,8 +234,8 @@ def summarize(ms: list[dict]) -> dict:
     walls_c = [r["snap"]["wall"] for r in central if r["snap"]]
     walls_w = [r["snap"]["wall"] for r in wide if r["snap"]]
     gk_fc = [r["fc"] for r in goal_kicks if r["fc"]]
-    gk_long = [f for f in gk_fc if f["len"] > LONG_M]
-    delivered = [r["delivery"] for r in corners if r["delivery"] is not None]
+    gk_long = [r["delivery"][0] for r in goal_kicks if r["delivery"] and r["delivery"][1] is not None and r["delivery"][1] >= LONG_M]
+    delivered = [r["delivery"][0] for r in corners if r["delivery"]]
     moves = Counter()
     for m in ms:
         moves.update(m["moves"])
@@ -260,11 +264,11 @@ def summarize(ms: list[dict]) -> dict:
         "gk_opp_box": _mean(snap(goal_kicks, "opp_box_line")),
         "gk_opp_def_third": _mean(snap(goal_kicks, "opp_def_third")),
         "gk_cb_u": _mean(snap(goal_kicks, "cb_u")),
-        "throw_mates_10m": _mean(snap(throws, "mates_10")),
+        "throw_mates_10m": _mean(snap(of("throw_mid"), "mates_10")),
         "throw_first_contact_m": _median([r["fc"]["len"] for r in throws if r["fc"]]),
         "kickoff_nearest_opp_m": _mean(snap(of("kickoff"), "nearest_opp")),
         "gk_long_share": _mean([f["len"] > LONG_M for f in gk_fc]),
-        "gk_long_completion": _mean([f["att"] for f in gk_long]),
+        "gk_long_completion": _mean([x == "successful" for x in gk_long]),
         "gk_shots_against_per100": per100(goal_kicks, "shot_against"),
         "keeper_fk_per_team": sum(m["keeper_fk"] for m in ms) / team_matches if n else math.nan,
         "fk_central_shot_share": _mean([r["direct"] for r in central]),

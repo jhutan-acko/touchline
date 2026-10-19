@@ -33,11 +33,11 @@ Real values: the 2026-10-13 realism analysis, IDSSE, 7 matches (aggregates only)
 | Goal kicks: opponents deeper than the box line (u < -36) | 0.18 | pending P4 merge | 0.00–0.40 | pending |
 | Goal kicks: opponents in the kicking side's defensive third | 2.64 | pending P4 merge | 2.00–3.20 | pending |
 | Goal kicks: kicking side's CBs, mean u (m) | -31.4 | pending P4 merge | -34.0–-28.0 | pending |
-| Throw-ins: team-mates within 10 m of the ball | 0.94 | pending P4 merge | 0.70–1.20 | pending |
-| Throw-ins: first-contact distance, median (m) | 9.5 | pending P4 merge | 8.0–11.0 | pending |
+| Middle-third throw-ins: team-mates within 10 m of the ball | 0.94 | pending P4 merge | 0.70–1.20 | pending |
+| Throw-ins: first-contact distance, median (m) | 9.6 | pending P4 merge | 8.1–11.1 | pending |
 | Kickoffs: nearest opponent to the ball (m) | 8.6 | pending P4 merge | 8.0–10.0 | pending |
 | Goal kicks: first contact beyond 32 m, share | 0.48 | pending P4 merge | 0.40–0.56 | pending |
-| Long goal kicks: first contact by the kicking side, share | 0.49 | pending P4 merge | 0.40–0.58 | pending |
+| Long goal kicks (32 m or more): restart pass completed, share | 0.49 | pending P4 merge | 0.40–0.58 | pending |
 | Goal kicks: opponents' shots within 10 s, per 100 | 0.9 | pending P4 merge | 0.0–4.0 | pending |
 | Free kicks taken by the keeper, per team-match | 3.00 | pending P4 merge | 2.30–3.70 | pending |
 | Central attacking free kicks shot directly, share | 0.36 | pending P4 merge | 0.20–0.50 | pending |
@@ -48,7 +48,7 @@ Real values: the 2026-10-13 realism analysis, IDSSE, 7 matches (aggregates only)
 | Dead time before attacking-third free kicks, median (s) | 42.0 | pending P4 merge | 37.0–47.0 | pending |
 | Dead time before other free kicks, median (s) | 28.0 | pending P4 merge | 24.0–32.0 | pending |
 | Dead time before kickoffs after a goal, median (s) | 70.0 | pending P4 merge | 62.0–78.0 | pending |
-| Outfielders' mean speed while the ball is dead, median over restarts (m/s) | 1.20 | pending P4 merge | 0.90–1.50 | pending |
+| Outfielders' mean speed while the ball is dead, median over restarts (m/s) | 1.20 | pending P4 merge | 1.00–1.50 | pending |
 | FB overlaps per team-match | 13.9 | pending P4 merge | 11.0–17.0 | pending |
 | Wingers coming inside per team-match | 61.9 | pending P4 merge | 52.0–72.0 | pending |
 | FB underlaps and inversions per team-match | 36.4 | pending P4 merge | 30.0–43.0 | pending |
