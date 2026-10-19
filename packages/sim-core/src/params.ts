@@ -51,6 +51,11 @@ export type PosGroup = "GK" | "CB" | "FB" | "WB" | "CM" | "AM" | "W" | "ST"
  */
 export interface PosRow { readonly a: number; readonly b: number; readonly w0: number; readonly w1: number; readonly w2: number; readonly w3: number; readonly e: number }
 
+/** A set-piece role table (realism v2 P5): per role, (u, |y|) in the restarting team's frame (metres); DM uses CM's row. */
+export type RoleTable = Readonly<Record<Role, readonly [number, number]>>
+/** S8 dead-ball delay keys (realism v2 P5): free_kick_att is a free kick in the taking side's attacking third. */
+export type DeadKey = "throw_in" | "goal_kick" | "corner" | "free_kick_att" | "free_kick" | "kickoff"
+
 /** The pass actions: every action that plays the ball to a teammate. */
 export type PassAction = Exclude<Action, "carry" | "take_on" | "shot" | "clear" | "hold">
 /** Pass-choice coefficients (or features), per unit of: distance/10, forward gain/10, |lateral|/10, lane blocked, min(open,10)/5, line-breaking, keeper. */
@@ -139,6 +144,11 @@ export interface Params {
      * pressedM (his hold is cut to now + a pressedS draw). rule 0: the old behaviour.
      */
     readonly rejudge: number
+    /**
+     * Release median (realism v2 P5, plan 8e ruling 22): 1 draws a free (unpressed) holder's base delay from freeS
+     * instead of timing.decisionMinS..MaxS. rule 0: the old behaviour.
+     */
+    readonly freeRule: number; readonly freeS: readonly [number, number]
   }
   readonly actions: {
     readonly logits: Readonly<Record<ActionZone, Readonly<Record<Action, number>>>>
@@ -305,6 +315,14 @@ export interface Params {
      * while he is at most cbStepM upfield of the CB's anchor. rule 0: the old behaviour (goal-side marking).
      */
     readonly rule: number; readonly laneShare: number; readonly cbStepM: number; readonly dropMps: number
+    /** Zonal cap (realism v2 P5, plan 8e ruling 17): the lane spot is pulled to within maxGapM of the attacker. 0: no cap (the old behaviour). */
+    readonly maxGapM: number
+    /**
+     * Landing-spot marking and reaction (realism v2 P5, plan 8e ruling 18): the nearest CB marks the most advanced
+     * opponent goal-side at landingGoalSideM while their keeper, CB or FB (own third) has the ball; the marker of a high
+     * flight's attacking winner goes to the contact within landingReactM. rule 0: the old behaviour.
+     */
+    readonly landingRule: number; readonly landingGoalSideM: number; readonly landingReactM: number
   }
   /** Share of top speed players use when moving back into shape (calibration knob for speeds and distance). */
   /**
@@ -454,6 +472,11 @@ export interface Params {
     readonly pauseS: number; readonly pauseShare: number; readonly pauseRadiusM: number
     readonly recoverFromS: number; readonly recoverPeakS: readonly [number, number]; readonly recoverToS: number; readonly recoverRatePerS: number
     readonly recoverBehindFactor: number; readonly recoverUpfieldM: number; readonly recoverS: readonly [number, number]; readonly recoverSpeedShare: number
+    /**
+     * Pause and recovery (realism v2 P5, plan 8e ruling 20): a paused player's cap is min(base cap, pauseDip x his speed at
+     * the loss), easing to base over pauseEndS after the pause. rule 0: the old behaviour (P4's pause).
+     */
+    readonly pauseRule: number; readonly pauseDip: number; readonly pauseEndS: number
   }
   /**
    * A5 team pressing (realism v2 P4): the press hazard is scaled by rateScale and lifted by backToGoalLift (a carrier who
@@ -466,6 +489,74 @@ export interface Params {
     readonly rule: number; readonly rateScale: number; readonly backToGoalLift: number; readonly backToGoalS: number; readonly backToGoalBallMps: number
     readonly ownThirdLift: number; readonly ownThirdU: number; readonly roleWeight: Readonly<Record<Exclude<Role, "GK">, number>>
     readonly secondM: number; readonly secondRadiusM: number; readonly secondShare: number; readonly shadowM: number
+  }
+  /**
+   * S1, S4 attacking set pieces (realism v2 P5, plan 8e rulings 6, 7): role spots at corners and attacking-third free
+   * kicks (team frame of the restarting side, (u, |y|)), held holdBackM short until the kick, then a run at
+   * runSpeedShare x vmax for runWindowS; rest defence of floor(k) + frac(k) players at u restU spread over restSpreadM.
+   * rule 0: the old behaviour.
+   */
+  readonly setAttack: {
+    readonly rule: number; readonly corner: RoleTable; readonly fk: RoleTable; readonly fkWideShiftU: number
+    readonly holdBackM: number; readonly runWindowS: number; readonly runSpeedShare: number
+    readonly restKeep: Readonly<Record<"corner" | "fk_wide" | "fk_central" | "throw_att", number>>
+    readonly restU: readonly [number, number]; readonly restSpreadM: number
+  }
+  /**
+   * S2, S3 defending set pieces (realism v2 P5, plan 8e rulings 8, 9): man-marking within manM goal-side at goalSideM,
+   * zonal spots (u, y), the corner defending table, a wide free kick's outlet, and walls (sizes, chance, distance, gap,
+   * shading and jitter). rule 0: the old behaviour.
+   */
+  readonly setDefend: {
+    readonly rule: number; readonly manM: number; readonly goalSideM: number; readonly zonal: ReadonlyArray<readonly [number, number]>; readonly corner: RoleTable
+    readonly outletShare: number; readonly wallCentral: readonly [number, number]; readonly wallWide: readonly [number, number]; readonly wallWideShare: number
+    readonly wallM: number; readonly wallGapM: number; readonly shadeM: number; readonly jitterM: number
+  }
+  /**
+   * S5-S7 restart shapes (realism v2 P5, plan 8e ruling 10): goal-kick and kickoff role tables for both sides (restarting
+   * team's frame), throw-in short support (throwShort players, throwShortM) marked at throwMarkWeight. rule 0: the old behaviour.
+   */
+  readonly setShapes: {
+    readonly rule: number
+    readonly goalKick: { readonly att: RoleTable; readonly def: RoleTable }
+    readonly kickoff: { readonly att: RoleTable; readonly def: RoleTable }
+    readonly throwShort: number; readonly throwShortM: number; readonly throwMarkWeight: number
+  }
+  /**
+   * S8 dead-ball timing (realism v2 P5, plan 8e ruling 11): lognormal delays (median, sigma, floor minS, lateGrowth),
+   * walk speeds, settle times and the taker's pause. rule 0: the old behaviour (timing.restartDelayS x U(0.7, 1.3)).
+   */
+  readonly deadBall: {
+    readonly rule: number
+    readonly medianS: Readonly<Record<DeadKey, number>>
+    readonly sigma: Readonly<Record<DeadKey, number>>
+    readonly minS: number; readonly lateGrowth: number
+    readonly walkMps: readonly [number, number]; readonly settleS: readonly [number, number]; readonly settleAttS: readonly [number, number]
+    readonly settleDefS: readonly [number, number]; readonly takerPauseS: readonly [number, number]
+  }
+  /**
+   * G3 keeper restarts (realism v2 P5, plan 8e rulings 12, 13): keepers take free kicks below fkU with chance fkShare;
+   * longShift on long_pass and switch at goal kicks and keeper free kicks; kicks of at least longM struck with
+   * longErrorScale. rule 0: the old behaviour.
+   */
+  readonly keeperRestarts: { readonly rule: number; readonly fkU: number; readonly fkShare: number; readonly longShift: number; readonly longM: number; readonly longErrorScale: number }
+  /**
+   * S9 direct free kicks (realism v2 P5, plan 8e ruling 14): a central attacking-third free kick within maxDistanceM may
+   * be shot, its logit + shotShift, its xG offset by xgLogit. rule 0: the old behaviour.
+   */
+  readonly directFk: { readonly rule: number; readonly shotShift: number; readonly xgLogit: number; readonly maxDistanceM: number }
+  /**
+   * A6 role moves (realism v2 P5, plan 8e rulings 15, 16): runs in behind and overlaps (runRule), wingers inside, full-back
+   * inversion and CM drops (rotateRule, jogged at jogMps). rule 0 (each): the old behaviour.
+   */
+  readonly roleMoves: {
+    readonly runRule: number; readonly rotateRule: number
+    readonly run: { readonly roleWeight: Readonly<Record<"ST" | "W" | "AM" | "FB", number>>; readonly holdM: number; readonly wideShare: number; readonly spaceBehindM: number }
+    readonly overlap: { readonly ratePerS: number; readonly behindM: number; readonly outsideM: number; readonly aheadM: number; readonly speed: number; readonly durS: readonly [number, number] }
+    readonly inside: { readonly ratePerS: number; readonly halfSpaceY: readonly [number, number]; readonly durS: readonly [number, number] }
+    readonly invert: { readonly ratePerS: number; readonly inM: readonly [number, number]; readonly aboveLastM: number; readonly durS: readonly [number, number] }
+    readonly cmDrop: { readonly ratePerS: number; readonly winS: number; readonly durS: readonly [number, number] }
+    readonly jogMps: number
   }
   /**
    * Game state on scoring: a multiplier per 15-minute bin (mean 1; the last bin includes added time), and the
@@ -565,7 +656,9 @@ export const DEFAULT_PARAMS: Params = {
     rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5,
     // P4 M6 (spec item M6; capS 0 and rejudge 0: the old behaviour).
     capS: 0,
-    rejudge: 0
+    rejudge: 0,
+    // P5 release median (plan 8e ruling 22; rule 0: the old behaviour).
+    freeRule: 0, freeS: [0.9, 2.2]
   },
   actions: {
     logits: {
@@ -680,7 +773,11 @@ export const DEFAULT_PARAMS: Params = {
   marking: {
     weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
     // P4 A5 zonal marking (spec item A5; rule 0: the old behaviour).
-    rule: 0, laneShare: 0.4, cbStepM: 10, dropMps: 1
+    rule: 0, laneShare: 0.4, cbStepM: 10, dropMps: 1,
+    // P5 zonal cap (plan 8e ruling 17; 0: no cap, the old behaviour).
+    maxGapM: 0,
+    // P5 landing-spot marking and reaction (plan 8e ruling 18; rule 0: the old behaviour).
+    landingRule: 0, landingGoalSideM: 1, landingReactM: 10
   },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
   shape: { width: 1, depth: 1, defDepth: 1 },
@@ -743,7 +840,9 @@ export const DEFAULT_PARAMS: Params = {
   // P4 A4 transitions (spec item A4; rule 0: the old behaviour).
   transition: {
     rule: 0, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
-    recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.05, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9
+    recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.05, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9,
+    // P5 pause and recovery (plan 8e ruling 20; rule 0: the old behaviour).
+    pauseRule: 0, pauseDip: 0.87, pauseEndS: 0.5
   },
   // P4 A5 team pressing (spec item A5; rule 0: the old behaviour). Task 7 tuned rateScale and roleWeight with tackle,
   // transition, marking and press on (16 held-out matches): press episodes 428/90 (real 405), >=3 engaged 0.060 (0.049);
@@ -752,6 +851,56 @@ export const DEFAULT_PARAMS: Params = {
   press: {
     rule: 0, rateScale: 0.1, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
     roleWeight: { CB: 0.6, FB: 0.8, DM: 1, CM: 0.9, AM: 1.6, W: 1.4, ST: 0.55 }, secondM: 12, secondRadiusM: 15, secondShare: 0.45, shadowM: 4
+  },
+  // P5 S1/S4 attacking set pieces (plan 8e rulings 6, 7; rule 0: the old behaviour). Role means from setpieces-report.md.
+  setAttack: {
+    rule: 0,
+    corner: { GK: [-12, 0], CB: [42, 4], FB: [30, 7], DM: [39, 10], CM: [39, 10], AM: [43, 16], W: [37, 11], ST: [43, 4] },
+    fk: { GK: [-13, 0], CB: [34, 5], FB: [22, 8], DM: [32.5, 11], CM: [32.5, 11], AM: [28, 13], W: [30, 9], ST: [37, 4] },
+    fkWideShiftU: 0, holdBackM: 2, runWindowS: 2, runSpeedShare: 0.75,
+    restKeep: { corner: 1.4, fk_wide: 2.7, fk_central: 2.3, throw_att: 4.1 },
+    restU: [20, 25], restSpreadM: 12
+  },
+  // P5 S2/S3 defending set pieces (plan 8e rulings 8, 9; rule 0: the old behaviour).
+  setDefend: {
+    rule: 0, manM: 12, goalSideM: 1,
+    zonal: [[47, -5.5], [47, 0], [47, 5.5], [41.5, 0]],
+    corner: { GK: [51, 0], CB: [45.5, 2.5], FB: [45, 3.6], DM: [43, 4], CM: [43, 4], AM: [43.6, 6.7], W: [40, 5.5], ST: [45, 3.5] },
+    outletShare: 0.24, wallCentral: [3, 4], wallWide: [1, 2], wallWideShare: 0.76, wallM: 9.15, wallGapM: 0.6, shadeM: 1, jitterM: 0.5
+  },
+  // P5 S5-S7 restart shapes (plan 8e ruling 10; rule 0: the old behaviour).
+  setShapes: {
+    rule: 0,
+    goalKick: {
+      att: { GK: [-48, 3], CB: [-31.5, 11], FB: [-20, 21], DM: [-15, 11], CM: [-15, 11], AM: [-5, 13], W: [-0.4, 18], ST: [5, 12] },
+      def: { GK: [31, 3], CB: [6.6, 9], FB: [2, 15], DM: [-5.6, 9], CM: [-5.6, 9], AM: [-18, 9], W: [-13.6, 15], ST: [-24, 9] }
+    },
+    kickoff: {
+      att: { GK: [-37.4, 0], CB: [-17, 8.4], FB: [-7.2, 21.4], DM: [-6.1, 9], CM: [-6.1, 9], AM: [-1.9, 12], W: [-0.7, 19.5], ST: [0.3, 9.6] },
+      def: { GK: [44, 0], CB: [17.3, 5], FB: [14, 14.6], DM: [8.8, 5], CM: [8.8, 5], AM: [4.8, 10.6], W: [4.5, 15.2], ST: [0.5, 9.4] }
+    },
+    throwShort: 3, throwShortM: 10, throwMarkWeight: 0.75
+  },
+  // P5 S8 dead-ball timing (plan 8e ruling 11; rule 0: the old behaviour). sigma = ln(q75 / q25) / 1.349 from the report's IQRs.
+  deadBall: {
+    rule: 0,
+    medianS: { throw_in: 13.5, goal_kick: 22, corner: 33, free_kick_att: 42, free_kick: 28, kickoff: 70 },
+    sigma: { throw_in: 0.68, goal_kick: 0.47, corner: 0.18, free_kick_att: 0.31, free_kick: 0.57, kickoff: 0.22 },
+    minS: 3, lateGrowth: 0, walkMps: [1, 1.5], settleS: [2.5, 3.5], settleAttS: [6, 7], settleDefS: [13, 19], takerPauseS: [0.5, 1]
+  },
+  // P5 G3 keeper restarts (plan 8e rulings 12, 13; rule 0: the old behaviour).
+  keeperRestarts: { rule: 0, fkU: -17.5, fkShare: 1, longShift: 0, longM: 32, longErrorScale: 1 },
+  // P5 S9 direct free kicks (plan 8e ruling 14; rule 0: the old behaviour).
+  directFk: { rule: 0, shotShift: 0, xgLogit: 0, maxDistanceM: 35 },
+  // P5 A6 role moves (plan 8e rulings 15, 16; runRule 0 and rotateRule 0: the old behaviour).
+  roleMoves: {
+    runRule: 0, rotateRule: 0,
+    run: { roleWeight: { ST: 0.45, W: 1.4, AM: 0.5, FB: 0.6 }, holdM: 1, wideShare: 0.6, spaceBehindM: 10 },
+    overlap: { ratePerS: 0.2, behindM: 15, outsideM: 3, aheadM: 6, speed: 5, durS: [1, 2] },
+    inside: { ratePerS: 0.1, halfSpaceY: [5, 8], durS: [1.5, 3.5] },
+    invert: { ratePerS: 0.1, inM: [5, 10], aboveLastM: 15, durS: [1.5, 4.5] },
+    cmDrop: { ratePerS: 0.3, winS: 5, durS: [1.5, 3] },
+    jogMps: 3.5
   },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
@@ -815,7 +964,9 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
 /** Model coefficients and logits, which may take any sign. */
-const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones/, /^distribution\.puntLogit$/, /^tackle\.(base|behindLogit|speedLogit)$/, /^transition\.recoverUpfieldM$/]
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones\.(s|minOriginU)$/, /^distribution\.puntLogit$/, /^tackle\.(base|behindLogit|speedLogit)$/, /^transition\.recoverUpfieldM$/,
+  // P5 (plan 8e): role tables, zonal spots and frame offsets (team-frame u may be negative), shot and long-kick shifts.
+  /^setAttack\.(corner|fk)\./, /^setAttack\.fkWideShiftU$/, /^setDefend\.(corner|zonal)/, /^setShapes\.(goalKick|kickoff)\./, /^keeperRestarts\.(fkU|longShift)$/, /^directFk\.(shotShift|xgLogit)$/]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
@@ -827,7 +978,9 @@ const PROBABILITIES = new Set([
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
   "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS",
   "firstTick.bootBlock", "release.tailShare",
-  "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare"
+  "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare",
+  // P5 (plan 8e)
+  "setDefend.outletShare", "setDefend.wallWideShare", "keeperRestarts.fkShare", "roleMoves.run.wideShare", "setAttack.runSpeedShare", "transition.pauseDip", "setShapes.throwMarkWeight"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
@@ -847,7 +1000,7 @@ const checkSupport = (s: Params["support"]): void => {
   if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
 }
 
-/** The P3 and P4 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
+/** The P3, P4 and P5 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
 const checkRuleSwitches = (v: Params): void => {
   const switches: ReadonlyArray<readonly [string, number]> = [
     ["firstTick.rule", v.firstTick.rule],
@@ -864,7 +1017,19 @@ const checkRuleSwitches = (v: Params): void => {
     ["press.rule", v.press.rule],
     ["marking.rule", v.marking.rule],
     ["firstTick.scopeRule", v.firstTick.scopeRule],
-    ["release.rejudge", v.release.rejudge]
+    ["release.rejudge", v.release.rejudge],
+    // P5 (plan 8e)
+    ["setAttack.rule", v.setAttack.rule],
+    ["setDefend.rule", v.setDefend.rule],
+    ["setShapes.rule", v.setShapes.rule],
+    ["deadBall.rule", v.deadBall.rule],
+    ["keeperRestarts.rule", v.keeperRestarts.rule],
+    ["directFk.rule", v.directFk.rule],
+    ["roleMoves.runRule", v.roleMoves.runRule],
+    ["roleMoves.rotateRule", v.roleMoves.rotateRule],
+    ["marking.landingRule", v.marking.landingRule],
+    ["transition.pauseRule", v.transition.pauseRule],
+    ["release.freeRule", v.release.freeRule]
   ]
   for (const [path, x] of switches) if (x !== 0 && x !== 1) throw new ParamsError(`params field ${path} must be 0 or 1 (got ${x})`)
 }
@@ -877,6 +1042,42 @@ const checkTransition = (t: Params["transition"]): void => {
     if (!(t.joinM[i]! > t.joinM[i - 1]!)) throw new ParamsError(`params field transition.joinM must be strictly increasing (got ${t.joinM.join(", ")})`)
 }
 
+/** P5 (plan 8e) [lo, hi] ranges: lo must not exceed hi (a reversed range would draw outside the stated bounds). */
+const checkPairs = (v: Params): void => {
+  const pairs: ReadonlyArray<readonly [string, readonly [number, number]]> = [
+    ["setAttack.restU", v.setAttack.restU],
+    ["setDefend.wallCentral", v.setDefend.wallCentral],
+    ["setDefend.wallWide", v.setDefend.wallWide],
+    ["deadBall.walkMps", v.deadBall.walkMps],
+    ["deadBall.settleS", v.deadBall.settleS],
+    ["deadBall.settleAttS", v.deadBall.settleAttS],
+    ["deadBall.settleDefS", v.deadBall.settleDefS],
+    ["deadBall.takerPauseS", v.deadBall.takerPauseS],
+    ["roleMoves.overlap.durS", v.roleMoves.overlap.durS],
+    ["roleMoves.inside.halfSpaceY", v.roleMoves.inside.halfSpaceY],
+    ["roleMoves.inside.durS", v.roleMoves.inside.durS],
+    ["roleMoves.invert.inM", v.roleMoves.invert.inM],
+    ["roleMoves.invert.durS", v.roleMoves.invert.durS],
+    ["roleMoves.cmDrop.durS", v.roleMoves.cmDrop.durS],
+    ["release.freeS", v.release.freeS]
+  ]
+  for (const [path, [lo, hi]] of pairs) if (lo > hi) throw new ParamsError(`params field ${path} must be [lo, hi] with lo <= hi (got ${lo}, ${hi})`)
+}
+
+/** P5 (plan 8e): wall sizes and the throw-in's short supporters are whole numbers of players; delay medians and spreads are positive. */
+const checkP5Counts = (v: Params): void => {
+  const counts: ReadonlyArray<readonly [string, number]> = [
+    ["setDefend.wallCentral[0]", v.setDefend.wallCentral[0]],
+    ["setDefend.wallCentral[1]", v.setDefend.wallCentral[1]],
+    ["setDefend.wallWide[0]", v.setDefend.wallWide[0]],
+    ["setDefend.wallWide[1]", v.setDefend.wallWide[1]],
+    ["setShapes.throwShort", v.setShapes.throwShort]
+  ]
+  for (const [path, x] of counts) if (!Number.isInteger(x)) throw new ParamsError(`params field ${path} must be a whole number (got ${x})`)
+  for (const block of ["medianS", "sigma"] as const)
+    for (const [k, x] of Object.entries(v.deadBall[block])) if (!(x > 0)) throw new ParamsError(`params field deadBall.${block}.${k} must be positive (got ${x})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
@@ -886,5 +1087,7 @@ export const paramsFromJson = (json: unknown): Params => {
   checkSupport(merged.support)
   checkRuleSwitches(merged)
   checkTransition(merged.transition)
+  checkPairs(merged)
+  checkP5Counts(merged)
   return merged
 }

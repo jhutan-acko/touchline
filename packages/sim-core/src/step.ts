@@ -55,6 +55,8 @@ import {
   type Possession,
   type PressState,
   type RestartKind,
+  type RestartPlan,
+  type SetPieceLive,
   type PlayerSetup,
   type Role,
   type StepResult,
@@ -67,6 +69,7 @@ import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, 
 import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
+import { setPieceKind, type SetPieceKind } from "./setpiece.js"
 // ---- P3 imports, boot-block seam (plan 8c Task 3; plan 8d Task 9 inserts below this line)
 import { bootBlocker } from "./deflect.js"
 
@@ -89,6 +92,20 @@ import { joinChance, pauseTarget, recoverRate, windowTicks } from "./transition.
 import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "./press.js"
 
 // ---- P4 imports, marking seam (plan 8d Task 8 inserts below this line)
+
+// ---- P5 imports, attacking set-piece seam (plan 8e Task 3 inserts below this line)
+
+// ---- P5 imports, defending set-piece seam (plan 8e Task 4 inserts below this line)
+
+// ---- P5 imports, restart-shape seam (plan 8e Task 5 inserts below this line)
+
+// ---- P5 imports, dead-ball seam (plan 8e Task 6 inserts below this line)
+
+// ---- P5 imports, keeper-restart seam (plan 8e Task 7 inserts below this line)
+
+// ---- P5 imports, role-run seam (plan 8e Task 9 inserts below this line)
+
+// ---- P5 imports, rotation seam (plan 8e Task 10 inserts below this line)
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -223,6 +240,10 @@ class Work {
   transition: TransitionState | undefined
   /** A5 team-press state (P4); absent while press.rule is 0. */
   press: PressState | undefined
+  /** P5 plan for the restart being set up; absent while no P5 seam plans one, or in open play. */
+  restartPlan: RestartPlan | undefined
+  /** P5 set piece just taken (attacking set-piece seam); absent while none is live. */
+  setPiece: SetPieceLive | undefined
 
   constructor(s: MatchState) {
     this.cfg = s.config
@@ -259,6 +280,8 @@ class Work {
     this.supportGate = s.supportGate
     this.transition = s.transition
     this.press = s.press
+    this.restartPlan = s.restartPlan
+    this.setPiece = s.setPiece
   }
 
   get p() {
@@ -369,12 +392,21 @@ class Work {
       ...(this.load ? { load: { ...this.load } } : {}),
       ...(this.supportGate ? { supportGate: this.supportGate } : {}),
       ...(this.transition ? { transition: this.transition } : {}),
-      ...(this.press ? { press: this.press } : {})
+      ...(this.press ? { press: this.press } : {}),
+      ...(this.restartPlan ? { restartPlan: this.restartPlan } : {}),
+      ...(this.setPiece ? { setPiece: this.setPiece } : {})
     }
   }
 }
 
 // ---------------------------------------------------------------- restarts
+
+/** A restart to set up: its kind, the taking side and the spot. */
+type RestartAt = { readonly restart: RestartKind; readonly side: Side; readonly at: Vec2 }
+/** The restart phase (a restart being set up). */
+type RestartPhase = Extract<Phase, { kind: "restart" }>
+/** A seam's part of a restart's plan: any field but `kind`, which startRestart sets. */
+type PlanPart = Partial<Omit<RestartPlan, "kind">>
 
 const restartFromOut = (lastSide: Side | null, at: Vec3, period: Period): { restart: RestartKind; side: Side; at: Vec2 } => {
   const last = lastSide ?? "home"
@@ -388,15 +420,24 @@ const restartFromOut = (lastSide: Side | null, at: Vec3, period: Period): { rest
   return { restart: "goal_kick", side: defending, at: { x: end * (PITCH.halfL - PITCH.sixDepth), y: 0 } }
 }
 
-const startRestart = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): void => {
-  const delay = w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)
-  w.phase = { kind: "restart", restart: r.restart, side: r.side, at: r.at, resumeTick: w.tick + Math.round(delay / w.dt) }
+const startRestart = (w: Work, r: RestartAt): void => {
+  const resumeTick = w.tick + restartDelayTicks(w, r)
+  w.phase = { kind: "restart", restart: r.restart, side: r.side, at: r.at, resumeTick }
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: r.at.x, y: r.at.y, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
   w.pressedBy = []
   // A restart is not a loss (P4 A4): it ends any transition.
   w.transition = undefined
   if (w.period === "second_half") for (const side of ["home", "away"] as const) subWindow(w, side)
+  // P5 (plan 8e): the restart's plan, after any substitution, so it names the players on the pitch. Each seam sees the
+  // fields before it (takerFor already knows the keeper choice); a plan holding nothing but its kind is dropped.
+  const kind = setPieceKind(r.restart, r.at, r.side, w.period)
+  w.restartPlan = { kind }
+  w.restartPlan = { ...w.restartPlan, ...planDead(w, r, kind, resumeTick) }
+  w.restartPlan = { ...w.restartPlan, ...planKeeper(w, r, kind) }
+  w.restartPlan = { ...w.restartPlan, ...planAttack(w, r, kind) }
+  w.restartPlan = { ...w.restartPlan, ...planDefend(w, r, kind) }
+  if (Object.values(w.restartPlan).filter((v) => v !== undefined).length === 1) w.restartPlan = undefined
 }
 
 // ---------------------------------------------------------------- substitutions
@@ -485,10 +526,64 @@ const orderedSubs = (w: Work, side: Side): void => {
   w.subs[side] = { ...st, made: st.made + made, used, windows: st.windows + (made > 0 && !w.halfTimeBreak ? 1 : 0) }
 }
 
-const takerFor = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): PlayerState => {
+// ================================================================ P5 attacking set-piece seam (plan 8e Task 3 owns this block)
+
+/** S1/S4: the attacking side's part of a restart's plan (rest defence; setpiece stream). rule 0: nothing, no draw. @internal */
+export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
+
+/** S1/S4: a restarting-side player's spot while the restart is set up; null falls through to shapeSpot. rule 0: null. @internal */
+export const attackSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
+
+/** S1: the restart has just been taken by `taker` (handleRestart); notes the live set piece. rule 0: nothing. @internal */
+export const noteSetPiece = (w: Work, ph: RestartPhase, taker: PlayerState): void => {}
+
+/** S1: an attacker's run to his table spot just after the kick (open play). rule 0: null. @internal */
+export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget | null => null
+
+// ================================================================ end of P5 attacking set-piece seam
+
+// ================================================================ P5 defending set-piece seam (plan 8e Task 4 owns this block)
+
+/** S2/S3: the defending side's part of a restart's plan (wall, jitter, outlet; setpiece stream). rule 0: nothing, no draw. @internal */
+export const planDefend = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
+
+/** S2/S3: a defending player's spot while the restart is set up; null falls through to shapeSpot. rule 0: null. @internal */
+export const defendSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
+
+// ================================================================ end of P5 defending set-piece seam
+
+// ================================================================ P5 restart-shape seam (plan 8e Task 5 owns this block)
+
+/** S5-S7: a player's goal-kick, throw-in or kickoff spot (either side); null keeps the old target. rule 0: null. @internal */
+export const shapeSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
+
+// ================================================================ end of P5 restart-shape seam
+
+// ================================================================ P5 dead-ball seam (plan 8e Task 6 owns this block)
+
+/** S8: ticks from a restart's start to its resume tick. rule 0: timing.restartDelayS x U(0.7, 1.3) (restart stream). @internal */
+export const restartDelayTicks = (w: Work, r: RestartAt): number => Math.round((w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)) / w.dt)
+
+/** S8: the dead-ball part of a restart's plan (walk speeds, settle ticks, taker pause; dead stream). rule 0: nothing, no draw. @internal */
+export const planDead = (w: Work, r: RestartAt, kind: SetPieceKind, resumeTick: number): PlanPart => ({})
+
+/** S8: a player's movement while the ball is dead, over the restart dispatcher's `mt` (walking pace). rule 0: `mt` itself. @internal */
+export const deadMove = (w: Work, pl: PlayerState, mt: MoveTarget): MoveTarget => mt
+
+/** S8: whether the taker is ready to take the restart (on the spot, his pause over). rule 0: within 1 m of the spot. @internal */
+export const takerReady = (w: Work, ph: RestartPhase, taker: PlayerState): boolean => dist(taker.pos, ph.at) <= 1.0
+
+// ================================================================ end of P5 dead-ball seam
+
+const takerFor = (w: Work, r: RestartAt): PlayerState => {
   const team = w.active(r.side)
   if (r.restart === "goal_kick") return team.find((x) => x.role === "GK") ?? team[0]!
   if (r.restart === "kickoff") return team.find((x) => x.role === "ST") ?? team[team.length - 1]!
+  // G3 (P5): the keeper takes the free kick when the restart's plan says so (keeperTakes makes no draw).
+  if (r.restart === "free_kick" && keeperTakes(w, r)) {
+    const gk = team.find((x) => x.role === "GK")
+    if (gk) return gk
+  }
   // With every outfielder sent off (only under a scripted red-card storm) the keeper takes it.
   return team.filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, r.at) - dist(b.pos, r.at))[0] ?? team[0]!
 }
@@ -498,10 +593,12 @@ const handleRestart = (w: Work): void => {
   if (ph.kind !== "restart") return
   if (w.tick < ph.resumeTick) return
   const taker = takerFor(w, ph)
-  // The taker walks to the ball (see moveTarget); the restart waits until they are there.
-  if (dist(taker.pos, ph.at) > 1.0) return
+  // The taker walks to the ball (see moveTarget); the restart waits until they are ready (P5 dead-ball seam).
+  if (!takerReady(w, ph, taker)) return
   w.setPlayer({ ...taker, vel: { x: 0, y: 0 }, intentUntil: w.tick, intent: { kind: "hold" } })
   w.emit(w.pending("set_piece", taker, ph.at, { kind: ph.restart }))
+  noteSetPiece(w, ph, taker)
+  w.restartPlan = undefined
   w.possession = { kind: "owned", playerId: taker.id, since: w.tick, restart: ph.restart }
   w.lastTouch = { playerId: taker.id, side: taker.side }
   w.phase = { kind: "open_play" }
@@ -779,13 +876,28 @@ const keeperMethod = (w: Work, d: Decision): string =>
 
 /** How a pass is struck: throw-ins and keeper throws by hand (throws more accurately), punts with more error. */
 const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { technique: "throw" | "foot"; hands: boolean; errorScale: number } => {
-  if (restart === "throw_in") return { technique: "throw", hands: true, errorScale: 1 }
-  if (d.candidate?.method === "throw") return { technique: "throw", hands: true, errorScale: w.p.distribution.throwErrorScale }
-  if (d.candidate?.method === "punt") return { technique: "foot", hands: false, errorScale: w.p.distribution.puntErrorScale }
-  return { technique: "foot", hands: false, errorScale: 1 }
+  // G3 (P5): a long goal kick or keeper free kick is struck with keeperRestarts.longErrorScale (keeper-restart seam).
+  const long = longKickScale(w, d, restart)
+  if (restart === "throw_in") return { technique: "throw", hands: true, errorScale: 1 * long }
+  if (d.candidate?.method === "throw") return { technique: "throw", hands: true, errorScale: w.p.distribution.throwErrorScale * long }
+  if (d.candidate?.method === "punt") return { technique: "foot", hands: false, errorScale: w.p.distribution.puntErrorScale * long }
+  return { technique: "foot", hands: false, errorScale: 1 * long }
 }
 
 // ================================================================ end of P3 keeper-distribution seam
+
+// ================================================================ P5 keeper-restart seam (plan 8e Task 7 owns this block)
+
+/** G3: the keeper-restart part of a restart's plan (whether the keeper takes an own-third free kick; dead stream). rule 0: nothing, no draw. @internal */
+export const planKeeper = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
+
+/** G3: whether the keeper takes this free kick (reads the plan's keeperTaker; no draw). rule 0: never. @internal */
+export const keeperTakes = (w: Work, r: RestartAt): boolean => false
+
+/** G3: the error multiplier of a kick (kickStyle): longErrorScale for a long goal kick or keeper free kick. rule 0: 1. @internal */
+export const longKickScale = (w: Work, d: Decision, restart: RestartKind | null): number => 1
+
+// ================================================================ end of P5 keeper-restart seam
 
 // ================================================================ P4 aerial seam (plan 8d Task 5 owns this block)
 
@@ -1348,8 +1460,8 @@ const keeperAtReleaseSpot = (w: Work, pl: PlayerState): boolean =>
 
 // ================================================================ P2 positioning
 
-/** True while a restart taken by the team's own keeper (a goal kick) is being set up: the build-up row applies, as in his hands (Ruling 7). */
-const keeperRestart = (w: Work): boolean => {
+/** True while a restart taken by the team's own keeper (a goal kick) is being set up: the build-up row applies, as in his hands (Ruling 7). @internal */
+export const keeperRestart = (w: Work): boolean => {
   const ph = w.phase
   return ph.kind === "restart" && ph.restart !== "kickoff" && takerFor(w, ph).role === "GK"
 }
@@ -1747,6 +1859,36 @@ export const markSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, at
 
 // ================================================================ end of P4 marking seam
 
+// ================================================================ P5 role-run seam (plan 8e Task 9 owns this block)
+
+/**
+ * A6: an in-possession teammate's run in behind (or overlap) while `owner` has the ball (movement stream); null when he
+ * makes none. rule 0: the old run in behind (ST, W and AM at runs.runInBehindRatePerS, carrier beyond u -20).
+ * @internal
+ */
+export const runMove = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarget | null => {
+  if (pl.role !== "ST" && pl.role !== "W" && pl.role !== "AM") return null
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
+  if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS * triggerFactor(w, pl), w.dt))) {
+    const lastDef = lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
+    const target = clampToPitch({ x: dirOf(pl.side, w.period) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
+    w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
+    w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
+    return { target, speedCap: vmax }
+  }
+  return null
+}
+
+// ================================================================ end of P5 role-run seam
+
+// ================================================================ P5 rotation seam (plan 8e Task 10 owns this block)
+
+/** A6: an in-possession teammate's rotation (winger inside, full-back inversion, CM drop) over his shape `base`; null when none. rule 0: null. @internal */
+export const rotateMove = (w: Work, pl: PlayerState, owner: PlayerState, base: () => MoveTarget): MoveTarget | null => null
+
+// ================================================================ end of P5 rotation seam
+
 const moveTarget = (
   w: Work,
   pl: PlayerState,
@@ -1763,14 +1905,18 @@ const moveTarget = (
   }
   const ph = w.phase
   if (ph.kind === "restart") {
-    if (takerFor(w, ph).id === pl.id) return { target: ph.at, speedCap: vmax * 0.8 }
+    if (takerFor(w, ph).id === pl.id) return deadMove(w, pl, { target: ph.at, speedCap: vmax * 0.8 })
+    // P5 restart-phase precedence (plan 8e ruling 5): the restarting side's set-piece spot, else the other side's, else
+    // the restart shape, else the old target and 9.15 m push; the dead-ball seam then sets the pace.
+    const spot = pl.side === ph.side ? (attackSpot(w, pl, ph) ?? shapeSpot(w, pl, ph)) : (defendSpot(w, pl, ph) ?? shapeSpot(w, pl, ph))
+    if (spot) return deadMove(w, pl, { target: clampToPitch(spot, 0.5), speedCap: vmax * 0.6 })
     const a = restartTarget(w, pl, ph.at, ph.side === pl.side)
-    if (ph.restart === "kickoff") return { target: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), speedCap: vmax * 0.6 }
+    if (ph.restart === "kickoff") return deadMove(w, pl, { target: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), speedCap: vmax * 0.6 })
     if (pl.side !== ph.side && dist(a, ph.at) < 9.15 && pl.role !== "GK") {
       const away = add(ph.at, scale(norm(sub(a, ph.at)), 9.5))
-      return { target: clampToPitch(away), speedCap: vmax * 0.6 }
+      return deadMove(w, pl, { target: clampToPitch(away), speedCap: vmax * 0.6 })
     }
-    return { target: a, speedCap: vmax * 0.6 }
+    return deadMove(w, pl, { target: a, speedCap: vmax * 0.6 })
   }
   const pos = w.possession
   if (pos.kind === "owned" && pos.playerId === pl.id) {
@@ -1799,6 +1945,9 @@ const moveTarget = (
     if (chasers.some((c) => c.id === pl.id) && pl.role !== "GK")
       return { target: interceptPoint(pl.pos, vmax, ballFlat, { x: w.ball.vel.x, y: w.ball.vel.y }), speedCap: vmax }
   }
+  // S1 (P5): an attacker's run just after a set piece (attacking set-piece seam).
+  const spr = setPieceRun(w, pl, vmax)
+  if (spr) return spr
   if (pl.role === "GK") {
     // Close down a ball carrier who gets near goal: stand between them and the goal centre, 2.5 m off the ball.
     if (pos.kind === "owned" && possSide !== pl.side) {
@@ -1821,16 +1970,13 @@ const moveTarget = (
   }
   const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
   if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax) }
-  if (pos.kind === "owned" && possSide === pl.side && (pl.role === "ST" || pl.role === "W" || pl.role === "AM")) {
-    if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
+  // A6 (P5): runs in behind and overlaps (role-run seam), then rotations (rotation seam).
+  if (pos.kind === "owned" && possSide === pl.side) {
     const owner = w.player(pos.playerId)
-    if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS * triggerFactor(w, pl), w.dt))) {
-      const lastDef = lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
-      const target = clampToPitch({ x: dirOf(pl.side, w.period) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
-      w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
-      w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
-      return { target, speedCap: vmax }
-    }
+    const rm = runMove(w, pl, owner)
+    if (rm) return rm
+    const ro = rotateMove(w, pl, owner, shape)
+    if (ro) return ro
   }
   const sp = w.p.support
   // Rule 1 (P3 Task 10d): supporters come short only while the carrier is pressed, onto a ring distM out; everyone else
@@ -1849,7 +1995,7 @@ const moveTarget = (
     const owner = w.player(pos.playerId)
     const supporters = w
       .active(pl.side)
-      .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+      .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil) && !(x.intent.kind === "rotate" && w.tick < x.intentUntil))
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
       .slice(0, sp.count)
     if (supporters.some((x) => x.id === pl.id))
@@ -1897,7 +2043,7 @@ const supportTick = (w: Work): SupportTick | null => {
     n > 0
       ? w
           .active(owner.side)
-          .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+          .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil) && !(x.intent.kind === "rotate" && w.tick < x.intentUntil))
           .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
           .slice(0, n)
           .map((x) => x.id)
@@ -1993,6 +2139,9 @@ const endPeriod = (w: Work): StepResult => {
   // A carry under way ends at the whistle.
   if (w.possession.kind === "owned") finishCarry(w, w.player(w.possession.playerId))
   w.carry = null
+  // P5 (plan 8e): a restart pending at the whistle leaves no plan or live set piece behind (the kickoffs have none).
+  w.restartPlan = undefined
+  w.setPiece = undefined
   w.emit(w.pending("period_end", null, null, { period: w.period }))
   if (w.period === "second_half") {
     w.emit(w.pending("match_end", null, null, { home: w.score.home, away: w.score.away }))
