@@ -164,3 +164,49 @@ describe("G5 in a match", () => {
     expect(throws).toBeGreaterThan(0)
   }, 120_000)
 })
+
+describe("G5 deferred cases (P5 Task 13)", () => {
+  const withLogit = (puntLogit: number): Params => ({ ...on, distribution: { ...on.distribution, puntLogit } })
+  const hands = (p: Params, n: number) => {
+    const r = new Rng(seedRng(17))
+    return Array.from({ length: n }, () => decide(input({}), p, r).candidate!)
+  }
+  it("pPunt 0 never punts, 1 always punts", () => {
+    // Both pools are open from this keeper's spot (the first G5 test punts and throws), so the branch is the logit's alone.
+    const pools = keeperHandsCandidates(candidateContext(input({}), on, 0))!
+    expect(pools.throws.length).toBeGreaterThan(0)
+    expect(pools.punts.length).toBeGreaterThan(0)
+    for (const c of hands(withLogit(-50), 200)) expect(c.method).toBe("throw")
+    for (const c of hands(withLogit(50), 200)) expect(c.method).toBe("punt")
+  })
+  it("a throw is never shorter than the throw lower bound and a punt is struck by foot", () => {
+    // A teammate 2 m from the keeper is under the 4 m lower bound: never a throw target, whichever way the draws fall.
+    const close = at(teammates.find((t) => t.slot === 5)!, keeper.pos.x + 2, 0)
+    const crowded = teammates.map((t) => (t.id === close.id ? close : t))
+    const r = new Rng(seedRng(19))
+    for (let i = 0; i < 300; i++) {
+      const c = decide(input({ teammates: crowded }), withLogit(-50), r).candidate!
+      expect(c.method).toBe("throw")
+      expect(c.receiverId).not.toBe(close.id)
+      expect(Math.hypot(c.target.x - keeper.pos.x, c.target.y - keeper.pos.y)).toBeGreaterThanOrEqual(4)
+    }
+    // (puntLogit 50 below: at the default a seed-7 match can pass without a single punt, as M10 records.)
+    // In a match every punt is followed by a pass struck by foot, and every throw by hands.
+    let s = initMatch(makeConfig(7, { params: withLogit(50) }))
+    const events: DomainEvent[] = []
+    while (!isFinished(s)) {
+      const res = step(s)
+      s = res.state
+      events.push(...res.events)
+    }
+    let punts = 0
+    events.forEach((e, i) => {
+      if (e.type !== "keeper_distribution" || e.attrs.method !== "punt") return
+      punts++
+      const pass = events.slice(i + 1).find((g) => g.type === "pass")!
+      expect(pass.attrs.technique).not.toBe("throw")
+      expect(pass.attrs.body_part).not.toBe("hands")
+    })
+    expect(punts).toBeGreaterThan(0)
+  }, 120_000)
+})

@@ -360,3 +360,35 @@ describe("on the ball", () => {
     expect(on).toBeGreaterThan(off)
   })
 })
+
+describe("support rule 1 hold across ticks (P3 deferred, P5 Task 13)", () => {
+  // The gate keeps its state while the same carrier has the ball: sinceTick holds, and a flip waits gateHoldS, at either tick rate.
+  for (const dt of [0.1, 0.04]) {
+    it(`the support hold carries across ticks for the same carrier at dt ${dt}`, () => {
+      const cfg = makeConfig(5, { params: DEFAULT_PARAMS })
+      let s = initMatch({ ...cfg, dt })
+      const hold = DEFAULT_PARAMS.support.gateHoldS
+      expect(DEFAULT_PARAMS.support.rule).toBe(1)
+      let prev = s.supportGate
+      let carried = 0, flips = 0
+      for (let i = 0; i < Math.round(1800 / dt); i++) {
+        s = step(s).state
+        const g = s.supportGate
+        if (prev && g && prev.carrierId === g.carrierId) {
+          if (g.sinceTick === prev.sinceTick) {
+            expect(g.pressed).toBe(prev.pressed)
+            carried++
+          } else {
+            flips++
+            expect(g.pressed).not.toBe(prev.pressed)
+            expect((g.sinceTick - prev.sinceTick) * dt).toBeGreaterThanOrEqual(hold - 1e-9)
+          }
+        }
+        prev = g
+      }
+      // Not vacuous: the gate was carried over many ticks, and flipped at least once in a half of football.
+      expect(carried).toBeGreaterThan(100)
+      expect(flips).toBeGreaterThan(0)
+    }, 120_000)
+  }
+})
