@@ -609,9 +609,23 @@ export const deadMove = (w: Work, pl: PlayerState, mt: MoveTarget): MoveTarget =
 }
 
 /**
+ * S8: the taker who has arrived on the spot (the plan's arrivedId) stays the taker while he is on the pitch, so a teammate
+ * crossing the spot neither takes over nor restarts the pause. null (takerFor picks as before) under rule 0, before anyone
+ * has arrived, or once he has been sent off or substituted. @internal
+ */
+export const arrivedTaker = (w: Work, r: RestartAt): PlayerState | null => {
+  const id = w.p.deadBall.rule === 1 ? w.restartPlan?.arrivedId : undefined
+  if (id === undefined) return null
+  return w.active(r.side).find((x) => x.id === id) ?? null
+}
+
+/**
  * S8: whether the taker is ready to take the restart. rule 0, or no pause planned (the period kickoffs): within 1 m of the
  * spot. rule 1: he has stood within 1 m for the plan's pauseTicks, counted from when this taker first stood there (a new
- * taker, or one who stepped away, starts again). Only asked from the resume tick on. @internal
+ * taker, or one who stepped away, starts again). Only asked from the resume tick on.
+ *
+ * Side effect (rule 1 with a pause planned): it records the pause in w.restartPlan, writing arrivedTick and arrivedId
+ * when the taker first stands on the spot and clearing both when he leaves it. @internal
  */
 export const takerReady = (w: Work, ph: RestartPhase, taker: PlayerState): boolean => {
   const near = dist(taker.pos, ph.at) <= 1.0
@@ -640,6 +654,9 @@ const takerFor = (w: Work, r: RestartAt): PlayerState => {
     const gk = team.find((x) => x.role === "GK")
     if (gk) return gk
   }
+  // S8 (P5 dead-ball seam): the taker on the spot keeps the kick while he is on the pitch.
+  const arrived = arrivedTaker(w, r)
+  if (arrived) return arrived
   // With every outfielder sent off (only under a scripted red-card storm) the keeper takes it.
   return team.filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, r.at) - dist(b.pos, r.at))[0] ?? team[0]!
 }

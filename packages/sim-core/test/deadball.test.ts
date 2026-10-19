@@ -14,6 +14,8 @@ const off: Params = { ...P, deadBall: { ...P.deadBall, rule: 0 } }
 const on: Params = { ...P, deadBall: { ...P.deadBall, rule: 1 } }
 const D = on.deadBall
 const KEYS: ReadonlyArray<DeadKey> = ["throw_in", "goal_kick", "corner", "free_kick_att", "free_kick", "kickoff"]
+/** The real median delays (s) from the set-pieces report, written out so a params change cannot move the target. */
+const REAL_MEDIAN_S: Readonly<Record<DeadKey, number>> = { throw_in: 13.5, goal_kick: 22, corner: 33, free_kick_att: 42, free_kick: 28, kickoff: 70 }
 
 const median = (xs: ReadonlyArray<number>): number => {
   const s = [...xs].sort((a, b) => a - b)
@@ -24,7 +26,8 @@ const quantile = (xs: ReadonlyArray<number>, q: number): number => [...xs].sort(
 
 const cfg = makeConfig(7)
 const home = (role: string, n = 0): string => cfg.home.starters.filter((x) => x.role === role)[n]!.id
-const R0 = 1500
+/** The resume tick of the taker-pause fixtures. */
+const R = 1500
 
 /**
  * A home throw-in being set up at `at` (first half, pitch coordinates), resuming at `resume`, the state one tick before
@@ -82,7 +85,7 @@ describe("S8 delays (deadball.ts)", () => {
     for (const key of KEYS) {
       const rng = new Rng(seedRng(1000 + KEYS.indexOf(key)))
       const xs = Array.from({ length: 4000 }, () => restartDelayS(key, 45, d, rng))
-      expect(Math.abs(median(xs) / d.medianS[key] - 1), key).toBeLessThan(0.04)
+      expect(Math.abs(median(xs) / REAL_MEDIAN_S[key] - 1), key).toBeLessThan(0.04)
       expect(Math.min(...xs), key).toBeGreaterThanOrEqual(d.minS)
       if (key === "throw_in") {
         expect(Math.abs(quantile(xs, 0.25) / 8 - 1)).toBeLessThan(0.15)
@@ -105,7 +108,7 @@ describe("S8 delays (deadball.ts)", () => {
       const rng = new Rng(seedRng(2000 + KEYS.indexOf(key)))
       const minutes = new Rng(seedRng(3000))
       const xs = Array.from({ length: 4000 }, () => restartDelayS(key, minutes.range(0, 90), d, rng))
-      expect(Math.abs(median(xs) / d.medianS[key] - 1), key).toBeLessThan(0.05)
+      expect(Math.abs(median(xs) / REAL_MEDIAN_S[key] - 1), key).toBeLessThan(0.05)
     }
   })
 
@@ -205,7 +208,6 @@ describe("S8 the taker's pause", () => {
       const taker = home("CM")
       const pauses: number[] = []
       for (let seed = 1; seed <= 12; seed++) {
-        const R = 1500
         const s = withPlan(restartState(on, dt, { at: { x: 10, y: -34 }, tick: R, resume: R, place: { [taker]: { x: 10, y: -34 } }, seed }))
         const { kick, states } = runToKick(s, 60)
         expect(kick).not.toBeNull()
@@ -220,15 +222,14 @@ describe("S8 the taker's pause", () => {
       }
       expect(new Set(pauses).size).toBeGreaterThan(1)
       // Under off the same taker kicks at the resume tick.
-      const s = restartState(off, dt, { at: { x: 10, y: -34 }, tick: R0, resume: R0, place: { [taker]: { x: 10, y: -34 } } })
-      expect(runToKick(s, 60).kick!.frame_id).toBe(R0)
+      const s = restartState(off, dt, { at: { x: 10, y: -34 }, tick: R, resume: R, place: { [taker]: { x: 10, y: -34 } } })
+      expect(runToKick(s, 60).kick!.frame_id).toBe(R)
     })
   }
 
   it("a taker sent off during the pause: the restart is re-picked and still taken", () => {
     const taker = home("CM")
     const next = home("CM", 1)
-    const R = 1500
     const s = withPlan(restartState(on, 0.1, { at: { x: 10, y: -34 }, tick: R, resume: R, place: { [taker]: { x: 10, y: -34 }, [next]: { x: 10, y: -28 } } }))
     expect(s.restartPlan!.pauseTicks).toBeGreaterThan(3)
     let arrived = -1
@@ -243,6 +244,19 @@ describe("S8 the taker's pause", () => {
     // The new taker's own pause: from his arrival, not the old taker's.
     expect(arrived).toBeGreaterThan(R + 2)
     expect(kick!.frame_id - arrived).toBe(s.restartPlan!.pauseTicks)
+  })
+
+  it("a teammate crossing the spot during the pause does not take over or restart it", () => {
+    const taker = home("CM")
+    const mate = home("CM", 1)
+    // The taker stands 0.6 m off the spot; two ticks into his pause a teammate steps onto it (nearer the ball).
+    const s = withPlan(restartState(on, 0.1, { at: { x: 10, y: -34 }, tick: R, resume: R, place: { [taker]: { x: 10.6, y: -34 }, [mate]: { x: 10, y: -20 } } }))
+    const { kick } = runToKick(s, 60, (x, i) =>
+      i === 2 ? { ...x, players: x.players.map((pl) => (pl.id === mate ? { ...pl, pos: { x: 10, y: -34 } } : pl)) } : x
+    )
+    expect(kick).not.toBeNull()
+    expect(kick!.player_id).toBe(taker)
+    expect(kick!.frame_id - R).toBe(s.restartPlan!.pauseTicks)
   })
 })
 
@@ -306,7 +320,6 @@ describe("S8 kickoffs and rule off", () => {
     expect(b.map((x) => x.trace)).toEqual(a.map((x) => x.trace))
   })
 })
-
 
 interface Spell {
   readonly restart: RestartKind
