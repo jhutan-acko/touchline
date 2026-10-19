@@ -94,6 +94,7 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 // ---- P4 imports, marking seam (plan 8d Task 8 inserts below this line)
 
 // ---- P5 imports, attacking set-piece seam (plan 8e Task 3 inserts below this line)
+import { attackRoleSpot, attackTable, holdSpot, restKeepers, restKind, restSpots } from "./setpiece-attack.js"
 
 // ---- P5 imports, defending set-piece seam (plan 8e Task 4 inserts below this line)
 
@@ -528,17 +529,80 @@ const orderedSubs = (w: Work, side: Side): void => {
 
 // ================================================================ P5 attacking set-piece seam (plan 8e Task 3 owns this block)
 
-/** S1/S4: the attacking side's part of a restart's plan (rest defence; setpiece stream). rule 0: nothing, no draw. @internal */
-export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
+/**
+ * S4: the attacking side's part of a restart's plan: at corners, attacking free kicks and attacking-third throw-ins, the
+ * rest-defence keepers (restKeepers, the taker as takerFor sees him now) and their spots (setpiece stream). rule 0, or
+ * any other kind: nothing, no draw. @internal
+ */
+export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
+  const s = w.p.setAttack
+  const rk = restKind(kind)
+  if (s.rule <= 0 || rk === null) return {}
+  const rng = w.rng.setpiece
+  const restKeep = restKeepers(w.active(r.side), takerFor(w, r).id, s.restKeep[rk], rng)
+  return { restKeep, restSpot: restSpots(restKeep, r.side, w.period, s, rng) }
+}
 
-/** S1/S4: a restarting-side player's spot while the restart is set up; null falls through to shapeSpot. rule 0: null. @internal */
-export const attackSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
+/** S1: `pl`'s table spot at a set piece of `kind` taken by his side, or null when the kind has no table. */
+const tableSpotOf = (w: Work, pl: PlayerState, kind: SetPieceKind): Vec2 | null => {
+  const table = attackTable(kind, w.p.setAttack)
+  if (!table) return null
+  const team = teamOf(w.cfg, pl.side)
+  return attackRoleSpot(table, pl.role, kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), pl.side, w.period)
+}
 
-/** S1: the restart has just been taken by `taker` (handleRestart); notes the live set piece. rule 0: nothing. @internal */
-export const noteSetPiece = (w: Work, ph: RestartPhase, taker: PlayerState): void => {}
+/**
+ * S1/S4: a restarting-side player's spot while the restart is set up: a rest keeper his rest spot; at a corner or an
+ * attacking free kick, the keeper his table spot and everyone else his table spot held holdBackM short (F31); null
+ * otherwise (falls through to shapeSpot). rule 0: null. @internal
+ */
+export const attackSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => {
+  const s = w.p.setAttack
+  const plan = w.restartPlan
+  if (s.rule <= 0 || !plan || pl.side !== ph.side) return null
+  const rest = plan.restSpot?.[pl.id]
+  if (rest) return rest
+  const spot = tableSpotOf(w, pl, plan.kind)
+  if (!spot) return null
+  return pl.role === "GK" ? spot : holdSpot(spot, pl.side, w.period, s.holdBackM)
+}
 
-/** S1: an attacker's run to his table spot just after the kick (open play). rule 0: null. @internal */
-export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget | null => null
+/**
+ * S1: the restart has just been taken by `taker` (handleRestart): at a set piece with a table, notes it live (with its
+ * rest keepers, before the plan is cleared, F2) for the run at the kick; any other restart ends a live one. rule 0:
+ * nothing. @internal
+ */
+export const noteSetPiece = (w: Work, ph: RestartPhase, taker: PlayerState): void => {
+  if (w.p.setAttack.rule <= 0) return
+  const kind = w.restartPlan?.kind ?? setPieceKind(ph.restart, ph.at, ph.side, w.period)
+  const restKeep = w.restartPlan?.restKeep
+  w.setPiece = attackTable(kind, w.p.setAttack)
+    ? { kind, side: ph.side, tick: w.tick, takerId: taker.id, ...(restKeep ? { restKeep } : {}) }
+    : undefined
+}
+
+/**
+ * S1: an attacker's run to his table spot just after the kick, at runSpeedShare x vmax, for runWindowS. Not for the
+ * taker, the ball's owner, the flight's winner, the keeper, the rest keepers or the other side. The window ends (and the
+ * live set piece is cleared) after runWindowS or when the other side gains the ball. rule 0: null. @internal
+ */
+export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget | null => {
+  const sp = w.setPiece
+  const s = w.p.setAttack
+  if (s.rule <= 0 || !sp) return null
+  const pos = w.possession
+  const lost =
+    (pos.kind === "owned" && w.players.find((x) => x.id === pos.playerId)?.side !== sp.side) || (pos.kind === "in_flight" && pos.flight.side !== sp.side)
+  if (w.tick - sp.tick >= Math.round(s.runWindowS / w.dt) || lost) {
+    w.setPiece = undefined
+    return null
+  }
+  if (pl.side !== sp.side || pl.role === "GK" || pl.id === sp.takerId || sp.restKeep?.includes(pl.id)) return null
+  if (pos.kind === "owned" && pos.playerId === pl.id) return null
+  if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id) return null
+  const spot = tableSpotOf(w, pl, sp.kind)
+  return spot ? { target: clampToPitch(spot, 0.5), speedCap: s.runSpeedShare * vmax } : null
+}
 
 // ================================================================ end of P5 attacking set-piece seam
 
