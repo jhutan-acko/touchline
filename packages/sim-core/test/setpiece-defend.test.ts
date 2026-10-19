@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { attackX, dist, dirOf, norm, other, sub, add, scale, type Period, type Side, type Vec2 } from "../src/geometry.js"
 import { DEFAULT_PARAMS, type Params } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
-import { wallSize, wallSpots, zonalSpot } from "../src/setpiece-defend.js"
+import { boxLayout, clearOfBall, LEGAL_M, PUSH_M, wallSize, wallSpots, zonalSpot } from "../src/setpiece-defend.js"
 import { setPieceKind } from "../src/setpiece.js"
 import { defendSpot, initMatch, isFinished, planDefend, step, workAt } from "../src/step.js"
 import { makeConfig } from "../src/testing.js"
@@ -174,6 +174,32 @@ describe("S3: walls", () => {
     }
   })
 
+  it("the other side's wall: away free kick, home wall, mirrored; and a ball on y 0 shades the goal centre", () => {
+    for (const period of ["first_half", "second_half"] as const) {
+      const d = dirOf("away", period)
+      const ball = { x: d * 25, y: 5 }
+      const s = withPlan(restartState(on, "free_kick", "away", ball, period, []))
+      const plan = s.restartPlan!
+      expect(plan.kind).toBe("fk_central")
+      expect(plan.wall!.length === 3 || plan.wall!.length === 4).toBe(true)
+      const dir = norm(sub({ x: d * 52.5, y: 2.66 }, ball))
+      const spots = spotsOf(s)
+      for (const id of plan.wall!) {
+        expect(s.players.find((pl) => pl.id === id)!.side).toBe("home")
+        const p = spots.get(id)!
+        expect(dist(p, ball)).toBeGreaterThanOrEqual(8.65 - 1e-9)
+        expect(dist(p, ball)).toBeLessThanOrEqual(9.15 + 1e-9)
+        expect((p.x - ball.x) * dir.x + (p.y - ball.y) * dir.y).toBeGreaterThan(8)
+      }
+    }
+    const flat = wallSpots({ x: 25, y: 0 }, "away", "first_half", 4, [0, 0, 0, 0], S)
+    expect(flat.reduce((a, p) => a + p.y, 0) / 4).toBeCloseTo(0, 9)
+    for (const p of flat) expect(dist(p, { x: 25, y: 0 })).toBeCloseTo(9.15, 9)
+    expect(flat.reduce((a, p) => a + p.x, 0) / 4).toBeGreaterThan(25 + 9.1)
+    const s0 = withPlan(restartState(on, "free_kick", "home", { x: 25, y: 0 }, "first_half", []))
+    for (const id of s0.restartPlan!.wall!) expect(Math.abs(spotsOf(s0).get(id)!.y)).toBeLessThan(1.5)
+  })
+
   it("off: no plan, no draw, no spot", () => {
     const s = restartState(off, "free_kick", "home", { x: 25, y: 5 }, "first_half", [])
     const w = workAt(s)
@@ -195,29 +221,61 @@ describe("S2: corners and wide free kicks", () => {
     { x: 37, y: -11 },
     { x: 44, y: 14 }
   ]
-  for (const period of ["first_half", "second_half"] as const)
-    it(`corners: nine in the box, man-marking within 12 m, the rest zonal, nobody up (${period})`, () => {
-      const d = dirOf("home", period)
-      const atk = six.map((p) => ({ x: d * p.x, y: p.y }))
-      const s = withPlan(restartState(on, "corner", "home", { x: d * 52.5, y: 34 }, period, atk))
-      const spots = spotsOf(s)
-      const defs = s.players.filter((pl) => pl.side === "away" && pl.role !== "GK")
-      expect(defs).toHaveLength(10)
-      const pts = defs.map((pl) => spots.get(pl.id)!)
-      for (const p of pts) expect(p).not.toBeNull()
-      // F19: nine in the box, the tenth at the box edge (u 32, y 0 in the restarting frame) for second balls.
-      expect(pts.filter((p) => inBox(p, "home", period)).length).toBe(9)
-      expect(pts.some((p) => near(p, { x: d * 32, y: 0 }))).toBe(true)
-      for (const p of pts) expect(attackX("home", p.x, period)).toBeGreaterThanOrEqual(17.5)
-      // Every attacker in the box has a marker 1 m goal-side of him.
-      for (const a of atk) expect(pts.filter((p) => near(p, goalSide(a, "away", period))).length).toBe(1)
-      // F20: zonal spots in the restarting team's frame, pitch y; the first one is (47, -5.5), then 0, then +5.5.
-      expect(zonalSpot(0, "away", period, S)).toEqual({ x: d * 47, y: -5.5 })
-      for (let i = 0; i < 3; i++) expect(pts.some((p) => near(p, zonalSpot(i, "away", period, S)))).toBe(true)
-      // The keeper on his line.
-      const gk = s.players.find((pl) => pl.side === "away" && pl.role === "GK")!
-      expect(spots.get(gk.id)).toEqual({ x: d * 51, y: 0 })
-    })
+  for (const rs of ["home", "away"] as const)
+    for (const period of ["first_half", "second_half"] as const)
+      it(`corners: nine in the box, man-marking within 12 m, the rest zonal, nobody up (${rs} corner, ${period})`, () => {
+        const ds = other(rs)
+        const d = dirOf(rs, period)
+        const atk = six.map((p) => ({ x: d * p.x, y: p.y }))
+        const s = withPlan(restartState(on, "corner", rs, { x: d * 52.5, y: 34 }, period, atk))
+        const spots = spotsOf(s)
+        const defs = s.players.filter((pl) => pl.side === ds && pl.role !== "GK")
+        expect(defs).toHaveLength(10)
+        const pts = defs.map((pl) => spots.get(pl.id)!)
+        for (const p of pts) expect(p).not.toBeNull()
+        // F19: nine in the box, the tenth at the box edge (u 32, y 0 in the restarting frame) for second balls.
+        expect(pts.filter((p) => inBox(p, rs, period)).length).toBe(9)
+        expect(pts.some((p) => near(p, { x: d * 32, y: 0 }))).toBe(true)
+        for (const p of pts) expect(attackX(rs, p.x, period)).toBeGreaterThanOrEqual(17.5)
+        // Every attacker in the box has a marker 1 m goal-side of him.
+        for (const a of atk) expect(pts.filter((p) => near(p, goalSide(a, ds, period))).length).toBe(1)
+        // F20: zonal spots in the restarting team's frame, pitch y; the first one is (47, -5.5), then 0, then +5.5.
+        expect(zonalSpot(0, ds, period, S)).toEqual({ x: d * 47, y: -5.5 })
+        for (let i = 0; i < 3; i++) expect(pts.some((p) => near(p, zonalSpot(i, ds, period, S)))).toBe(true)
+        // The keeper on his line.
+        const gk = s.players.find((pl) => pl.side === ds && pl.role === "GK")!
+        expect(spots.get(gk.id)).toEqual({ x: d * 51, y: 0 })
+      })
+
+  it("a marker whose goal-side spot is inside 9.15 m is pushed out to 9.5 m", () => {
+    // A wide free kick at (40, -24); the attacker at (40, -17) is 11.5 m from the W's table spot (40, -5.5), and his
+    // goal-side spot is 7.8 m from the ball. (An attacker at (42, -18) is 12.7 m from every table spot: nobody marks him.)
+    const ball = { x: 40, y: -24 }
+    const a = { x: 40, y: -17 }
+    const pushed = add(ball, scale(norm(sub(goalSide(a, "away", "first_half"), ball)), PUSH_M))
+    expect(dist(goalSide(a, "away", "first_half"), ball)).toBeLessThan(LEGAL_M)
+    const atk = [{ ...restartState(on, "free_kick", "home", ball, "first_half", []).players[1]!, pos: a }]
+    const direct = boxLayout([{ id: "w", role: "W", ySign: -1 }], atk, ball, "away", "first_half", S, true)
+    expect(dist(direct.get("w")!, pushed)).toBeLessThan(1e-9)
+    expect(dist(direct.get("w")!, ball)).toBeCloseTo(PUSH_M, 9)
+    // Through the seam: the wide defender W marks him unless he is in the wall; some seed leaves him out of it.
+    let found = false
+    for (let seed = 0; seed < 50 && !found; seed++) {
+      const s = withPlan(restartState(on, "free_kick", "home", ball, "first_half", [a], 0, seed))
+      found = [...spotsOf(s).values()].some((p) => p !== null && dist(p, pushed) < 1e-9)
+    }
+    expect(found).toBe(true)
+  })
+
+  it("clearOfBall: the zero vector goes +x, and the byline clamp can leave a spot inside 9.15 m", () => {
+    expect(clearOfBall({ x: 10, y: 3 }, { x: 10, y: 3 })).toEqual({ x: 10 + PUSH_M, y: 3 })
+    expect(clearOfBall({ x: 20, y: 3 }, { x: 10, y: 3 })).toEqual({ x: 20, y: 3 })
+    // Ball at (51, 0), spot (52, 2): pushed 9.5 m along (1, 2) to (55.25, 8.50), clamped to x 52 (F30: the impossible case).
+    const p = clearOfBall({ x: 52, y: 2 }, { x: 51, y: 0 })
+    expect(p.x).toBeCloseTo(52, 9)
+    expect(p.y).toBeCloseTo((2 * PUSH_M) / Math.sqrt(5), 9)
+    expect(dist(p, { x: 51, y: 0 })).toBeLessThan(LEGAL_M)
+  })
 
   it("more attackers than defenders: the extras go unmarked, no throw", () => {
     const eight = [...six, { x: 46, y: -8 }, { x: 40, y: 2 }]

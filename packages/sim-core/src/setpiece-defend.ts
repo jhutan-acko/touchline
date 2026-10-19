@@ -7,24 +7,23 @@
  * defended), with pitch y; after half-time only x mirrors.
  */
 import { assignMarks, markTarget } from "./offball.js"
-import { add, attackX, clampToPitch, dirOf, dist, norm, other, scale, sub, type Period, type Side, type Vec2 } from "./geometry.js"
+import { add, attackX, clampToPitch, dirOf, dist, norm, other, PITCH, scale, sub, type Period, type Side, type Vec2 } from "./geometry.js"
 import type { Params } from "./params.js"
 import type { Rng } from "./rng.js"
 import { framePoint, roleSpot, type SetPieceKind } from "./setpiece.js"
 import type { PlayerState, Role } from "./types.js"
 
-const POST_Y = 3.66
-const BOX_U = 36
-const BOX_HALF_W = 20.16
 /** F19: at most nine defending outfielders in the box; one more stands at the box edge for second balls. */
 const BOX_CAP = 9
 const EDGE: readonly [number, number] = [32, 0]
-/** The old restart push (step.ts): a defender within 9.15 m of the ball is moved out to 9.5 m. */
-const PUSH_M = 9.5
+/** The law's distance at a restart (Law 13), fixed: tuning the wall (setDefend.wallM) never moves it. */
+export const LEGAL_M = 9.15
+/** The old restart push (step.ts): a defender within LEGAL_M of the ball is moved out to 9.5 m. */
+export const PUSH_M = 9.5
 
 /** Whether `p` (pitch) is in the box the restarting side `restarting` attacks. */
 export const inSetPieceBox = (p: Vec2, restarting: Side, period: Period): boolean =>
-  attackX(restarting, p.x, period) > BOX_U && Math.abs(p.y) < BOX_HALF_W
+  attackX(restarting, p.x, period) > PITCH.halfL - PITCH.boxDepth && Math.abs(p.y) < PITCH.boxHalfWidth
 
 /** S3: the wall's size: fk_central wallCentral[0]..[1] (equal chance); fk_wide wallWide[0]..[1] with chance wallWideShare, else 0; 0 otherwise (no draw). */
 export const wallSize = (kind: SetPieceKind, s: Params["setDefend"], rng: Rng): number => {
@@ -36,8 +35,8 @@ export const wallSize = (kind: SetPieceKind, s: Params["setDefend"], rng: Rng): 
 
 /** The point the wall shades: shadeM inside the near post of `defSide`'s goal (the post on the ball's side). */
 const shadePoint = (ball: Vec2, defSide: Side, period: Period, s: Params["setDefend"]): Vec2 => ({
-  x: -dirOf(defSide, period) * 52.5,
-  y: Math.sign(ball.y) * (POST_Y - s.shadeM)
+  x: -dirOf(defSide, period) * PITCH.halfL,
+  y: Math.sign(ball.y) * (PITCH.goalHalfWidth - s.shadeM)
 })
 
 /** S3: where the wall stands, at ball distance wallM along the line to the shade point. @internal */
@@ -73,9 +72,12 @@ export interface BoxDefender {
   readonly ySign: number
 }
 
-/** A spot at least 9.15 m from the ball: inside it, pushed straight out to 9.5 m (the old push), on the pitch. */
-export const clearOfBall = (spot: Vec2, ball: Vec2, s: Params["setDefend"]): Vec2 => {
-  if (dist(spot, ball) >= s.wallM) return spot
+/**
+ * A spot at least LEGAL_M from the ball: inside it, pushed straight out to PUSH_M (the old push; +x when the spot is the
+ * ball's own), then clamped half a metre inside the pitch. By the byline the clamp can bring it back inside LEGAL_M (F30).
+ */
+export const clearOfBall = (spot: Vec2, ball: Vec2): Vec2 => {
+  if (dist(spot, ball) >= LEGAL_M) return spot
   const out = sub(spot, ball)
   const dir = out.x === 0 && out.y === 0 ? { x: 1, y: 0 } : norm(out)
   return clampToPitch(add(ball, scale(dir, PUSH_M)), 0.5)
@@ -88,7 +90,7 @@ export const clearOfBall = (spot: Vec2, ball: Vec2, s: Params["setDefend"]): Vec
  * - With `zonal`, the unassigned defenders take the zonal spots in order (each spot the nearest of them by table spot),
  *   then their corner-table spots; when that would put more than nine in the box, the last of them goes to the box edge.
  * - Without `zonal` (central free kicks), only the markers get a spot.
- * Every spot is kept 9.15 m from the ball (clearOfBall). Ids absent from the map have no spot.
+ * Every spot is kept LEGAL_M from the ball (clearOfBall). Ids absent from the map have no spot.
  */
 export const boxLayout = (
   defs: ReadonlyArray<BoxDefender>,
@@ -121,12 +123,14 @@ export const boxLayout = (
       order.push(d!)
       zonalSpots.set(d!.id, z)
     }
-    // The rest on their corner-table spots, nearest the goal first; the last of the sequence is the edge player.
+    // The rest on their corner-table spots, nearest the goal first; the last of the sequence is the edge player. When
+    // nobody is left after the zonal spots (six markers of ten, say), that last one is the defender given the final zonal
+    // spot (the penalty spot), so the penalty spot stays empty and he stands at the box edge instead.
     free.sort((a, b) => attackX(restarting, anchor.get(b.id)!.x, period) - attackX(restarting, anchor.get(a.id)!.x, period) || (a.id < b.id ? -1 : 1))
     order.push(...free)
     const edge = pairs.length + order.length > BOX_CAP ? order[order.length - 1]?.id : undefined
     for (const d of order) out.set(d.id, d.id === edge ? framePoint(restarting, period, EDGE[0], EDGE[1]) : (zonalSpots.get(d.id) ?? anchor.get(d.id)!))
   }
-  for (const [id, p] of out) out.set(id, clearOfBall(p, ball, s))
+  for (const [id, p] of out) out.set(id, clearOfBall(p, ball))
   return out
 }
