@@ -38,8 +38,12 @@ export const pressureFrom = (nearestOpponentM: number): number => Math.max(0, Ma
 /**
  * How much tiredness widens a kick's error (P6 SH4, plan 8f Task 6 owns this body). `fatigue` is 0 fresh .. 1 exhausted.
  * rule 0: the old behaviour, 1 + fatigue.executionK x fatigue.
+ * rule 1: flat until `ref`, then rising: 1 + k x max(0, fatigue - ref)^power (execFatigue).
  */
-export const fatigueScale = (fatigue: number, p: Params): number => 1 + p.fatigue.executionK * fatigue
+export const fatigueScale = (fatigue: number, p: Params): number => {
+  const x = p.execFatigue
+  return x.rule === 1 ? 1 + x.k * Math.pow(Math.max(0, fatigue - x.ref), x.power) : 1 + p.fatigue.executionK * fatigue
+}
 
 /**
  * Turn an intended kick into the actual one: Gaussian direction and distance error that grows
