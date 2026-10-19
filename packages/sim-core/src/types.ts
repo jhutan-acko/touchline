@@ -81,7 +81,7 @@ export interface MatchConfig {
 export type Intent =
   | { readonly kind: "shape" }
   | { readonly kind: "press"; readonly targetId: string }
-  | { readonly kind: "run_in_behind"; readonly target: Vec2 }
+  | { readonly kind: "run_in_behind"; readonly target: Vec2; readonly overlap?: true }
   | { readonly kind: "chase"; readonly target: Vec2 }
   | { readonly kind: "carry"; readonly dir: Vec2; readonly speed: number }
   | { readonly kind: "hold" }
