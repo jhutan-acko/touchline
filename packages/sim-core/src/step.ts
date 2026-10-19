@@ -97,6 +97,8 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 import { attackRoleSpot, attackTable, holdSpot, restKeepers, restKind, restSpots } from "./setpiece-attack.js"
 
 // ---- P5 imports, defending set-piece seam (plan 8e Task 4 inserts below this line)
+import { boxLayout, inSetPieceBox, wallPoint, wallSize, wallSpots } from "./setpiece-defend.js"
+import { roleSpot, ySignOf } from "./setpiece.js"
 
 // ---- P5 imports, restart-shape seam (plan 8e Task 5 inserts below this line)
 
@@ -613,11 +615,70 @@ export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget 
 
 // ================================================================ P5 defending set-piece seam (plan 8e Task 4 owns this block)
 
-/** S2/S3: the defending side's part of a restart's plan (wall, jitter, outlet; setpiece stream). rule 0: nothing, no draw. @internal */
-export const planDefend = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
+/**
+ * S2/S3: the defending side's part of a restart's plan (setpiece stream). At a central or wide attacking free kick: the
+ * wall's size (wallSize), its members (the defending outfielders other than CBs nearest the wall point, ordered across
+ * the line), each member's jitter U(-jitterM, 0), and at a wide one the outlet (the most advanced ST outside the wall,
+ * with chance outletShare). Corners draw nothing. rule 0: nothing, no draw. @internal
+ */
+export const planDefend = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
+  const s = w.p.setDefend
+  if (s.rule <= 0 || (kind !== "fk_central" && kind !== "fk_wide")) return {}
+  const rng = w.rng.setpiece
+  const defSide = other(r.side)
+  const point = wallPoint(r.at, defSide, w.period, s)
+  const pool = w.active(defSide).filter((pl) => pl.role !== "GK" && pl.role !== "CB")
+  const n = Math.min(wallSize(kind, s, rng), pool.length)
+  const dir = norm(sub(point, r.at))
+  const across = (p: Vec2): number => dir.x * (p.y - r.at.y) - dir.y * (p.x - r.at.x)
+  const wall = [...pool]
+    .sort((a, b) => dist(a.pos, point) - dist(b.pos, point) || (a.id < b.id ? -1 : 1))
+    .slice(0, n)
+    .sort((a, b) => across(a.pos) - across(b.pos))
+    .map((pl) => pl.id)
+  const jitter = Object.fromEntries(wall.map((id) => [id, rng.range(-s.jitterM, 0)]))
+  const up = kind === "fk_wide" && rng.chance(s.outletShare)
+  const outlet = up
+    ? w
+        .active(defSide)
+        .filter((pl) => pl.role === "ST" && !wall.includes(pl.id))
+        .sort((a, b) => attackX(defSide, b.pos.x, w.period) - attackX(defSide, a.pos.x, w.period) || (a.id < b.id ? -1 : 1))[0]?.id
+    : undefined
+  return { ...(wall.length > 0 ? { wall, jitter } : {}), ...(outlet !== undefined ? { outlet } : {}) }
+}
 
-/** S2/S3: a defending player's spot while the restart is set up; null falls through to shapeSpot. rule 0: null. @internal */
-export const defendSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
+/**
+ * S2/S3: a defending player's spot while a corner or an attacking free kick is set up; null falls through to shapeSpot
+ * (and the old target with its 9.15 m push). Wall members stand on the wall (members who have left are skipped, so the
+ * wall closes up); the outlet keeps his old target; at corners the keeper takes the table's spot on his line. The other
+ * outfielders follow boxLayout: corners and wide free kicks fill the box (markers, zonal spots, table spots, one at the
+ * edge), central ones mark only. Attackers count at their position when in the box, else at their attacking set-piece
+ * spot when that is. rule 0: null. @internal
+ */
+export const defendSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => {
+  const s = w.p.setDefend
+  if (s.rule <= 0) return null
+  const kind = setPieceKind(ph.restart, ph.at, ph.side, w.period)
+  if (kind !== "corner" && kind !== "fk_wide" && kind !== "fk_central") return null
+  if (pl.role === "GK") return kind === "corner" ? roleSpot(s.corner, "GK", 0, ph.side, w.period) : null
+  const plan = w.restartPlan
+  if (pl.id === plan?.outlet) return null
+  const team = w.active(pl.side)
+  const wall = (plan?.wall ?? []).filter((id) => team.some((x) => x.id === id))
+  const wi = wall.indexOf(pl.id)
+  if (wi >= 0) return wallSpots(ph.at, pl.side, w.period, wall.length, wall.map((id) => plan?.jitter?.[id] ?? 0), s)[wi]!
+  const formation = teamOf(w.cfg, pl.side)
+  const defs = team
+    .filter((x) => x.role !== "GK" && !wall.includes(x.id) && x.id !== plan?.outlet)
+    .map((x) => ({ id: x.id, role: x.role, ySign: ySignOf(kickoffAnchor(formation.formation, x.slot, x.side, w.period, formation.style)) }))
+  const takerId = takerFor(w, ph).id
+  const attackers = w.active(ph.side).flatMap((a) => {
+    if (a.role === "GK" || a.id === takerId) return []
+    const at = inSetPieceBox(a.pos, ph.side, w.period) ? a.pos : attackSpot(w, a, ph)
+    return at && inSetPieceBox(at, ph.side, w.period) ? [{ ...a, pos: at }] : []
+  })
+  return boxLayout(defs, attackers, ph.at, pl.side, w.period, s, kind !== "fk_central").get(pl.id) ?? null
+}
 
 // ================================================================ end of P5 defending set-piece seam
 
