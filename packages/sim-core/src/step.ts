@@ -105,6 +105,8 @@ import { roleSpot, ySignOf } from "./setpiece.js"
 import { kickoffLegal, outsideBox, throwShortIds } from "./setpiece-shapes.js"
 
 // ---- P5 imports, dead-ball seam (plan 8e Task 6 inserts below this line)
+import { restartDelayS, settleS, walkCap } from "./deadball.js"
+import { deadKey } from "./setpiece.js"
 
 // ---- P5 imports, keeper-restart seam (plan 8e Task 7 inserts below this line)
 
@@ -744,17 +746,85 @@ const THROW_MARK_RADIUS_M = 15
 
 // ================================================================ P5 dead-ball seam (plan 8e Task 6 owns this block)
 
-/** S8: ticks from a restart's start to its resume tick. rule 0: timing.restartDelayS x U(0.7, 1.3) (restart stream). @internal */
-export const restartDelayTicks = (w: Work, r: RestartAt): number => Math.round((w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)) / w.dt)
+/**
+ * S8: ticks from a restart's start to its resume tick. rule 0: timing.restartDelayS x U(0.7, 1.3) (restart stream). rule 1:
+ * a lognormal delay at the real median of the restart's key at this minute (dead stream); a penalty keeps the old draw.
+ * @internal
+ */
+export const restartDelayTicks = (w: Work, r: RestartAt): number => {
+  const key = w.p.deadBall.rule === 1 ? deadKey(setPieceKind(r.restart, r.at, r.side, w.period)) : null
+  if (key === null) return Math.round((w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)) / w.dt)
+  return Math.round(restartDelayS(key, w.minute(), w.p.deadBall, w.rng.dead) / w.dt)
+}
 
-/** S8: the dead-ball part of a restart's plan (walk speeds, settle ticks, taker pause; dead stream). rule 0: nothing, no draw. @internal */
-export const planDead = (w: Work, r: RestartAt, kind: SetPieceKind, resumeTick: number): PlanPart => ({})
+/**
+ * S8: the dead-ball part of a restart's plan. rule 1: each player on the pitch, in order, draws his walking speed and his
+ * settle time before `resumeTick` (his deadline); then the taker's pause (dead stream). rule 0: nothing, no draw. @internal
+ */
+export const planDead = (w: Work, r: RestartAt, kind: SetPieceKind, resumeTick: number): PlanPart => {
+  const d = w.p.deadBall
+  if (d.rule !== 1) return {}
+  const rng = w.rng.dead
+  const walkMps: Record<string, number> = {}
+  const readyTick: Record<string, number> = {}
+  for (const pl of w.active()) {
+    walkMps[pl.id] = rng.range(d.walkMps[0], d.walkMps[1])
+    readyTick[pl.id] = resumeTick - Math.round(settleS(kind, pl.side === r.side, d, rng) / w.dt)
+  }
+  const pauseTicks = Math.round(rng.range(d.takerPauseS[0], d.takerPauseS[1]) / w.dt)
+  return { walkMps, readyTick, pauseTicks }
+}
 
-/** S8: a player's movement while the ball is dead, over the restart dispatcher's `mt` (walking pace). rule 0: `mt` itself. @internal */
-export const deadMove = (w: Work, pl: PlayerState, mt: MoveTarget): MoveTarget => mt
+/**
+ * S8: a player's movement while the ball is dead, over the restart dispatcher's `mt`: his walking pace, raised to arrive
+ * by his deadline (walkCap; 0.8 x vmax within a tick of it). rule 0, no plan (the period kickoffs) or a player the plan
+ * does not name (on since): `mt` itself. @internal
+ */
+export const deadMove = (w: Work, pl: PlayerState, mt: MoveTarget): MoveTarget => {
+  const plan = w.restartPlan
+  if (w.p.deadBall.rule !== 1 || plan === undefined) return mt
+  const walk = plan.walkMps?.[pl.id]
+  const ready = plan.readyTick?.[pl.id]
+  if (walk === undefined || ready === undefined) return mt
+  const secondsLeft = (ready - w.tick) * w.dt
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  return { ...mt, speedCap: walkCap(dist(pl.pos, mt.target), secondsLeft <= w.dt ? 0 : secondsLeft, walk, vmax) }
+}
 
-/** S8: whether the taker is ready to take the restart (on the spot, his pause over). rule 0: within 1 m of the spot. @internal */
-export const takerReady = (w: Work, ph: RestartPhase, taker: PlayerState): boolean => dist(taker.pos, ph.at) <= 1.0
+/**
+ * S8: the taker who has arrived on the spot (the plan's arrivedId) stays the taker while he is on the pitch, so a teammate
+ * crossing the spot neither takes over nor restarts the pause. null (takerFor picks as before) under rule 0, before anyone
+ * has arrived, or once he has been sent off or substituted. @internal
+ */
+export const arrivedTaker = (w: Work, r: RestartAt): PlayerState | null => {
+  const id = w.p.deadBall.rule === 1 ? w.restartPlan?.arrivedId : undefined
+  if (id === undefined) return null
+  return w.active(r.side).find((x) => x.id === id) ?? null
+}
+
+/**
+ * S8: whether the taker is ready to take the restart. rule 0, or no pause planned (the period kickoffs): within 1 m of the
+ * spot. rule 1: he has stood within 1 m for the plan's pauseTicks, counted from when this taker first stood there (a new
+ * taker, or one who stepped away, starts again). Only asked from the resume tick on.
+ *
+ * Side effect (rule 1 with a pause planned): it records the pause in w.restartPlan, writing arrivedTick and arrivedId
+ * when the taker first stands on the spot and clearing both when he leaves it. @internal
+ */
+export const takerReady = (w: Work, ph: RestartPhase, taker: PlayerState): boolean => {
+  const near = dist(taker.pos, ph.at) <= 1.0
+  const plan = w.restartPlan
+  if (w.p.deadBall.rule !== 1 || plan?.pauseTicks === undefined) return near
+  const { arrivedTick, arrivedId, ...rest } = plan
+  if (!near) {
+    if (arrivedTick !== undefined) w.restartPlan = rest
+    return false
+  }
+  if (arrivedTick === undefined || arrivedId !== taker.id) {
+    w.restartPlan = { ...rest, arrivedTick: w.tick, arrivedId: taker.id }
+    return plan.pauseTicks <= 0
+  }
+  return w.tick - arrivedTick >= plan.pauseTicks
+}
 
 // ================================================================ end of P5 dead-ball seam
 
@@ -767,6 +837,9 @@ const takerFor = (w: Work, r: RestartAt): PlayerState => {
     const gk = team.find((x) => x.role === "GK")
     if (gk) return gk
   }
+  // S8 (P5 dead-ball seam): the taker on the spot keeps the kick while he is on the pitch.
+  const arrived = arrivedTaker(w, r)
+  if (arrived) return arrived
   // With every outfielder sent off (only under a scripted red-card storm) the keeper takes it.
   return team.filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, r.at) - dist(b.pos, r.at))[0] ?? team[0]!
 }
