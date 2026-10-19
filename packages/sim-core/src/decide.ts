@@ -11,6 +11,10 @@ import type { ChoiceCoefs, PassAction } from "./params.js"
 import { add, clampToPitch, norm, scale, sub } from "./geometry.js"
 import type { Intent } from "./types.js"
 
+// ---- P5 imports, direct-free-kick seam (plan 8e Task 8 inserts below this line)
+
+// ---- P5 imports, goal-kick seam (plan 8e Task 7 inserts below this line)
+
 export const KIND_TO_ACTION: Readonly<Record<Exclude<PassKind, "set_piece">, Action>> = {
   short: "short_pass",
   long: "long_pass",
@@ -532,6 +536,30 @@ const keeperHandsDecision = (ctx: CandidateContext, rng: Rng): Decision | null =
 
 const NON_PASS: ReadonlyArray<Action> = ["shot", "carry", "hold", "take_on", "clear"]
 
+// ================================================================ P5 direct-free-kick seam (plan 8e Task 8 owns this block)
+
+/** S9: a direct free kick's shot: whether it is available, the shot logit's shift, and its xG. */
+export interface RestartShot {
+  readonly available: boolean
+  readonly shift: number
+  readonly xg: number
+}
+
+/**
+ * S9: the shot at a central attacking-third free kick (goalDist from goal, ax the owner's team-frame u); null leaves the
+ * shot as it is. rule 0: null.
+ */
+export const restartShot = (input: DecisionInput, p: Params, goalDist: number, ax: number): RestartShot | null => null
+
+// ================================================================ end of P5 direct-free-kick seam
+
+// ================================================================ P5 goal-kick seam (plan 8e Task 7 owns this block)
+
+/** G3: the logit shift of action `a` at a goal kick or keeper free kick (keeperRestarts.longShift on long passes). rule 0: 0. */
+export const restartKindShift = (input: DecisionInput, a: Action, p: Params): number => 0
+
+// ================================================================ end of P5 goal-kick seam
+
 const RESTART_ACTIONS: Readonly<Record<RestartKind, ReadonlyArray<Action>>> = {
   kickoff: ["short_pass", "back_pass"],
   throw_in: ["short_pass", "back_pass", "through_ball"],
@@ -562,13 +590,14 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   }).length
   const xg = goalDist <= p.shot.maxDistanceM ? xgOf(p, side, period, owner.pos, false, cone) : 0
   const ax = attackX(side, owner.pos.x, period)
+  const rs = restartShot(input, p, goalDist, ax)
   const allowed = input.restart ? new Set(RESTART_ACTIONS[input.restart]) : null
 
   const available = (a: Action): boolean => {
     if (allowed && !allowed.has(a)) return false
     switch (a) {
       case "shot":
-        return input.restart === "penalty" || (goalDist <= p.shot.maxDistanceM && ax > 15)
+        return rs ? rs.available : input.restart === "penalty" || (goalDist <= p.shot.maxDistanceM && ax > 15)
       case "carry":
       case "hold":
         return input.restart === null
@@ -604,6 +633,8 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (a === "shot") l += 3 * (xg - 0.1) + 0.3 * style.riskTolerance
     if (lateTrailing && (a === "shot" || a === "cross" || a === "long_pass")) l += 0.4
     if (lateLeading && (a === "hold" || a === "back_pass")) l += 0.4
+    if (a === "shot" && rs) l += rs.shift
+    l += restartKindShift(input, a, p)
     l += input.scriptBias[a] ?? 0
     // Passers weigh each kind of pass by its options (old engine: the lean towards kinds that have a safe option now).
     if (!NON_PASS.includes(a)) l += kindTerm(ctx, candidates, a, base)
@@ -624,7 +655,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const action = ACTIONS[idx]!
 
   let passOptions = candidates.filter((c) => c.action === action)
-  if (NON_PASS.includes(action)) return { action, candidate: null, decisionQuality: null, xg: action === "shot" ? xg : null, pressure, ...record }
+  if (NON_PASS.includes(action)) return { action, candidate: null, decisionQuality: null, xg: action === "shot" ? (rs?.xg ?? xg) : null, pressure, ...record }
   let fallback = false
   if (passOptions.length === 0) {
     // Forced restart with no option of the allowed kinds: play the best available pass, or clear it.
