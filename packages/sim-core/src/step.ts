@@ -1891,26 +1891,33 @@ export const rotateMove = (w: Work, pl: PlayerState, owner: PlayerState, base: (
   if (rm.rotateRule <= 0 || pl.role === "GK") return null
   const vmax = vmaxFor(pl, pl.energy, w.p)
   const speedCap = Math.min(rm.jogMps, vmax)
-  const live = pl.intent.kind === "rotate" && w.tick < pl.intentUntil
+  const rot = pl.intent.kind === "rotate" && w.tick < pl.intentUntil ? pl.intent : null
   const mates = w.active(pl.side)
-  // The same-side winger (the winger on his flank), and whether he is rotating inside now.
+  // The same-side winger (the nearest winger on his flank, FB only), and whether he is rotating inside now.
   const flank = pl.pos.y < 0 ? -1 : 1
-  const winger = pl.role === "FB" ? mates.filter((x) => x.role === "W" && (x.pos.y < 0 ? -1 : 1) === flank).sort((a, b) => Math.abs(a.pos.y - pl.pos.y) - Math.abs(b.pos.y - pl.pos.y))[0] : undefined
+  let winger: PlayerState | undefined
+  if (pl.role === "FB")
+    for (const x of mates)
+      if (x.role === "W" && (x.pos.y < 0 ? -1 : 1) === flank && (winger === undefined || Math.abs(x.pos.y - pl.pos.y) < Math.abs(winger.pos.y - pl.pos.y))) winger = x
   const wingerInside = winger !== undefined && winger.intent.kind === "rotate" && w.tick < winger.intentUntil
-  if (live) {
-    // A rotation ends when its side loses the ball (a transition against it), and a full-back's when his winger comes inside.
-    if ((w.transition !== undefined && w.transition.loser === pl.side) || wingerInside) {
+  const tr = w.transition
+  if (rot) {
+    // A rotation ends when the ball changes hands after it began (the loss, and a regain, are both recorded after `since`),
+    // and a full-back's when his winger comes inside.
+    if ((tr !== undefined && tr.tick > rot.since) || wingerInside) {
       w.setPlayer({ ...pl, intentUntil: w.tick })
       return null
     }
-    return { target: (pl.intent as { readonly target: Vec2 }).target, speedCap }
+    return { target: rot.target, speedCap }
   }
+  // None while his side is the recorded loser of the last turnover.
+  if (tr !== undefined && tr.loser === pl.side) return null
   // One rotation at a time, and none over another intent still running.
   if (w.tick < pl.intentUntil && pl.intent.kind !== "rotate") return null
   const ballU = attackX(pl.side, w.ball.pos.x, w.period)
   const start = (kind: "inside" | "invert" | "cm_drop", target: Vec2, durS: readonly [number, number]): MoveTarget => {
     const to = clampToPitch(target, 1)
-    w.setPlayer({ ...pl, intent: { kind: "rotate", target: to }, intentUntil: w.tick + Math.max(1, Math.round(w.rng.roles.range(durS[0], durS[1]) / w.dt)) })
+    w.setPlayer({ ...pl, intent: { kind: "rotate", target: to, since: w.tick }, intentUntil: w.tick + Math.max(1, Math.round(w.rng.roles.range(durS[0], durS[1]) / w.dt)) })
     w.emit(w.pending("off_ball_run", pl, pl.pos, { kind, ball_carrier_id: owner.id }, to))
     return { target: to, speedCap }
   }
@@ -1924,15 +1931,15 @@ export const rotateMove = (w: Work, pl: PlayerState, owner: PlayerState, base: (
   if (pl.role === "FB") {
     const c = rm.invert
     // His winger is wide (or has the ball) and is not coming inside: the pair is gated both ways.
-    const wide = winger !== undefined && !wingerInside && (Math.abs(winger.pos.y) > 20 || winger.id === owner.id)
+    if (winger === undefined || wingerInside) return null
+    const wide = Math.abs(winger.pos.y) > 20 || winger.id === owner.id
     if (!wide || ballU <= -17.5 || !w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
     const lastOwnU = Math.min(...mates.filter((x) => x.role !== "GK").map((x) => attackX(pl.side, x.pos.x, w.period)))
-    return start("invert", invertTarget(base().target, winger!.pos.y, w.rng.roles.range(c.inM[0], c.inM[1]), lastOwnU, pl.side, w.period, c.aboveLastM), c.durS)
+    return start("invert", invertTarget(base().target, winger.pos.y, w.rng.roles.range(c.inM[0], c.inM[1]), lastOwnU, pl.side, w.period, c.aboveLastM), c.durS)
   }
   if (pl.role === "CM" || pl.role === "DM") {
     const c = rm.cmDrop
     // Within winS of his side winning the ball (needs transition.rule 1), with the ball in his own third; the deepest of the others drops.
-    const tr = w.transition
     if (w.p.transition.rule <= 0 || tr === undefined || tr.loser === pl.side || w.tick - tr.tick >= windowTicks(c.winS, w.dt) || ballU >= -17.5) return null
     const deepest = mates
       .filter((x) => (x.role === "CM" || x.role === "DM") && x.id !== owner.id)

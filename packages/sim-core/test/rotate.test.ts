@@ -77,6 +77,9 @@ describe("A6 rotations: targets", () => {
     // CBs 4 m apart: 3 m outside the CB on the ball's side.
     expect(dropTarget([{ x: -35, y: 2 }, { x: -35, y: -2 }], 20, "home", "first_half")).toEqual({ x: -34, y: 5 })
     expect(dropTarget([{ x: -35, y: 2 }, { x: -35, y: -2 }], -20, "home", "first_half")).toEqual({ x: -34, y: -5 })
+    // The 6 m boundary: CBs exactly 6 m apart are "together" (beside); just over, between.
+    expect(dropTarget([{ x: -35, y: 3 }, { x: -35, y: -3 }], 20, "home", "first_half")).toEqual({ x: -34, y: 6 })
+    expect(dropTarget([{ x: -35, y: 3.01 }, { x: -35, y: -3.01 }], 20, "home", "first_half")).toEqual({ x: -34, y: 0 })
   })
 
   it("second half mirrors", () => {
@@ -116,7 +119,7 @@ describe("A6 rotations: the seam", () => {
 
   it("the W-FB pair is gated both ways", () => {
     // The W rotating inside: the FB's rotation is null (and none starts for him).
-    const s1 = pair({ [HW]: { kind: "rotate", target: { x: 5, y: 6 } } })
+    const s1 = pair({ [HW]: { kind: "rotate", target: { x: 5, y: 6 }, since: T0 } })
     const w1 = workAt(s1)
     expect(rotateMove(w1, w1.player(HFB), w1.player(HST), BASE({ x: -28, y: 24 }))).toBeNull()
     // Nobody rotating: the FB inverts (|y| = W y minus 5..10) and the W goes inside.
@@ -127,7 +130,7 @@ describe("A6 rotations: the seam", () => {
     expect(Math.abs(inv.target.y)).toBeLessThanOrEqual(19)
     expect(w2.player(HFB).intent.kind).toBe("rotate")
     // With the FB inverted the W can still go inside; then the FB's rotation ends.
-    const w3 = workAt(pair({ [HFB]: { kind: "rotate", target: { x: -10, y: 17 } } }))
+    const w3 = workAt(pair({ [HFB]: { kind: "rotate", target: { x: -10, y: 17 }, since: T0 } }))
     expect(rotateMove(w3, w3.player(HFB), w3.player(HST), BASE({ x: -28, y: 24 }))).not.toBeNull()
     const ins = rotateMove(w3, w3.player(HW), w3.player(HST), BASE({ x: 5, y: 24 }))!
     expect(ins).not.toBeNull()
@@ -146,11 +149,14 @@ describe("A6 rotations: the seam", () => {
   })
 
   it("a rotation ends when its side loses the ball, and no one rotates with the ball deep", () => {
-    const w = workAt(pair({ [HW]: { kind: "rotate", target: { x: 5, y: 6 } } }))
+    const w = workAt(pair({ [HW]: { kind: "rotate", target: { x: 5, y: 6 }, since: T0 } }))
     expect(rotateMove(w, w.player(HW), w.player(HST), BASE({ x: 5, y: 24 }))!.target).toEqual({ x: 5, y: 6 })
+    w.tick += 1
     w.transition = { loser: "home", tick: w.tick, at: { x: 30, y: 0 }, joiners: [] }
     expect(rotateMove(w, w.player(HW), w.player(HST), BASE({ x: 5, y: 24 }))).toBeNull()
     expect(w.player(HW).intentUntil).toBeLessThanOrEqual(w.tick)
+    // No new rotation while the side is the recorded loser.
+    expect(rotateMove(w, w.player(HW), w.player(HST), BASE({ x: 5, y: 24 }))).toBeNull()
     // Ball at u 10: the W does not come inside (needs u > 17.5).
     const deep = workAt(fixture(forced(), 0.1, { place: { [HW]: { x: 5, y: 24 }, [HST]: { x: 10, y: 0 } }, carrier: HST, ball: { x: 10, y: 0 } }))
     expect(rotateMove(deep, deep.player(HW), deep.player(HST), BASE({ x: 5, y: 24 }))).toBeNull()
@@ -197,6 +203,29 @@ describe("A6 rotations: the seam", () => {
     }
   })
 
+  it("a loss then a regain within 4.5 s gives no resumed rotation (through step)", () => {
+    // Rotation began at T0 (lasting past T0+30); home lost the ball at T0+5 and regained it at T0+12 (the other side's loss).
+    const regain: TransitionState = { loser: "away", tick: T0 + 12, at: { x: 30, y: 0 }, joiners: [] }
+    const s = fixture(forced(), 0.1, {
+      place: { [HW]: { x: 5, y: 24 }, [HST]: { x: 30, y: 0 }, [HCB]: { x: -35, y: 8 } },
+      carrier: HST,
+      ball: { x: 30, y: 0 },
+      tick: T0 + 15,
+      transition: regain,
+      intents: { [HW]: { kind: "rotate", target: { x: 5, y: 6 }, since: T0 } }
+    })
+    const w = workAt(s)
+    expect(w.player(HW).intentUntil).toBeGreaterThan(s.tick)
+    expect(rotateMove(w, w.player(HW), w.player(HST), BASE({ x: 5, y: 24 }))).toBeNull()
+    // Through a real step: the old rotation is not resumed (it ends; a new one may only start fresh, with a later since).
+    const next = step(s).state.players.find((x) => x.id === HW)!
+    if (next.intent.kind === "rotate" && next.intent.since === T0) expect(next.intentUntil).toBeLessThanOrEqual(s.tick + 1)
+    else if (next.intent.kind === "rotate") expect(next.intent.since).toBeGreaterThan(T0 + 12)
+    // Control: with no change of hands since it began, the rotation lives.
+    const w2 = workAt({ ...s, transition: { ...regain, tick: T0 - 3 } })
+    expect(rotateMove(w2, w2.player(HW), w2.player(HST), BASE({ x: 5, y: 24 }))!.target).toEqual({ x: 5, y: 6 })
+  })
+
   it("rule off returns null and draws nothing", () => {
     const tr: TransitionState = { loser: "away", tick: T0, at: { x: -30, y: 0 }, joiners: [] }
     const w = workAt(fixture(forced(0), 0.1, { place: { [HW]: { x: 5, y: 24 }, [HFB]: { x: -28, y: 24 }, [HCM]: { x: -25, y: 5 }, [HCB]: { x: -35, y: 5 }, [HST]: { x: 30, y: 0 } }, carrier: HST, ball: { x: 30, y: 0 }, transition: tr }))
@@ -204,6 +233,7 @@ describe("A6 rotations: the seam", () => {
     for (const id of [HW, HFB, HCM]) expect(rotateMove(w, w.player(id), w.player(HST), BASE({ x: 0, y: 0 }))).toBeNull()
     expect(w.rng.roles.state).toEqual(before)
     expect(w.events).toHaveLength(0)
+    expect(w.players).toEqual(workAt(fixture(forced(0), 0.1, { place: { [HW]: { x: 5, y: 24 }, [HFB]: { x: -28, y: 24 }, [HCM]: { x: -25, y: 5 }, [HCB]: { x: -35, y: 5 }, [HST]: { x: 30, y: 0 } }, carrier: HST, ball: { x: 30, y: 0 }, transition: tr })).players)
   })
 })
 
@@ -214,22 +244,22 @@ describe("A6 rotations: in matches", () => {
     while (!isFinished(s)) {
       const r = step(s)
       s = r.state
-      for (const e of r.events) if (e.type === "off_ball_run") n[String(e.attrs.kind)] = (n[String(e.attrs.kind)] ?? 0) + 1
+      for (const e of r.events) if (e.type === "off_ball_run") n[`${e.team_id}:${String(e.attrs.kind)}`] = (n[`${e.team_id}:${String(e.attrs.kind)}`] ?? 0) + 1
     }
     return n
   }
   for (const seed of [7, 9]) {
     it(`rotations appear (seed ${seed}); off has none`, () => {
-      // The test's own pinned inside rate (the default is tuned in P5's measure step).
-      const on = count(mk(1, 1, { inside: { ...RM.inside, ratePerS: 0.3 } }), seed)
-      // Two teams per match: per-team-match minimums.
-      expect(on.inside ?? 0).toBeGreaterThanOrEqual(2 * 20)
-      expect(on.invert ?? 0).toBeGreaterThanOrEqual(2 * 10)
-      expect(on.cm_drop ?? 0).toBeGreaterThanOrEqual(2 * 15)
+      // The test's own pinned inside and CM-drop rates (the default is tuned in P5's measure step).
+      const on = count(mk(1, 1, { inside: { ...RM.inside, ratePerS: 0.3 }, cmDrop: { ...RM.cmDrop, ratePerS: 0.5 } }), seed)
+      // Per-team-match minimums: each team meets them.
+      for (const team of [cfg.home.id, cfg.away.id]) {
+        expect(on[`${team}:inside`] ?? 0).toBeGreaterThanOrEqual(20)
+        expect(on[`${team}:invert`] ?? 0).toBeGreaterThanOrEqual(10)
+        expect(on[`${team}:cm_drop`] ?? 0).toBeGreaterThanOrEqual(15)
+      }
       const off = count(mk(0, 1), seed)
-      expect(off.inside ?? 0).toBe(0)
-      expect(off.invert ?? 0).toBe(0)
-      expect(off.cm_drop ?? 0).toBe(0)
+      for (const k of Object.keys(off)) expect(k).toMatch(/:in_behind$/)
     }, 300_000)
   }
 })
