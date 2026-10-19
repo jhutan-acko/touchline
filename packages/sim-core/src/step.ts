@@ -95,6 +95,7 @@ import { CONTROL, OPEN_SHOT, type ContactPlan, type ShotHow } from "./contact.js
 
 // ---- P6 imports, first-time seam (plan 8f Task 3 inserts below this line)
 import { firstTimeChoice, firstTimeEligible, goalDistM } from "./firsttime.js"
+import type { DecisionInput } from "./decide.js"
 
 // ---- P6 imports, header seam (plan 8f Task 4 inserts below this line)
 
@@ -1275,7 +1276,7 @@ export const firstTimePlan = (w: Work, f: Flight, receiver: PlayerState): Contac
   if (!firstTimeEligible(goalDistM(receiver, w.period), w.ball.pos.z, restart, receiver.role === "GK", p)) return CONTROL
   const opps = w.active(other(side))
   const opp = nearestOpponent(receiver.pos, opps)
-  const input = {
+  const input: DecisionInput = {
     period: w.period,
     owner: receiver,
     teammates: w.active(side),

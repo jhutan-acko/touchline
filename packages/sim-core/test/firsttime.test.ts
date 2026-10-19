@@ -43,6 +43,8 @@ interface FixtureOpts {
   readonly dt?: number
   /** A teammate 8 m from the striker (a lay-off option); otherwise he stands far away. */
   readonly mateNear?: boolean
+  /** The striker's distance up the pitch in the team frame (default 40.5: 12 m from goal). */
+  readonly strikerU?: number
   /** Changes to the flight (outcome, winner, extras, foul, ...). */
   readonly flight?: (f: Flight, ids: { striker: string; homeGk: string; awayGk: string; awayCb: string; mate: string }, pe: (type: PendingEvent["type"], id: string | null) => PendingEvent) => Flight
   readonly state?: (s: MatchState, ids: { striker: string; mate: string }) => MatchState
@@ -69,7 +71,7 @@ const contactFixture = (p: Params, o: FixtureOpts = {}): Fixture => {
   const awayGk = away.find((x) => x.role === "GK")!
   const awayCb = away.find((x) => x.role === "CB")!
   const place = new Map<string, Vec2>([
-    [striker.id, P(40.5, 0)],
+    [striker.id, P(o.strikerU ?? 40.5, 0)],
     [passer.id, P(46, 12)],
     [mate.id, o.mateNear ? P(34, 5) : P(5, 25)],
     [awayGk.id, P(51.5, 0)]
@@ -212,7 +214,11 @@ describe("SH1: the first-time seam", () => {
     expect(lay.attrs.first_time).toBe(true)
     const to = lay.attrs.intended_receiver_id as string
     expect(to).toBe(fx.mate.id)
-    expect(Math.hypot(fx.mate.pos.x - fx.striker.pos.x, fx.mate.pos.y - fx.striker.pos.y)).toBeLessThanOrEqual(12)
+    // Measured where they stand at the resolve tick, not where the fixture placed them.
+    const now = (id: string) => r.first.state.players.find((x) => x.id === id)!.pos
+    const gap = Math.hypot(now(fx.mate.id).x - now(fx.striker.id).x, now(fx.mate.id).y - now(fx.striker.id).y)
+    expect(gap).toBeGreaterThan(4)
+    expect(gap).toBeLessThanOrEqual(12)
     expect(Object.keys(lay.attrs.action_probs as Record<string, number>).sort()).toEqual(["hold", "short_pass", "shot"])
     expect(lay.attrs.chosen_rank).toBe(1)
     expect(shotsBy(r.events, fx.striker.id).filter((e) => e.frame_id === fx.resolveTick)).toHaveLength(0)
@@ -247,6 +253,53 @@ describe("SH1: the first-time seam", () => {
         expect(forced.attrs.intended_receiver_id).toBe(fx.mate.id)
       }
     }
+  })
+
+  it("the seam's own checks: first-time off under header on, and a receiver 27 m out, draw nothing", () => {
+    // header.rule 1 lets contactPlan reach the seams; the header seam passes (no header yet) and firstTimePlan's own
+    // rule-0 return gives control.
+    const headerOnly: Params = { ...off, header: { ...off.header, rule: 1 } }
+    const far = onWith({ b0: 20 })
+    const cases: Record<string, Fixture> = {
+      "first time off, header on": contactFixture(headerOnly),
+      "27 m out": contactFixture(far, { strikerU: 25.5 })
+    }
+    // Precondition: the 27 m fixture's receiver is beyond maxGoalM; the clean 12 m fixture under the same params draws.
+    expect(52.5 - 25.5).toBeGreaterThan(far.firstTime.maxGoalM)
+    expect(run(contactFixture(far).state, 0).first.state.rng.contact).not.toEqual(contactFixture(far).state.rng.contact)
+    for (const [name, fx] of Object.entries(cases)) {
+      const r = run(fx.state, 40)
+      expect(r.first.state.rng.contact, name).toEqual(fx.state.rng.contact)
+      expect(r.first.events.some((e) => e.type === "reception" && e.player_id === fx.striker.id), name).toBe(true)
+      expect(r.events.filter((e) => e.type === "shot" && e.attrs.first_time === true), name).toHaveLength(0)
+    }
+  })
+
+  it("pressure at contact does not change the choice", () => {
+    const p = onWith({ b0: 3 })
+    // An opponent 1 m behind the striker (out of his cone to goal), against nobody near him.
+    const pressed = contactFixture(p, {
+      state: (s, ids) => {
+        const st = s.players.find((x) => x.id === ids.striker)!.pos
+        const cb = s.players.find((x) => x.side === "away" && x.role === "CB")!.id
+        return { ...s, players: s.players.map((pl) => (pl.id === cb ? { ...pl, pos: { x: st.x - 1, y: st.y }, vel: { x: 0, y: 0 } } : pl)) }
+      }
+    })
+    const free = contactFixture(p)
+    const a = run(pressed.state), b = run(free.state)
+    const near = (st: MatchState) => {
+      const me = st.players.find((x) => x.id === pressed.striker.id)!.pos
+      return Math.min(...st.players.filter((x) => x.side === "away").map((x) => Math.hypot(x.pos.x - me.x, x.pos.y - me.y)))
+    }
+    // Precondition: pressed (an opponent within 1.5 m at the resolve tick) against free (none within 5 m).
+    expect(near(a.first.state)).toBeLessThan(1.5)
+    expect(near(b.first.state)).toBeGreaterThan(5)
+    const sa = shotsBy(a.events, pressed.striker.id), sb = shotsBy(b.events, free.striker.id)
+    expect(sa).toHaveLength(1)
+    expect(sb).toHaveLength(1)
+    expect(sa[0]!.attrs.first_time).toBe(true)
+    expect(sa[0]!.attrs.xg).toBe(sb[0]!.attrs.xg)
+    expect(sa[0]!.attrs.action_probs).toEqual(sb[0]!.attrs.action_probs)
   })
 
   it("rule off draws nothing on the contact stream", () => {
@@ -297,6 +350,8 @@ describe("SH1 in matches", () => {
    * receptions within 25 m in the match, 2 of them on the ground), so the share saturates below 0.2.
    * Measured on seeds 7 and 9 (shots with technique normal / first time): dt 0.1 b0 1: 52 / 6 (0.115), b0 6: 57 / 10
    * (0.175); dt 0.04 b0 1: 64 / 11 (0.172), b0 6: 67 / 10 (0.149).
+   * Share definition here: every shot with technique "normal" (open play and corner or free-kick deliveries alike;
+   * penalties and direct free kicks aside), not open play only. Phase B judges open play (F8) with SH1 and SH2 on.
    */
   const pinned = onWith({ b0: 6 })
   const cache = new Map<number, { n: number; firstTime: number }>()
@@ -329,11 +384,10 @@ describe("SH1 in matches", () => {
     }, 900_000)
     // NOT MET in phase A: measured 0.175 (dt 0.1) and 0.149 (dt 0.04) at b0 6, see above. Re-checked in phase B on the
     // P4-merged engine; when it passes there, this it.fails goes red and becomes an it.
+    // Only the one clause that is not met: the shot count and the 0.6 ceiling are asserted in the passing case above.
     it.fails(`NOT MET: about two in five shots are first time (dt ${dt})`, () => {
       const { n, firstTime } = shares(dt)
-      expect(n).toBeGreaterThanOrEqual(40)
       expect(firstTime / n).toBeGreaterThanOrEqual(0.2)
-      expect(firstTime / n).toBeLessThanOrEqual(0.6)
     }, 900_000)
   }
 })
