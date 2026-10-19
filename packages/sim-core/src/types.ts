@@ -88,7 +88,7 @@ export type Intent =
   /** A4 recovery run (realism v2 P4): back to his out-of-possession shape spot after a loss. */
   | { readonly kind: "recover"; readonly target: Vec2 }
   /** A6 rotation (realism v2 P5): a held spot (winger inside, full-back inversion, CM drop), jogged to. */
-  | { readonly kind: "rotate"; readonly target: Vec2 }
+  | { readonly kind: "rotate"; readonly target: Vec2; readonly since: number }
 
 export interface PlayerState {
   readonly id: string
