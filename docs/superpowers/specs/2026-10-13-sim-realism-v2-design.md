@@ -1064,8 +1064,11 @@ Controller and user rulings during execution (progress.md):
 - **T4:**
   - `fouls.attackerShare` 0.05 below `shieldSpeedMax` 2 m/s, and `takeOnShare` 0.15;
   - `aerial.contestM` 2, `bHeading` 3, `bSlack` 1, `foulShare` 0.13.
+  - **Shipped in the calibrated file** (through the knobs): `attackerShare` **0.075** (`attacker_foul` 1.5),
+    `aerial.contestM` **2.25** (`aerial_contest`) and `foulShare` **0.195** (`aerial_foul` 1.5).
 - **A4:**
-  - join table 0.8 / 0.3 / 0.23 / 0.13 / 0.07 at 0–5 / 5–10 / 10–15 / 15–20 / 20–30 m;
+  - join table 0.8 / 0.3 / 0.23 / 0.13 / 0.07 at 0–5 / 5–10 / 10–15 / 15–20 / 20–30 m (default). **Shipped:**
+    1.0 / 0.375 / 0.2875 / 0.1625 / 0.0875 (`counter_join` 1.25);
   - window 3 s, speed 4.5 m/s;
   - pause 1.5 s at 0.55 × vmax beyond 10 m;
   - recovery from 2.5 to 8 s, peak 5–6 s, `recoverRatePerS` 0.05, behind × 0.33, runs of 1.5–3 s at 0.9 × vmax.
@@ -1126,7 +1129,8 @@ Changes made on measurement:
    in the stats golden; it is unchanged.
 3. **G26.** The A4 join rows are reach rates (reaching 3 m of the ball within 3 s), not join decisions.
 4. **Task 5.** Aerial duels reached about 21 per match against 47 at the brief's `contestM` range. Only the intended
-   receiver anticipates a high ball, and defenders do not mark landing spots (P5). `foulShare` stays 0.13 per duel.
+   receiver anticipates a high ball, and defenders do not mark landing spots (P5). Task 5's ruling kept `foulShare` at
+   0.13 per duel in the defaults; the tuner's `aerial_foul` 1.5 (in range) ships 0.195, which reverses it through a knob.
 5. **Task 7.** `rateScale` 0.1 hit 405 press episodes but cut fouls from 16.1 to 9.9. Task 10 raised it to 0.5 (below).
 6. **Task 10, `foul_per_tackle` start.** Sweep with everything on (16 matches):
 
@@ -1219,8 +1223,24 @@ parameters, free kicks are 27.0 against 18.6 fouls (8.8 offsides) on the gate se
 
 - **The tuner buys fouls with fewer tackles that foul more often, and cards with the lowest booking rate.** Ground duels
   fall to 112 against 155 real.
-- `counter_join` 1.25 caps the 0–5 m join chance at 1.0.
+- `counter_join` 1.25 makes the 0–5 m join chance exactly 1.0 (0.8 × 1.25), so the knob's `min(1, x)` never clips and
+  the table keeps its shape. The cost: the 0–5 m row is now deterministic, and its reach is 0.933 against 0.79 real
+  (further from real). A higher `counter_join` would clip, change the shape and need a ruling.
 - `box_intensity`, `recovery_rate` and `press_rate` did not move.
+
+**Knobs on their bounds (pending the user's decision).** In run 3 three discipline knobs sit on their range limits:
+- `tackle_rate` at its minimum (0.1);
+- `foul_per_tackle` at its maximum (0.6);
+- `yellow_per_foul` at its minimum (0.10).
+
+The tuner bought fouls with fewer tackles that foul more often, and lower cards with the booking floor. The consequences:
+- ground duels 153.5 before the tuner (MET) → 112 (64 matches; real 155);
+- yellows 3.30 against 5.0;
+- cards per foul 0.101 against 0.14;
+- the T2 real-target test goes NOT MET (0.568 on 88 attempts).
+
+The options are to accept this as recorded, or to narrow `tackle_rate` (for example 0.2–0.4 around the P3 value 0.275) and
+run one more round; the gate has a 9.7-point margin. The user decides before the merge.
 
 **Pre/post-tuner duels** (16 matches, seeds 2000–2015):
 - **MET → NOT MET because of a knob:**
@@ -1355,8 +1375,9 @@ parameters, free kicks are 27.0 against 18.6 fouls (8.8 offsides) on the gate se
   | Sent off | 0.75 | 0.31 | 0.29 |
   | Penalties | 0.09 | 0.22 | 0.43 |
 
-  Sending-offs are back near real (0.31 against 0.29). Cards follow `yellow_per_foul` at its 0.10 floor (ruling 26 keeps
-  the tuner from buying cards back).
+  Sending-offs are back near real (0.31 against 0.29). Ruling 26's narrower `yellow_per_foul` range did not keep cards near
+  real: the tuner went to its 0.10 floor and pushed cards below real (yellows 3.30 against 5.0, cards per foul 0.101 against
+  0.14).
 - **P3 passing rows** (64 matches, P3 → P4):
   - tightly marked 0.100 → **0.121** (NOT MET by 0.001; zonal marking off);
   - near-1 completion 0.474 → 0.425;
@@ -1383,7 +1404,7 @@ parameters, free kicks are 27.0 against 18.6 fouls (8.8 offsides) on the gate se
   | Target | Measured | Bound | Status |
   |---|---|---|---|
   | Tackle attempts won | 0.568 (88 attempts) | 0.43–0.53 | NOT MET, `it.fails` |
-  | Front − behind | +0.055 (13 / 75) | ≥ 0.04 | MET |
+  | Front − behind | +0.055 (13 / 75) | ≥ 0.04 | MET (within noise: 13 front attempts, SE about 0.14; the deep report agrees, +0.054) |
   | Supported − alone | +0.080 (34 / 54) | ≥ 0.05 (G3) | MET |
   | Defender fouls | 11.75 | 12–18 | NOT MET, `it.fails` |
   | All fouls | 18.75 | 19–27 | NOT MET, `it.fails` |

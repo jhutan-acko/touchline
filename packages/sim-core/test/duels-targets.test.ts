@@ -93,6 +93,10 @@ const measure = (seed: number): M => {
       }
       // Tackle attempts (pre-flight G2): lost or foul, or won with a ball; the won tackle of a lost take-on has none.
       if (e.type !== "tackle" || !(a.outcome === "lost" || a.outcome === "foul" || (a.outcome === "won" && a.ball !== undefined))) continue
+      // Bearing and support are read from the state after the step, i.e. after this tick's movement (tackles are drawn
+      // in ownedTick, before moveAll), as duels.py reads the tracking frame of the tackle's frame id. Read from the state
+      // before the step instead (Task 10 fix round 1, 4 matches), front − behind is −0.077 (10 front) and supported −
+      // alone −0.031 (31 against 57): up to about 0.8 m of movement at about 1 m range moves attempts between bins.
       const def = s.players.find((x) => x.id === e.player_id)
       const car = s.players.find((x) => x.id === a.opponent_id)
       if (!def || !car) continue
@@ -116,11 +120,15 @@ const win = (rows: ReadonlyArray<Tackle>) => rows.filter((r) => r.won).length / 
 const perMatch = (k: "defFouls" | "fouls" | "aerials") => ms().reduce((acc, m) => acc + m[k], 0) / SEEDS.length
 
 describe("P4 real-data targets on the calibrated parameters (4 matches)", () => {
-  // NOT MET (Task 10, calibrated params): 0.568 of 88 attempts. The tuner moved tackle_rate to its 0.1 minimum, so
-  // fewer, mostly supported tackles (deep report: see Results: P4).
+  // Non-vacuity (F11), outside the it.fails cases so that a run with no tackles or no losses fails the suite.
+  it("the measure pass sees at least 50 tackle attempts and 50 losses", () => {
+    expect(tackles().length).toBeGreaterThanOrEqual(50)
+    expect(ms().flatMap((m) => m.reach5).length).toBeGreaterThanOrEqual(50)
+  }, 600_000)
+  // NOT MET (Task 10, calibrated params): 0.568 of 88 attempts (54 with the tackler alone within 3 m, 34 supported).
+  // The tuner moved tackle_rate to its 0.1 minimum, so fewer tackles (deep report: see Results: P4).
   it.fails("NOT MET: defenders win about 48 % of tackle attempts (T2)", () => {
     const v = win(tackles())
-    expect(tackles().length).toBeGreaterThanOrEqual(50)
     expect(v).toBeGreaterThanOrEqual(0.43)
     expect(v).toBeLessThanOrEqual(0.53)
   }, 600_000)
@@ -161,7 +169,6 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
   // NOT MET (Task 10): 1.954 per loss over 480 losses.
   it.fails("NOT MET: about 2.3 losing players reach the ball within 3 s (A4)", () => {
     const r = ms().flatMap((m) => m.reach5)
-    expect(r.length).toBeGreaterThan(50)
     const v = r.reduce((a, b) => a + b, 0) / r.length
     expect(v).toBeGreaterThanOrEqual(2.0)
     expect(v).toBeLessThanOrEqual(2.6)

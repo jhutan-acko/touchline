@@ -760,8 +760,9 @@ export const DEFAULT_PARAMS: Params = {
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   // Script nudges re-set in P4 Task 10 (scripts only, never the bounds): pressSurge 4 -> 20, since press.rateScale
-  // scales the team-press hazard (pressures per opponent pass x1.30 against the x1.3 bound at 4, x1.71 at 20; the stats
-  // pressure-shift signal in 4 of 6 seeds at 10 against at least 5, 5 of 6 at 15, 20 and 30); howlerSave 1.5 -> 2, since the
+  // scales the team-press hazard. Pressures per opponent pass (sim-core scenario test, bound x1.3): at rateScale 0.1 on the
+  // pre-tuned params x1.30 at 4 and x1.71 at 20; on the final params (rateScale 0.5) x1.36 at 4, x1.44 at 10, x1.47 at 20.
+  // The stats pressure-shift signal (final params, bound 5 of 6 seeds): 4 at 10, 5 at 15, 20 and 30. howlerSave 1.5 -> 2, since the
   // recalibrated keeper lets in 44 % of shots on target (howlers 0.62 against 1.5 x 0.44; 0.74 at 2).
   script: {
     goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
