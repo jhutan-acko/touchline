@@ -84,21 +84,44 @@ export interface ShotOnTarget {
   readonly y: number
   readonly z: number
   readonly distance: number
-  /** P6 (plan 8f): where it was struck from, the goal centre it was aimed at, and its ball speed (m/s). Not read yet. */
+  /** P6 (plan 8f): where it was struck from, the goal centre it was aimed at, and its ball speed (m/s). Read by saveGeometry. */
   readonly from?: Vec2
   readonly goal?: Vec2
   readonly speed?: number
 }
 
 /**
+ * SH3 (plan 8f) geometry of an on-target shot against the keeper: how far he stands off the goal line, how far off the
+ * segment from the shot's origin to the goal centre, and the ball's flight time from the origin to where it crosses the
+ * goal line. Null when the shot does not carry its origin, goal or speed.
+ */
+export const saveGeometry = (s: ShotOnTarget, keeper: PlayerState): { offLineM: number; offBisectorM: number; flightS: number } | null => {
+  if (!s.from || !s.goal || s.speed === undefined) return null
+  return {
+    offLineM: Math.abs(keeper.pos.x - s.goal.x),
+    offBisectorM: segmentDistance(s.from, s.goal, keeper.pos).d,
+    flightS: Math.hypot(s.goal.x - s.from.x, s.goal.y + s.y - s.from.y) / s.speed
+  }
+}
+
+/**
  * Chance that the keeper saves an on-target shot: lower towards the posts (`bWide`) and near the bar or the
  * ground (`bEdge`), lower from close range (`bDistance` per 10 m beyond 16 m), higher for quick reflexes.
+ * Under saveGeo.rule 1 (SH3), when the shot carries its geometry, the distance term gives way to the keeper's position
+ * (off the line beyond offLineRefM, off the shot's line) and his reaction time (flight time less reactionS, capped),
+ * the last centred on a 16 m shot at the base shot speed (F16), so the term adds nothing to a typical shot.
  */
 export const saveChance = (s: ShotOnTarget, keeper: PlayerState, p: Params, logitShift = 0): number => {
   const c = p.shot.save
   const wide = Math.min(1, Math.abs(s.y) / PITCH.goalHalfWidth)
   const edge = Math.min(1, Math.abs(s.z / PITCH.goalHeight - 0.5) * 2)
-  return 1 / (1 + Math.exp(-(logitShift + c.b0 + c.bWide * wide + c.bEdge * edge + (c.bDistance * (s.distance - 16)) / 10 + c.bReflexes * (keeper.attrs.reflexes - 0.6))))
+  const g = p.saveGeo.rule === 1 ? saveGeometry(s, keeper) : null
+  const reach = (flightS: number): number => Math.min(p.saveGeo.flightCapS, flightS - p.saveGeo.reactionS)
+  const position = g
+    ? p.saveGeo.bOffLine * (g.offLineM - p.saveGeo.offLineRefM) + p.saveGeo.bOffBisector * g.offBisectorM +
+      p.saveGeo.bFlightS * (reach(g.flightS) - reach(16 / p.shot.speed))
+    : (c.bDistance * (s.distance - 16)) / 10
+  return 1 / (1 + Math.exp(-(logitShift + c.b0 + c.bWide * wide + c.bEdge * edge + position + c.bReflexes * (keeper.attrs.reflexes - 0.6))))
 }
 
 /**
