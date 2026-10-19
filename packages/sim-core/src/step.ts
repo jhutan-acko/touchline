@@ -98,6 +98,10 @@ import { firstTimeChoice, firstTimeEligible, goalDistM } from "./firsttime.js"
 import type { DecisionInput } from "./decide.js"
 
 // ---- P6 imports, header seam (plan 8f Task 4 inserts below this line)
+import { coneCount, contactDecision } from "./contact.js"
+import { xgOf } from "./decide.js"
+import { actionZone } from "./geometry.js"
+import { headerEligible, headerHow, headShare } from "./header.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -1254,8 +1258,23 @@ export const executeContact = (w: Work, _f: Flight, receiver: PlayerState, plan:
 /**
  * SH2: a header at goal by the winner of a high ball in the box he attacks, or null for the first-time path. Checks its
  * own switch: contactPlan runs when either P6 contact rule is 1, so this returns null while header.rule is 0. rule 0: null.
+ * Eligible (ruling 8): the ball at the resolve tick is zMin..zMax up and he stands in the box he attacks. Then one draw
+ * on the contact stream: head it (U = b0 + bXg xg(header) + bHeading (heading - 0.6) + script shot bias) or control it
+ * (U = 0). The header goes through releaseShot with his pressure at contact; no headed lay-off.
  */
-export const headerPlan = (_w: Work, _f: Flight, _receiver: PlayerState): ContactPlan | null => null
+export const headerPlan = (w: Work, _f: Flight, receiver: PlayerState): ContactPlan | null => {
+  const h = w.p.header
+  if (h.rule === 0) return null
+  const contactZ = w.ball.pos.z
+  if (!headerEligible(contactZ, actionZone(receiver.side, w.period, receiver.pos) === "box", receiver.role === "GK", h)) return null
+  const opps = w.active(other(receiver.side))
+  const xg = xgOf(w.p, receiver.side, w.period, receiver.pos, true, coneCount(receiver.side, w.period, receiver.pos, opps))
+  const share = headShare(xg, receiver.attrs.heading, scriptBias(w, receiver.side).shot ?? 0, h)
+  if (!w.rng.contact.chance(share)) return CONTROL
+  const opp = nearestOpponent(receiver.pos, opps)
+  const pressure = pressureFrom(opp ? dist(opp.pos, receiver.pos) : 50)
+  return { kind: "shot", decision: contactDecision({ shot: share, hold: 1 - share }, "shot", null, [], xg, pressure), how: headerHow(receiver.attrs.heading, contactZ, h) }
+}
 
 // ===== end of P6 header seam
 
