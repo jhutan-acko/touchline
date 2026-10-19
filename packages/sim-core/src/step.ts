@@ -106,6 +106,7 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 // ---- P5 imports, role-run seam (plan 8e Task 9 inserts below this line)
 
 // ---- P5 imports, rotation seam (plan 8e Task 10 inserts below this line)
+import { dropTarget, insideTarget, invertTarget } from "./rotate.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -1885,7 +1886,63 @@ export const runMove = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarge
 // ================================================================ P5 rotation seam (plan 8e Task 10 owns this block)
 
 /** A6: an in-possession teammate's rotation (winger inside, full-back inversion, CM drop) over his shape `base`; null when none. rule 0: null. @internal */
-export const rotateMove = (w: Work, pl: PlayerState, owner: PlayerState, base: () => MoveTarget): MoveTarget | null => null
+export const rotateMove = (w: Work, pl: PlayerState, owner: PlayerState, base: () => MoveTarget): MoveTarget | null => {
+  const rm = w.p.roleMoves
+  if (rm.rotateRule <= 0 || pl.role === "GK") return null
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  const speedCap = Math.min(rm.jogMps, vmax)
+  const live = pl.intent.kind === "rotate" && w.tick < pl.intentUntil
+  const mates = w.active(pl.side)
+  // The same-side winger (the winger on his flank), and whether he is rotating inside now.
+  const flank = pl.pos.y < 0 ? -1 : 1
+  const winger = pl.role === "FB" ? mates.filter((x) => x.role === "W" && (x.pos.y < 0 ? -1 : 1) === flank).sort((a, b) => Math.abs(a.pos.y - pl.pos.y) - Math.abs(b.pos.y - pl.pos.y))[0] : undefined
+  const wingerInside = winger !== undefined && winger.intent.kind === "rotate" && w.tick < winger.intentUntil
+  if (live) {
+    // A rotation ends when its side loses the ball (a transition against it), and a full-back's when his winger comes inside.
+    if ((w.transition !== undefined && w.transition.loser === pl.side) || wingerInside) {
+      w.setPlayer({ ...pl, intentUntil: w.tick })
+      return null
+    }
+    return { target: (pl.intent as { readonly target: Vec2 }).target, speedCap }
+  }
+  // One rotation at a time, and none over another intent still running.
+  if (w.tick < pl.intentUntil && pl.intent.kind !== "rotate") return null
+  const ballU = attackX(pl.side, w.ball.pos.x, w.period)
+  const start = (kind: "inside" | "invert" | "cm_drop", target: Vec2, durS: readonly [number, number]): MoveTarget => {
+    const to = clampToPitch(target, 1)
+    w.setPlayer({ ...pl, intent: { kind: "rotate", target: to }, intentUntil: w.tick + Math.max(1, Math.round(w.rng.roles.range(durS[0], durS[1]) / w.dt)) })
+    w.emit(w.pending("off_ball_run", pl, pl.pos, { kind, ball_carrier_id: owner.id }, to))
+    return { target: to, speedCap }
+  }
+  if (pl.role === "W") {
+    const c = rm.inside
+    if (ballU <= 17.5 || Math.abs(pl.pos.y) <= c.halfSpaceY[1]) return null
+    if (!w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
+    const shape = base().target
+    return start("inside", insideTarget(shape, shape.y < 0 || (shape.y === 0 && pl.pos.y < 0) ? -1 : 1, w.rng.roles.range(c.halfSpaceY[0], c.halfSpaceY[1])), c.durS)
+  }
+  if (pl.role === "FB") {
+    const c = rm.invert
+    // His winger is wide (or has the ball) and is not coming inside: the pair is gated both ways.
+    const wide = winger !== undefined && !wingerInside && (Math.abs(winger.pos.y) > 20 || winger.id === owner.id)
+    if (!wide || ballU <= -17.5 || !w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
+    const lastOwnU = Math.min(...mates.filter((x) => x.role !== "GK").map((x) => attackX(pl.side, x.pos.x, w.period)))
+    return start("invert", invertTarget(base().target, winger!.pos.y, w.rng.roles.range(c.inM[0], c.inM[1]), lastOwnU, pl.side, w.period, c.aboveLastM), c.durS)
+  }
+  if (pl.role === "CM" || pl.role === "DM") {
+    const c = rm.cmDrop
+    // Within winS of his side winning the ball (needs transition.rule 1), with the ball in his own third; the deepest of the others drops.
+    const tr = w.transition
+    if (w.p.transition.rule <= 0 || tr === undefined || tr.loser === pl.side || w.tick - tr.tick >= windowTicks(c.winS, w.dt) || ballU >= -17.5) return null
+    const deepest = mates
+      .filter((x) => (x.role === "CM" || x.role === "DM") && x.id !== owner.id)
+      .sort((a, b) => dirOf(pl.side, w.period) * (a.pos.x - b.pos.x) || (a.id < b.id ? -1 : 1))[0]
+    const cbs = mates.filter((x) => x.role === "CB").map((x) => x.pos)
+    if (deepest?.id !== pl.id || cbs.length === 0 || !w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
+    return start("cm_drop", dropTarget(cbs, w.ball.pos.y, pl.side, w.period), c.durS)
+  }
+  return null
+}
 
 // ================================================================ end of P5 rotation seam
 
