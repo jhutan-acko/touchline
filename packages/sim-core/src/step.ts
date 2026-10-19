@@ -98,6 +98,8 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 // ---- P5 imports, defending set-piece seam (plan 8e Task 4 inserts below this line)
 
 // ---- P5 imports, restart-shape seam (plan 8e Task 5 inserts below this line)
+import { roleSpot, ySignOf } from "./setpiece.js"
+import { kickoffLegal, outsideBox, throwShortIds } from "./setpiece-shapes.js"
 
 // ---- P5 imports, dead-ball seam (plan 8e Task 6 inserts below this line)
 
@@ -555,7 +557,39 @@ export const defendSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | n
 // ================================================================ P5 restart-shape seam (plan 8e Task 5 owns this block)
 
 /** S5-S7: a player's goal-kick, throw-in or kickoff spot (either side); null keeps the old target. rule 0: null. @internal */
-export const shapeSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => null
+export const shapeSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => {
+  const sh = w.p.setShapes
+  if (sh.rule <= 0) return null
+  if (ph.restart === "goal_kick" || ph.restart === "kickoff") {
+    // Role tables are in the restarting side's frame for both sides; the sign is the pitch side of his slot (ruling 4).
+    const tables = ph.restart === "goal_kick" ? sh.goalKick : sh.kickoff
+    const mine = pl.side === ph.side
+    const slot = FORMATIONS[teamOf(w.cfg, pl.side).formation][pl.slot]!
+    const spot = roleSpot(mine ? tables.att : tables.def, pl.role, ySignOf({ x: 0, y: slot.y * dirOf(pl.side, w.period) }), ph.side, w.period)
+    if (ph.restart === "kickoff") return kickoffLegal(spot, pl.side, w.period, mine)
+    return mine ? spot : outsideBox(spot, ph.side, w.period)
+  }
+  if (ph.restart !== "throw_in") return null
+  // S6: the taker's three nearest outfield teammates come short to the ring; the defending side marks them goal-side.
+  const taker = takerFor(w, ph)
+  const ids = throwShortIds(w.active(ph.side), taker.id, ph.at, sh.throwShort)
+  const opps = w.active(other(ph.side))
+  const support = new Map<string, Vec2>()
+  for (const id of ids) {
+    const m = w.player(id)
+    support.set(id, supportSpot(ph.at, restartTarget(w, m, ph.at, true), ph.side, w.period, opps, sh.throwShortM, true))
+  }
+  if (pl.side === ph.side) return support.get(pl.id) ?? null
+  if (pl.role === "GK" || support.size === 0) return null
+  const defenders = w.active(pl.side).filter((d) => d.role !== "GK").map((d) => ({ id: d.id, anchor: restartTarget(w, d, ph.at, false) }))
+  const supporters = ids.map((id) => ({ ...w.player(id), pos: support.get(id)! }))
+  const mark = assignMarks(defenders, supporters, THROW_MARK_RADIUS_M).get(pl.id)
+  if (!mark) return null
+  return markTarget(defenders.find((d) => d.id === pl.id)!.anchor, mark.pos, pl.side, w.period, 1, sh.throwMarkWeight)
+}
+
+/** S6: a defender marks a short supporter only within this distance of his own spot (ruling 10). */
+const THROW_MARK_RADIUS_M = 15
 
 // ================================================================ end of P5 restart-shape seam
 
