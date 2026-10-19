@@ -33,6 +33,17 @@ export interface ShotMods {
   readonly force?: "goal" | "save" | "keeper_error"
   /** Multiplies the shooting error (scenario goal nudges sharpen finishing). */
   readonly aim?: number
+  /** P6 hooks (plan 8f), each absent = the old behaviour: multiply the horizontal / vertical aiming error. */
+  readonly aimY?: number
+  readonly aimZ?: number
+  /** P6: the 0..1 skill in the shooting error in place of finishing (a header uses heading). */
+  readonly skill?: number
+  /** P6: multiplies the mis-hit chance (inside its cap). */
+  readonly mishit?: number
+  /** P6: the height the shot is struck from (m; default 0.2, a header from the contact height). */
+  readonly fromZ?: number
+  /** P6: multiplies the shot's ball speed (shot.speed). */
+  readonly speed?: number
 }
 
 const segmentDistance = (a: Vec2, b: Vec2, q: Vec2): { d: number; t: number } => {
@@ -73,6 +84,10 @@ export interface ShotOnTarget {
   readonly y: number
   readonly z: number
   readonly distance: number
+  /** P6 (plan 8f): where it was struck from, the goal centre it was aimed at, and its ball speed (m/s). Not read yet. */
+  readonly from?: Vec2
+  readonly goal?: Vec2
+  readonly speed?: number
 }
 
 /**
@@ -108,15 +123,16 @@ export const planShot = (
 ): ShotPlan => {
   const scoring = mods.scoring ?? 1
   const goal = goalOf(side, period)
-  const from: Vec3 = { x: shooter.pos.x, y: shooter.pos.y, z: 0.2 }
+  const from: Vec3 = { x: shooter.pos.x, y: shooter.pos.y, z: mods.fromZ ?? 0.2 }
   const d = dist(shooter.pos, goal)
-  const skill = (1.35 - 0.7 * shooter.attrs.finishing) * (weakFoot ? p.execution.weakFootK : 1)
+  const skill = (1.35 - 0.7 * (mods.skill ?? shooter.attrs.finishing)) * (weakFoot ? p.execution.weakFootK : 1)
   const aimY = rng.range(-2.9, 2.9)
   const aimZ = rng.range(0.3, 1.8)
   const aim = p.shot.aimNoise * (mods.aim ?? 1)
-  const sdY = (isPenalty ? 1.0 : 1.6 + 0.12 * d) * (1 + 0.8 * pressure) * skill * aim
-  const sdZ = (0.6 + 0.05 * d) * (1 + 0.5 * pressure) * skill * aim
-  const pMis = Math.min(0.4, p.execution.mishitBase * 2 + p.execution.mishitK * Math.pow(pressure, 1.6) * (1.2 - shooter.attrs.composure))
+  const sdY = (isPenalty ? 1.0 : 1.6 + 0.12 * d) * (1 + 0.8 * pressure) * skill * aim * (mods.aimY ?? 1)
+  const sdZ = (0.6 + 0.05 * d) * (1 + 0.5 * pressure) * skill * aim * (mods.aimZ ?? 1)
+  const pMis = Math.min(0.4, (p.execution.mishitBase * 2 + p.execution.mishitK * Math.pow(pressure, 1.6) * (1.2 - shooter.attrs.composure)) * (mods.mishit ?? 1))
+  const shotSpeed = p.shot.speed * (mods.speed ?? 1)
   const mis = rng.chance(pMis)
   const misKind = rng.uniform()
   let y = aimY + rng.normal() * sdY
@@ -138,10 +154,10 @@ export const planShot = (
     // Scripted: a clean strike inside the frame that beats the keeper.
     const fy = Math.max(-(PITCH.goalHalfWidth - 0.4), Math.min(PITCH.goalHalfWidth - 0.4, y))
     const goalTo: Vec3 = { x: goal.x, y: fy, z: Math.min(z, PITCH.goalHeight - 0.4) }
-    return { outcome: "goal", ticks: Math.max(1, Math.ceil(d / p.shot.speed / dt)), from, to: goalTo, execution: "clean", onTarget: true, blockerId: null, keeperId: null, handling: null, forced: true }
+    return { outcome: "goal", ticks: Math.max(1, Math.ceil(d / shotSpeed / dt)), from, to: goalTo, execution: "clean", onTarget: true, blockerId: null, keeperId: null, handling: null, forced: true }
   }
   const to: Vec3 = { x: goal.x, y, z }
-  const speed = execution === "scuffed" ? p.shot.speed * 0.5 : p.shot.speed
+  const speed = execution === "scuffed" ? shotSpeed * 0.5 : shotSpeed
   const travel = (m: number) => Math.max(1, Math.ceil(m / speed / dt))
 
   if (!isPenalty) {
@@ -176,7 +192,7 @@ export const planShot = (
   // Heights below 0 are clamped to the ground, so the vertical window is (-inf, crossbar).
   const pGoalClean = isPenalty
     ? Math.min(0.95, 0.76 / Math.max(0.05, normalBetween(-PITCH.goalHalfWidth, PITCH.goalHalfWidth, aimY, sdY) * normalBetween(-50, PITCH.goalHeight, aimZ, sdZ)))
-    : Math.min(0.95, (keeper ? 1 - saveChance({ y, z, distance: d }, keeper, p, mods.saveLogit ?? 0) : 1) * scoring)
+    : Math.min(0.95, (keeper ? 1 - saveChance({ y, z, distance: d, from: shooter.pos, goal, speed }, keeper, p, mods.saveLogit ?? 0) : 1) * scoring)
   const pGoal = mis ? pGoalClean * 0.3 : pGoalClean
   if (rng.chance(pGoal) || keeper === null)
     return { outcome: "goal", ticks: travel(d), from, to, execution, onTarget, blockerId: null, keeperId: null, handling: null }

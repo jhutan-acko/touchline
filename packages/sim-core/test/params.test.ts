@@ -160,3 +160,21 @@ describe("realism v2 P4 params", () => {
     expect(paramsFromJson({ provenance: cc, tackle: { base: -0.4 } }).tackle.base).toBe(-0.4)
   })
 })
+
+describe("realism v2 P6 params", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("ship switched off, with the spec's header band and the contact stream", () => {
+    const P = DEFAULT_PARAMS
+    for (const r of [P.firstTime.rule, P.header.rule, P.saveGeo.rule, P.execFatigue.rule, P.shotModel.rule]) expect(r).toBe(0)
+    expect([P.firstTime.maxGoalM, P.header.zMin, P.header.zMax]).toEqual([25, 1, 2.4])
+    // The keys only: Task 7 commits the refit values.
+    expect(Object.keys(P.shotModel.xg).sort()).toEqual(Object.keys(P.shot.xg).sort())
+    expect(CONCERNS).toContain("contact")
+  })
+  it("reject a P6 switch other than 0 or 1 and a header band out of order", () => {
+    expect(() => paramsFromJson({ provenance: cc, firstTime: { rule: 2 } })).toThrow(/firstTime\.rule must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, firstTime: { setPieces: 0.5 } })).toThrow(/firstTime\.setPieces must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, header: { zMin: 2.5 } })).toThrow(/header\.zMin/)
+    expect(paramsFromJson({ provenance: cc, shotModel: { xg: { b0: -2 } } }).shotModel.xg.b0).toBe(-2)
+  })
+})

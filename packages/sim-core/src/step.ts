@@ -90,6 +90,13 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 
 // ---- P4 imports, marking seam (plan 8d Task 8 inserts below this line)
 
+// ---- P6 imports, contact executor (plan 8f Task 1; no wave task inserts below this line)
+import { CONTROL, OPEN_SHOT, type ContactPlan, type ShotHow } from "./contact.js"
+
+// ---- P6 imports, first-time seam (plan 8f Task 3 inserts below this line)
+
+// ---- P6 imports, header seam (plan 8f Task 4 inserts below this line)
+
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
 const MATCH_SECONDS_90 = 5400
@@ -1004,14 +1011,16 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   if (chaser && !offside) w.setPlayer({ ...w.player(chaser.id), intent: { kind: "chase", target: endAt }, intentUntil: tickAt })
 }
 
-const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null): void => {
+/** `how` (P6, plan 8f): a first-time shot or a header from the contact executor; OPEN_SHOT, the default, is the old shot. */
+const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null, how: ShotHow = OPEN_SHOT): void => {
   const side = owner.side
   const opps = w.active(other(side))
   const isPenalty = restart === "penalty"
   const xg = isPenalty ? 0.76 : (d.xg ?? 0.02)
   // The recorded xG is the model's; the chance of scoring also follows the game state (minute, red cards).
   const scoring = isPenalty ? 1 : scoringFactor(w.minute(), w.active(side).length, opps.length, w.p, w.period)
-  const weakFoot = !isPenalty && w.rng.execution.chance(0.2)
+  // A header has no weaker foot (and draws nothing for it).
+  const weakFoot = !isPenalty && !how.header && w.rng.execution.chance(0.2)
   // Scenario scripts: this team's scoring nudge; the defending keeper's save shift and fumbles; forced outcomes.
   const own = w.mods(side), def = w.mods(other(side))
   const force: ShotMods["force"] = w.takeForced(side, "goal")
@@ -1022,7 +1031,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
         ? "keeper_error"
         : undefined
   const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, aim: isPenalty ? 1 : own.aim, ...(force ? { force } : {}) }
-  const plan = planShot(owner, side, w.period, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
+  const plan = planShot(owner, side, w.period, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, { ...mods, ...how.mods })
   // A forced save or keeper error is used up by the next shot that is not blocked.
   if (plan.forced && force === "save") w.takeForced(other(side), "keeper_heroics")
   if (plan.forced && force === "keeper_error") w.takeForced(other(side), "keeper_howler")
@@ -1032,12 +1041,13 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const main = w.pending("shot", owner, owner.pos, {
     ...decisionAttrs(d),
     technique: isPenalty ? "penalty" : restart === "free_kick" ? "free_kick" : "normal",
-    body_part: footPart(owner, weakFoot),
+    body_part: how.header ? "head" : footPart(owner, weakFoot),
     execution: plan.execution,
     on_target: plan.onTarget,
     xg: Math.round(xg * 1000) / 1000,
     ...(plan.forced ? { scripted: true } : {}),
-    shot_speed_kmh: round2(w.p.shot.speed * 3.6 * (plan.execution === "scuffed" ? 0.5 : 1))
+    ...(how.firstTime ? { first_time: true } : {}),
+    shot_speed_kmh: round2(w.p.shot.speed * 3.6 * (plan.execution === "scuffed" ? 0.5 : 1) * (how.mods.speed ?? 1))
   }, end)
   const extra: PendingEvent[] = []
   let restartAfter: Flight["restartAfter"] = null
@@ -1196,12 +1206,74 @@ const ownedTick = (w: Work): void => {
 
 // ---------------------------------------------------------------- flights and loose ball
 
+// ===== P6 contact executor seam (plan 8f Task 1; no wave task edits this block)
+
+/**
+ * What the receiver of a clean pass does at contact (P6 SH1, SH2; planning rulings 2, 3): null (he controls it, the old
+ * behaviour) when firstTime.rule and header.rule are both 0, with no work and no draw, and whenever the shared
+ * eligibility fails: the winner is the passer's teammate, not a keeper, the flight carries no aerial foul, no what-if
+ * override waits for him, and the pass is from open play (or a corner or free-kick delivery when firstTime.setPieces is 1).
+ * Otherwise the header seam's plan, or the first-time seam's.
+ */
+export const contactPlan = (w: Work, f: Flight): { receiver: PlayerState; plan: ContactPlan } | null => {
+  const p = w.p
+  if (p.firstTime.rule === 0 && p.header.rule === 0) return null
+  if (!f.winnerId || f.foul) return null
+  const receiver = w.player(f.winnerId)
+  if (receiver.side !== f.side || receiver.id === f.fromId || receiver.role === "GK") return null
+  if (w.override?.playerId === receiver.id) return null
+  const restart = f.pending.attrs.restart ?? null
+  if (restart !== null && !((restart === "corner" || restart === "free_kick") && p.firstTime.setPieces === 1)) return null
+  return { receiver, plan: headerPlan(w, f, receiver) ?? firstTimePlan(w, f, receiver) }
+}
+
+/**
+ * Carry out a contact plan in the pass's resolve tick: a first-time shot or header through releaseShot, or a lay-off
+ * through releaseKick (unchanged) with first_time: true added to the new pass event. Nobody is pressing him any more.
+ */
+export const executeContact = (w: Work, _f: Flight, receiver: PlayerState, plan: ContactPlan): void => {
+  if (plan.kind === "shot") releaseShot(w, receiver, plan.decision, null, plan.how)
+  else if (plan.kind === "layoff") {
+    releaseKick(w, receiver, plan.decision, null)
+    if (w.possession.kind === "in_flight") {
+      const fl = w.possession.flight
+      w.possession = { ...w.possession, flight: { ...fl, pending: { ...fl.pending, attrs: { ...fl.pending.attrs, first_time: true } } } }
+    }
+  }
+  w.pressedBy = []
+}
+
+// ===== end of P6 contact executor seam
+
+// ===== P6 header seam (plan 8f Task 4 owns this block)
+
+/**
+ * SH2: a header at goal by the winner of a high ball in the box he attacks, or null for the first-time path. Checks its
+ * own switch: contactPlan runs when either P6 contact rule is 1, so this returns null while header.rule is 0. rule 0: null.
+ */
+export const headerPlan = (_w: Work, _f: Flight, _receiver: PlayerState): ContactPlan | null => null
+
+// ===== end of P6 header seam
+
+// ===== P6 first-time seam (plan 8f Task 3 owns this block)
+
+/**
+ * SH1: shoot first time, lay off or control. Checks its own switch: contactPlan runs when either P6 contact rule is 1,
+ * so this returns CONTROL while firstTime.rule is 0. rule 0: CONTROL (the old behaviour).
+ */
+export const firstTimePlan = (_w: Work, _f: Flight, _receiver: PlayerState): ContactPlan => CONTROL
+
+// ===== end of P6 first-time seam
+
 const resolveFlightNow = (w: Work, f: Flight): void => {
   // A deflection's "main event" is the ball going out; it has no outcome or end frame of its own.
   w.emit(f.pending, f.kind === "deflection" ? {} : { frame_id_end: f.resolveTick, outcome: f.outcome })
+  // P6 (plan 8f): a receiver may shoot first time, head at goal or lay off instead of controlling (no reception then).
+  const contact = f.kind === "pass" && f.outcome === "successful" && f.winnerId ? contactPlan(w, f) : null
   // The receiver's first touch is decided now, at contact, from the ball as it arrives and the pressure on them.
   let touch: FirstTouch | null = null
   for (const e of f.extra) {
+    if (e.type === "reception" && contact && contact.plan.kind !== "control") continue
     if (e.type !== "reception" || !f.winnerId) {
       w.emit(e)
       continue
@@ -1244,6 +1316,10 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     if (toucher) w.lastTouch = { playerId: toucher, side: w.player(toucher).side }
     w.ball = f.looseBall
     w.possession = toucher ? { kind: "loose", noTouchId: toucher, noTouchUntil: w.tick + Math.round(0.4 / w.dt) } : { kind: "loose" }
+    return
+  }
+  if (contact && contact.plan.kind !== "control") {
+    executeContact(w, f, contact.receiver, contact.plan)
     return
   }
   if (f.winnerId && touch !== null && touch !== "controlled") {

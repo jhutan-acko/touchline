@@ -36,6 +36,12 @@ export interface Executed {
 export const pressureFrom = (nearestOpponentM: number): number => Math.max(0, Math.min(1, 1 - (nearestOpponentM - 1) / 4))
 
 /**
+ * How much tiredness widens a kick's error (P6 SH4, plan 8f Task 6 owns this body). `fatigue` is 0 fresh .. 1 exhausted.
+ * rule 0: the old behaviour, 1 + fatigue.executionK x fatigue.
+ */
+export const fatigueScale = (fatigue: number, p: Params): number => 1 + p.fatigue.executionK * fatigue
+
+/**
  * Turn an intended kick into the actual one: Gaussian direction and distance error that grows
  * with pressure, weak foot and low technique, plus a heavy-tail "mis-hit" mixture.
  */
@@ -45,7 +51,7 @@ export const executeKick = (k: KickIntent, p: Params, rng: Rng): Executed => {
   const dy = k.to.y - k.from.y
   const intendedLen = Math.max(0.5, Math.hypot(dx, dy))
   const ang0 = Math.atan2(dy, dx)
-  const skill = (1.35 - 0.7 * k.technique) * (1 + p.fatigue.executionK * (k.fatigue ?? 0)) * (k.errorScale ?? 1)
+  const skill = (1.35 - 0.7 * k.technique) * fatigueScale(k.fatigue ?? 0, p) * (k.errorScale ?? 1)
   const foot = k.weakFoot ? e.weakFootK : 1
   const pressureScale = 1 + e.pressureK * k.pressure
   const pMishit = Math.min(0.35, e.mishitBase + e.mishitK * Math.pow(k.pressure, 1.6) * (1.2 - k.composure) * (k.weakFoot ? 1.6 : 1))

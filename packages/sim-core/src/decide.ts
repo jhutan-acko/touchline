@@ -125,10 +125,23 @@ export const xpassOf = (p: Params, distance: number, lane: number, pressure: num
 }
 
 export const xgOf = (p: Params, side: Side, period: Period, pos: Vec2, header: boolean, defendersInCone: number): number => {
-  const c = p.shot.xg
+  const c = xgCoefs(p)
   const d = dist(pos, goalOf(side, period))
   return sigmoid(c.b0 + c.bDist * d + c.bAngle * goalAngle(side, period, pos) + (header ? c.bHeader : 0) + c.bDefenders * defendersInCone)
 }
+
+// ================================================================ P6 shot-model seam (plan 8f Task 7 owns this block)
+
+/** The xG model's coefficients (P6 xG refit: shotModel.xg under shotModel.rule 1). rule 0: the old behaviour, shot.xg. */
+export const xgCoefs = (p: Params): Params["shot"]["xg"] => p.shot.xg
+
+/**
+ * The shot's term in decide's action logits (P6 shot logit: bXg (xg - pivot) + bRisk riskTolerance in open play under
+ * shotModel.rule 1; a restart keeps the old term). rule 0: the old behaviour, 3 (xg - 0.1) + 0.3 riskTolerance.
+ */
+export const shotTerm = (xg: number, style: TeamStyle, _restart: RestartKind | null, _p: Params): number => 3 * (xg - 0.1) + 0.3 * style.riskTolerance
+
+// ================================================================ end of P6 shot-model seam
 
 export const nearestOpponent = (pos: Vec2, opponents: ReadonlyArray<PlayerState>): PlayerState | null => {
   let best: PlayerState | null = null
@@ -601,7 +614,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (a === "carry") l -= pw * 0.6 * pressure
     if (a === "take_on") l += pw * 0.3 * pressure
     if (a === "short_pass") l -= pw * 0.2 * pressure
-    if (a === "shot") l += 3 * (xg - 0.1) + 0.3 * style.riskTolerance
+    if (a === "shot") l += shotTerm(xg, style, input.restart, p)
     if (lateTrailing && (a === "shot" || a === "cross" || a === "long_pass")) l += 0.4
     if (lateLeading && (a === "hold" || a === "back_pass")) l += 0.4
     l += input.scriptBias[a] ?? 0
