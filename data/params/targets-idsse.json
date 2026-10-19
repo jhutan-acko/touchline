@@ -302,5 +302,42 @@
    "clear_lane_per_pass": {"label": "Teammates with a clear lane per open-play pass", "real": 4.95, "lo": 4.5, "hi": 5.4, "fmt": "{:.2f}"},
    "distance_km": {"label": "Distance per full-match outfielder (km; info)", "real": 10.88, "lo": null, "hi": null, "fmt": "{:.2f}"}
   }
+ },
+ "shots": {
+  "source": "realism v2 analysis 2026-10-13 (finalthird-report.md A3, R6; finalthird.json extras); late_completion_drop and the xG fit computed from IDSSE events (7 matches); aggregates only. Bands are plan 8f rulings.",
+  "rows": {
+   "shots_per_match": {"label": "Shots per match (all)", "real": 24.4, "lo": 21, "hi": 28, "fmt": "{:.1f}"},
+   "open_shots_per_match": {"label": "Open-play shots per match", "real": 17.1, "lo": 14.5, "hi": 19.7, "fmt": "{:.1f}"},
+   "goals_per_match": {"label": "Goals per match", "real": 2.71, "lo": 2.4, "hi": 3.0, "fmt": "{:.2f}"},
+   "open_conv": {"label": "Open-play conversion", "real": 0.092, "lo": 0.07, "hi": 0.11, "fmt": "{:.3f}"},
+   "first_time_share": {"label": "First-time shots (on the ball < 0.3 s), share of open-play shots", "real": 0.41, "lo": 0.33, "hi": 0.49, "fmt": "{:.3f}"},
+   "first_time_goal_share": {"label": "First-time shots, share of open-play goals", "real": 0.55, "lo": 0.4, "hi": 0.7, "fmt": "{:.3f}"},
+   "conv_first_time": {"label": "Conversion, first-time shots", "real": 0.122, "lo": 0.09, "hi": 0.15, "fmt": "{:.3f}"},
+   "conv_other": {"label": "Conversion, other open-play shots", "real": 0.07, "lo": 0.05, "hi": 0.09, "fmt": "{:.3f}"},
+   "header_share": {"label": "Headers, share of open-play shots", "real": 0.14, "lo": 0.1, "hi": 0.18, "fmt": "{:.3f}"},
+   "conv_header": {"label": "Conversion, headers", "real": 0.06, "lo": 0.03, "hi": 0.09, "fmt": "{:.3f}"},
+   "conv_tight": {"label": "Conversion, nearest defender < 1.5 m", "real": 0.118, "lo": 0.08, "hi": 0.16, "fmt": "{:.3f}"},
+   "conv_mid": {"label": "Conversion, nearest defender 1.5–3 m", "real": 0.109, "lo": 0.07, "hi": 0.15, "fmt": "{:.3f}"},
+   "conv_open": {"label": "Conversion, nearest defender 3 m or more", "real": 0.032, "lo": 0.01, "hi": 0.06, "fmt": "{:.3f}"},
+   "conv_tight_minus_open": {"label": "Conversion, tight minus open (< 1.5 m minus ≥ 3 m)", "real": 0.086, "lo": 0.03, "hi": 0.14, "fmt": "{:.3f}"},
+   "near_def_median": {"label": "Nearest outfield defender at the shot, median (m)", "real": 2.04, "lo": 1.6, "hi": 2.5, "fmt": "{:.2f}"},
+   "in_box_share": {"label": "Open-play shots from inside the box, share", "real": 0.59, "lo": 0.52, "hi": 0.66, "fmt": "{:.3f}"},
+   "in_box_conv": {"label": "Conversion, inside the box", "real": 0.127, "lo": 0.09, "hi": 0.16, "fmt": "{:.3f}"},
+   "out_box_conv": {"label": "Conversion, outside the box", "real": 0.041, "lo": 0.02, "hi": 0.06, "fmt": "{:.3f}"},
+   "blocked_share": {"label": "Open-play shots blocked, share", "real": 0.217, "lo": 0.17, "hi": 0.27, "fmt": "{:.3f}"},
+   "setup_pass": {"label": "Setup: pass, share of open-play shots", "real": 0.33, "lo": 0.27, "hi": 0.39, "fmt": "{:.3f}"},
+   "setup_dribble": {"label": "Setup: dribble (1.5 s and 5 m on the ball), share", "real": 0.31, "lo": 0.25, "hi": 0.37, "fmt": "{:.3f}"},
+   "setup_cross": {"label": "Setup: cross, share", "real": 0.17, "lo": 0.11, "hi": 0.23, "fmt": "{:.3f}"},
+   "setup_loose": {"label": "Setup: loose ball or regain, share", "real": 0.13, "lo": 0.07, "hi": 0.19, "fmt": "{:.3f}"},
+   "setup_through": {"label": "Setup: through ball, share", "real": 0.025, "lo": 0.0, "hi": 0.05, "fmt": "{:.3f}"},
+   "gk_off_line_at_shot": {"label": "Keeper off his line at open-play shots, median (m; info)", "real": 2.23, "lo": null, "hi": null, "fmt": "{:.2f}"},
+   "gk_off_bisector_at_shot": {"label": "Keeper off the ball–goal line at open-play shots, median (m; info)", "real": 0.32, "lo": null, "hi": null, "fmt": "{:.2f}"},
+   "late_completion_drop": {"label": "Open-play pass completion, 75–90+ minus 0–15", "real": -0.063, "lo": -0.083, "hi": -0.043, "fmt": "{:.3f}"},
+   "xg_per_shot": {"label": "xG per open-play shot (real: DFL model; info)", "real": 0.101, "lo": null, "hi": null, "fmt": "{:.3f}"}
+  },
+  "xgFit": {"b0": -3.0038, "bDist": -0.0392, "bAngle": 4.0588, "bHeader": -1.617, "bDefenders": -0.3416},
+  "xgFitMean": 0.0916,
+  "xgDflMean": 0.0916,
+  "xgFitScope": "fractional logit of DFL xG, 159 IDSSE shots with a defender count; method in shots.fit_xg"
  }
 }

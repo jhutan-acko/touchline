@@ -17,7 +17,7 @@ const o = cliOptions("realism: simulate held-out matches and write a realism rep
   matches: { default: "10", check: positiveInteger, help: "held-out matches to simulate (seeds 2000+)" },
   params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" },
   set: { default: "", help: "comma-separated key=value overrides on the parameter file, e.g. firstTick.rule=1,firstTick.bootBlock=0.3" },
-  only: { default: "", help: "\"passing\" or \"duels\": write only the P3 passing or the P4 duels section (faster)" },
+  only: { default: "", help: "\"passing\", \"duels\" or \"shots\": write only the P3 passing, the P4 duels or the P6 shots section (faster)" },
   runs: { default: join(root, "out/realism"), help: "folder for the simulated matches; use a separate one for each concurrent run" }
 })
 // Make the report's folder now, before the matches are simulated.
@@ -30,7 +30,7 @@ exitOnUserError(() => {
 })
 const matches = Number(o.matches)
 const sets = exitOnUserError(() => {
-  if (o.only !== "" && o.only !== "passing" && o.only !== "duels") throw new CliError(`--only must be "passing" or "duels", got "${o.only}"`)
+  if (o.only !== "" && o.only !== "passing" && o.only !== "duels" && o.only !== "shots") throw new CliError(`--only must be "passing", "duels" or "shots", got "${o.only}"`)
   return parseSets(o.set)
 })
 const params: Params = exitOnUserError(() => {
