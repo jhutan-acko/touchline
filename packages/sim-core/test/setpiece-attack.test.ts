@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { attackX, dist, PITCH, type Period, type Vec2 } from "../src/geometry.js"
+import { attackX, dist, PITCH, type Period, type Side, type Vec2 } from "../src/geometry.js"
 import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
 import { attackTable, holdSpot, restKeepers } from "../src/setpiece-attack.js"
 import { setPieceKind } from "../src/setpiece.js"
 import { attackSpot, initMatch, isFinished, noteSetPiece, planAttack, setPieceRun, step, workAt } from "../src/step.js"
 import { makeConfig } from "../src/testing.js"
-import type { Flight, MatchState, PlayerState, RestartKind } from "../src/types.js"
+import type { Flight, MatchState, PendingEvent, PlayerState, RestartKind } from "../src/types.js"
 
 // Explicit on and off (plan 8e "Test fixtures"): Task 14 flips the defaults. Everything else as the defaults.
 const off: Params = { ...P, setAttack: { ...P.setAttack, rule: 0 } }
@@ -17,6 +17,9 @@ const pending = (p: Params, restart: RestartKind, at: Vec2, period: Period = "fi
   const s = initMatch(makeConfig(seed, { params: p, dt }))
   return { ...s, tick: 500, periodTick: 500, period, phase: { kind: "restart", restart, side: "home", at, resumeTick: 5000 } }
 }
+
+/** State `s` with its pending restart taken by `side` instead. */
+const asSide = (s: MatchState, side: Side): MatchState => (s.phase.kind === "restart" ? { ...s, phase: { ...s.phase, side } } : s)
 
 /** The Work for state `s` with its restart planned by the attacking seam (as startRestart does). */
 const planned = (s: MatchState) => {
@@ -48,6 +51,19 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
       const st = home.find((pl) => pl.role === "ST")!
       expect(near(attackSpot(w, st, ph), { x: d * 41, y: 0 })).toBe(true)
     }
+    // An away-side corner (away attacks -x in the first half), nobody kept back: the 4-4-2's FBs hold 2 m short of
+    // (30, 7) and its Ws of (37, 11), one of each on either side of the pitch.
+    const noRest: Params = { ...on, setAttack: { ...on.setAttack, restKeep: { ...on.setAttack.restKeep, corner: 0 } } }
+    const away = planned(asSide(pending(noRest, "corner", { x: -52.5, y: 34 }), "away"))
+    expect(away.w.restartPlan!.restKeep).toEqual([])
+    const spotsOf = (role: string) => away.w.active("away").filter((pl) => pl.role === role).map((pl) => attackSpot(away.w, pl, away.ph))
+    for (const [role, u, y] of [["FB", 28, 7], ["W", 35, 11]] as const) {
+      const sp = spotsOf(role)
+      expect(sp).toHaveLength(2)
+      expect(sp.some((x) => near(x, { x: -u, y }))).toBe(true)
+      expect(sp.some((x) => near(x, { x: -u, y: -y }))).toBe(true)
+    }
+    for (const pl of away.w.active("home")) expect(attackSpot(away.w, pl, away.ph)).toBeNull()
     const { w, ph } = planned(pending(off, "corner", { x: 52.5, y: 34 }))
     expect(w.restartPlan).toEqual({ kind: "corner" })
     for (const pl of w.active()) expect(attackSpot(w, pl, ph)).toBeNull()
@@ -102,6 +118,10 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
       expect(new Set(k).size).toBe(k.length)
       expect(k).not.toContain(seven[0]!.id)
     }
+    // k above the pool: everyone available is kept, and no more (7 outfielders less the taker; 3 less the taker).
+    expect(restKeepers(seven, seven[1]!.id, 8, rng)).toHaveLength(6)
+    const four = [home[0]!, ...home.filter((pl) => pl.role !== "GK").slice(0, 4)]
+    expect(restKeepers(four, four[1]!.id, 4.1, rng)).toHaveLength(3)
     // In a planned corner the keepers stand at u 20-25, |y| <= 12, on their spots (no hold).
     for (let seed = 1; seed <= 20; seed++) {
       const { w, ph } = planned(pending(on, "corner", { x: 52.5, y: -34 }, "first_half", 0.1, seed))
@@ -113,6 +133,36 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
         expect(spot.x).toBeLessThanOrEqual(25)
         expect(Math.abs(spot.y)).toBeLessThanOrEqual(12)
         expect(spot).toEqual(w.restartPlan!.restSpot![id])
+      }
+    }
+  })
+
+  it("planAttack keeps the deepest FB first, whichever slot he plays in", () => {
+    const one: Params = { ...on, setAttack: { ...on.setAttack, restKeep: { ...on.setAttack.restKeep, corner: 1 } } }
+    const base = pending(one, "corner", { x: 52.5, y: 34 })
+    const fbs = base.players.filter((pl) => pl.side === "home" && pl.role === "FB")
+    expect(fbs).toHaveLength(2)
+    for (const [deep, high] of [[fbs[0]!, fbs[1]!], [fbs[1]!, fbs[0]!]] as const) {
+      const s = { ...base, players: base.players.map((pl) => (pl.id === deep.id ? { ...pl, pos: { x: -30, y: 0 } } : pl.id === high.id ? { ...pl, pos: { x: -10, y: 0 } } : pl)) }
+      const { w } = planned(s)
+      expect(w.restartPlan!.restKeep).toEqual([deep.id])
+    }
+    // Second half (home attacks -x): depth is judged in the side's frame.
+    const s2 = pending(one, "corner", { x: -52.5, y: 34 }, "second_half")
+    const p2 = { ...s2, players: s2.players.map((pl) => (pl.id === fbs[0]!.id ? { ...pl, pos: { x: 10, y: 0 } } : pl.id === fbs[1]!.id ? { ...pl, pos: { x: 30, y: 0 } } : pl)) }
+    expect(planned(p2).w.restartPlan!.restKeep).toEqual([fbs[1]!.id])
+  })
+
+  it("a new restart ends the last set piece's run under rule 1 only", () => {
+    const live = { kind: "corner" as const, side: "home" as const, tick: 400, takerId: "x" }
+    for (const [p, cleared] of [[on, true], [off, false]] as const) {
+      for (const [restart, at] of [["corner", { x: 52.5, y: 34 }], ["goal_kick", { x: -47, y: 0 }]] as const) {
+        const w = workAt(pending(p, restart, at))
+        const ph = w.phase
+        if (ph.kind !== "restart") throw new Error("not a restart")
+        w.setPiece = live
+        planAttack(w, ph, setPieceKind(ph.restart, ph.at, ph.side, w.period))
+        expect(w.setPiece).toEqual(cleared ? undefined : live)
       }
     }
   })
@@ -164,18 +214,24 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
       expect(setPieceRun(w, home.find((pl) => pl.role === "GK")!, 8)).toBeNull()
       for (const id of keep) expect(setPieceRun(w, w.player(id), 8)).toBeNull()
       // Not for the flight's winner (the ball in the air from the taker to the ST).
-      w.possession = { kind: "in_flight", flight: { kind: "cross", fromId: taker.id, side: "home", releaseTick: t0, resolveTick: t0 + 15, winnerId: st.id } as unknown as Flight }
+      const pendingPass: PendingEvent = { type: "pass", frame_id: t0, team_id: null, player_id: taker.id, x: null, y: null, x_end: null, y_end: null, attrs: {} }
+      const flight: Flight = {
+        kind: "pass", fromId: taker.id, side: "home", releaseTick: t0, resolveTick: t0 + 15, winnerId: st.id, outcome: "successful",
+        pending: pendingPass, extra: [], path: null, restartAfter: null, looseBall: null, deflectTo: null
+      }
+      w.possession = { kind: "in_flight", flight }
       expect(setPieceRun(w, st, 8)).toBeNull()
       expect(setPieceRun(w, cb, 8)).not.toBeNull()
       w.tick = t0 + last
       expect(setPieceRun(w, cb, 8)).not.toBeNull()
       w.tick = t0 + last + 1
       expect(setPieceRun(w, cb, 8)).toBeNull()
-      expect(w.setPiece).toBeUndefined()
+      // A pure query: the record stays (inert) until the next restart replaces it.
+      expect(w.setPiece?.tick).toBe(t0)
     })
   }
 
-  it("a possession change to the other side ends the run; off notes nothing", () => {
+  it("the other side on the ball stops the run; off notes nothing", () => {
     const { w, ph } = planned(pending(on, "corner", { x: 52.5, y: 34 }))
     const home = w.active("home")
     const taker = home.find((pl) => pl.role === "W")!
@@ -184,7 +240,6 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
     const away = w.active("away")[3]!
     w.possession = { kind: "owned", playerId: away.id, since: w.tick, restart: null }
     expect(setPieceRun(w, cb, 8)).toBeNull()
-    expect(w.setPiece).toBeUndefined()
     const o = planned(pending(off, "corner", { x: 52.5, y: 34 }))
     noteSetPiece(o.w, o.ph, taker)
     expect(o.w.setPiece).toBeUndefined()

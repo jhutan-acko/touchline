@@ -531,15 +531,22 @@ const orderedSubs = (w: Work, side: Side): void => {
 
 /**
  * S4: the attacking side's part of a restart's plan: at corners, attacking free kicks and attacking-third throw-ins, the
- * rest-defence keepers (restKeepers, the taker as takerFor sees him now) and their spots (setpiece stream). rule 0, or
- * any other kind: nothing, no draw. @internal
+ * rest-defence keepers (restKeepers over the side sorted deepest first, the taker as takerFor sees him now) and their
+ * spots (setpiece stream); any other kind: nothing, no draw. Under rule 1 every restart also ends the last set piece's
+ * run (w.setPiece). rule 0: nothing, no draw, no write. @internal
  */
 export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
   const s = w.p.setAttack
+  if (s.rule <= 0) return {}
+  // The ball is dead: any run from the last set piece is over.
+  w.setPiece = undefined
   const rk = restKind(kind)
-  if (s.rule <= 0 || rk === null) return {}
+  if (rk === null) return {}
   const rng = w.rng.setpiece
-  const restKeep = restKeepers(w.active(r.side), takerFor(w, r).id, s.restKeep[rk], rng)
+  // Deepest first (u in the side's frame, where each player stands now; stable, so slot order breaks ties), so
+  // restKeepers keeps the deepest FB or CM first.
+  const byDepth = w.active(r.side).sort((a, b) => attackX(r.side, a.pos.x, w.period) - attackX(r.side, b.pos.x, w.period))
+  const restKeep = restKeepers(byDepth, takerFor(w, r).id, s.restKeep[rk], rng)
   return { restKeep, restSpot: restSpots(restKeep, r.side, w.period, s, rng) }
 }
 
@@ -583,8 +590,9 @@ export const noteSetPiece = (w: Work, ph: RestartPhase, taker: PlayerState): voi
 
 /**
  * S1: an attacker's run to his table spot just after the kick, at runSpeedShare x vmax, for runWindowS. Not for the
- * taker, the ball's owner, the flight's winner, the keeper, the rest keepers or the other side. The window ends (and the
- * live set piece is cleared) after runWindowS or when the other side gains the ball. rule 0: null. @internal
+ * taker, the ball's owner, the flight's winner, the keeper, the rest keepers or the other side. The run ends after
+ * runWindowS or while the other side has the ball. A pure query: w.setPiece stays as the record of the last set piece
+ * (inert after its window) until the next restart's planAttack or noteSetPiece replaces it. rule 0: null. @internal
  */
 export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget | null => {
   const sp = w.setPiece
@@ -593,10 +601,7 @@ export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget 
   const pos = w.possession
   const lost =
     (pos.kind === "owned" && w.players.find((x) => x.id === pos.playerId)?.side !== sp.side) || (pos.kind === "in_flight" && pos.flight.side !== sp.side)
-  if (w.tick - sp.tick >= Math.round(s.runWindowS / w.dt) || lost) {
-    w.setPiece = undefined
-    return null
-  }
+  if (w.tick - sp.tick >= Math.round(s.runWindowS / w.dt) || lost) return null
   if (pl.side !== sp.side || pl.role === "GK" || pl.id === sp.takerId || sp.restKeep?.includes(pl.id)) return null
   if (pos.kind === "owned" && pos.playerId === pl.id) return null
   if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id) return null

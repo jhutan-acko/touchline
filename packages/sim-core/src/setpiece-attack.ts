@@ -15,7 +15,7 @@ type SetAttack = Params["setAttack"]
 
 /**
  * Rest-defence preference (ruling 7): FB, CM, DM, CB, then the forward roles for a side short of those. Within a role,
- * team (slot) order.
+ * the order `team` comes in (the sort is stable): planAttack passes it deepest first.
  */
 const REST_ORDER: ReadonlyArray<Role> = ["FB", "CM", "DM", "CB", "AM", "W", "ST"]
 
@@ -47,6 +47,19 @@ export const restSpots = (ids: ReadonlyArray<string>, side: Side, period: Period
   return out
 }
 
+/** The wide-free-kick table built from each setAttack block (built once per params block, not per call). */
+const WIDE_TABLES = new WeakMap<SetAttack, RoleTable>()
+
+const wideTable = (s: SetAttack): RoleTable => {
+  const cached = WIDE_TABLES.get(s)
+  if (cached) return cached
+  const out = {} as Record<Role, readonly [number, number]>
+  for (const [role, [u, y]] of Object.entries(s.fk) as Array<[Role, readonly [number, number]]>)
+    out[role] = role === "GK" ? [u, y] : [u + s.fkWideShiftU, y]
+  WIDE_TABLES.set(s, out)
+  return out
+}
+
 /**
  * S1: the restarting side's role table for `kind`: corners their own; wide and central attacking free kicks the pooled
  * free-kick table, a wide one moved fkWideShiftU up the pitch (the keeper's row stays); null for every other kind.
@@ -57,12 +70,8 @@ export const attackTable = (kind: SetPieceKind, s: SetAttack): RoleTable | null 
       return s.corner
     case "fk_central":
       return s.fk
-    case "fk_wide": {
-      const out = {} as Record<Role, readonly [number, number]>
-      for (const [role, [u, y]] of Object.entries(s.fk) as Array<[Role, readonly [number, number]]>)
-        out[role] = role === "GK" ? [u, y] : [u + s.fkWideShiftU, y]
-      return out
-    }
+    case "fk_wide":
+      return wideTable(s)
     default:
       return null
   }
