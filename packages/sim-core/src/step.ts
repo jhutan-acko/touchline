@@ -570,22 +570,41 @@ export const shapeSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | nu
     return mine ? spot : outsideBox(spot, ph.side, w.period)
   }
   if (ph.restart !== "throw_in") return null
-  // S6: the taker's three nearest outfield teammates come short to the ring; the defending side marks them goal-side.
+  const plan = throwPlan(w, ph)
+  return (pl.side === ph.side ? plan.support : plan.marks).get(pl.id) ?? null
+}
+
+/** S6: one tick's short supporters and their markers (spots by player id). */
+interface ThrowPlan { readonly tick: number; readonly at: Vec2; readonly support: ReadonlyMap<string, Vec2>; readonly marks: ReadonlyMap<string, Vec2> }
+const throwPlans = new WeakMap<Work, ThrowPlan>()
+
+/**
+ * S6: the taker's `throwShort` nearest outfield teammates come short to the ring, and the defending side marks them
+ * goal-side. Teammates are ranked, and opponents counted, by the restart anchor (not the live position), so the
+ * trio, their spots and the pairs stay the same while players move; stateless. Computed once per tick for all 22 players.
+ */
+const throwPlan = (w: Work, ph: RestartPhase): ThrowPlan => {
+  const hit = throwPlans.get(w)
+  if (hit && hit.tick === w.tick && hit.at.x === ph.at.x && hit.at.y === ph.at.y) return hit
+  const sh = w.p.setShapes
   const taker = takerFor(w, ph)
-  const ids = throwShortIds(w.active(ph.side), taker.id, ph.at, sh.throwShort)
-  const opps = w.active(other(ph.side))
+  const mates = w.active(ph.side).map((m) => ({ ...m, pos: restartTarget(w, m, ph.at, true) }))
+  const ids = throwShortIds(mates, taker.id, ph.at, sh.throwShort)
+  // The opponents count at their restart anchors too, so a marker walking toward his man cannot move the man's spot.
+  const opps = w.active(other(ph.side)).map((d) => ({ ...d, pos: restartTarget(w, d, ph.at, false) }))
   const support = new Map<string, Vec2>()
-  for (const id of ids) {
-    const m = w.player(id)
-    support.set(id, supportSpot(ph.at, restartTarget(w, m, ph.at, true), ph.side, w.period, opps, sh.throwShortM, true))
+  for (const id of ids) support.set(id, supportSpot(ph.at, mates.find((m) => m.id === id)!.pos, ph.side, w.period, opps, sh.throwShortM, true))
+  const marks = new Map<string, Vec2>()
+  if (support.size > 0) {
+    const defSide = other(ph.side)
+    const defenders = opps.filter((d) => d.role !== "GK").map((d) => ({ id: d.id, anchor: d.pos }))
+    const supporters = ids.map((id) => ({ ...w.player(id), pos: support.get(id)! }))
+    for (const [defId, att] of assignMarks(defenders, supporters, THROW_MARK_RADIUS_M))
+      marks.set(defId, markTarget(defenders.find((d) => d.id === defId)!.anchor, att.pos, defSide, w.period, 1, sh.throwMarkWeight))
   }
-  if (pl.side === ph.side) return support.get(pl.id) ?? null
-  if (pl.role === "GK" || support.size === 0) return null
-  const defenders = w.active(pl.side).filter((d) => d.role !== "GK").map((d) => ({ id: d.id, anchor: restartTarget(w, d, ph.at, false) }))
-  const supporters = ids.map((id) => ({ ...w.player(id), pos: support.get(id)! }))
-  const mark = assignMarks(defenders, supporters, THROW_MARK_RADIUS_M).get(pl.id)
-  if (!mark) return null
-  return markTarget(defenders.find((d) => d.id === pl.id)!.anchor, mark.pos, pl.side, w.period, 1, sh.throwMarkWeight)
+  const plan = { tick: w.tick, at: ph.at, support, marks }
+  throwPlans.set(w, plan)
+  return plan
 }
 
 /** S6: a defender marks a short supporter only within this distance of his own spot (ruling 10). */

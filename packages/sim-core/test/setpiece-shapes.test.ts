@@ -3,10 +3,10 @@ import { DEFAULT_PARAMS as P, type Params } from "../src/params.js"
 import { assignMarks, markTarget } from "../src/offball.js"
 import { attackX, dist, dirOf, inPitch, type Period, type Side, type Vec2 } from "../src/geometry.js"
 import { kickoffLegal, outsideBox, throwShortIds } from "../src/setpiece-shapes.js"
-import { anchorFor } from "../src/shape.js"
+import { anchorFor, FORMATIONS } from "../src/shape.js"
 import { initMatch, isFinished, shapeSpot, step, workAt } from "../src/step.js"
 import { makeConfig } from "../src/testing.js"
-import type { MatchState, PlayerState, RestartKind } from "../src/types.js"
+import type { FormationName, MatchState, PlayerState, RestartKind } from "../src/types.js"
 
 // Explicit arms (never DEFAULT_PARAMS as "off"); positioning pinned to the old template so a throw-in marker's anchor is
 // anchorFor(...) the test can recompute.
@@ -59,30 +59,51 @@ describe("setpiece-shapes helpers", () => {
   })
 })
 
+// A defender's table spot (restarting frame, row [u, |y|]) with the sign of his own slot's pitch side.
+const tableSpot = (pl: PlayerState, formation: FormationName, period: Period, kickerSide: Side, row: readonly [number, number]): Vec2 => {
+  const slotY = FORMATIONS[formation][pl.slot]!.y * dirOf(pl.side, period)
+  return { x: row[0] * dirOf(kickerSide, period) + 0, y: Math.sign(slotY) * row[1] }
+}
+const formationOf = (side: Side) => (side === "home" ? makeConfig(7).home : makeConfig(7).away).formation
+const SIDES_HALVES = [["home", "first_half"], ["home", "second_half"], ["away", "first_half"], ["away", "second_half"]] as const
+
 describe("restart shapes", () => {
   it("goal kicks: the real build-up shape, opponents outside the box", () => {
-    for (const [period, k] of [["first_half", 1], ["second_half", -1]] as const) {
-      const s = restartAt("goal_kick", "home", { x: -47 * k, y: 0 }, period)
-      const all = spots(s)
+    for (const [kicker, period] of SIDES_HALVES) {
+      const foe: Side = kicker === "home" ? "away" : "home"
+      const k = dirOf(kicker, period)
+      const all = spots(restartAt("goal_kick", kicker, { x: -47 * k, y: 0 }, period))
       expect(all.every((x) => x.spot !== null)).toBe(true)
-      const cbs = all.filter((x) => x.pl.side === "home" && x.pl.role === "CB")
+      const cbs = all.filter((x) => x.pl.side === kicker && x.pl.role === "CB")
       expect(cbs).toHaveLength(2)
-      for (const { spot } of cbs) {
-        expect(u("home", period, spot!)).toBeCloseTo(-31.5, 9)
-        expect(Math.abs(spot!.y)).toBeCloseTo(11, 9)
-      }
+      for (const { pl, spot } of cbs) expect(spot, `${kicker} ${period} ${pl.id}`).toEqual(tableSpot(pl, formationOf(kicker), period, kicker, [-31.5, 11]))
       expect(Math.sign(cbs[0]!.spot!.y)).toBe(-Math.sign(cbs[1]!.spot!.y))
-      for (const { pl, spot } of all.filter((x) => x.pl.side === "away")) {
-        expect(u("home", period, spot!) > -35.5 || Math.abs(spot!.y) > 20.66, `${period} ${pl.id}`).toBe(true)
+      for (const { pl, spot } of all.filter((x) => x.pl.side === foe)) {
+        expect(u(kicker, period, spot!) > -35.5 || Math.abs(spot!.y) > 20.66, `${kicker} ${period} ${pl.id}`).toBe(true)
+      }
+      // A defender takes his table row on his own pitch side (CB row [6.6, 9] in the kicker's frame).
+      for (const { pl, spot } of all.filter((x) => x.pl.side === foe && x.pl.role === "CB")) expect(spot).toEqual(tableSpot(pl, formationOf(foe), period, kicker, [6.6, 9]))
+    }
+  })
+
+  it("goal kicks: a defender whose table spot is in the box is pushed to its edge", () => {
+    // Fixture tables put the defending ST 9.5 m inside the kicker's box; removing outsideBox leaves him at u -45.
+    const tables = { ...P.setShapes.goalKick, def: { ...P.setShapes.goalKick.def, ST: [-45, 5] as const } }
+    const params = { ...on, setShapes: { ...on.setShapes, goalKick: tables } }
+    for (const [kicker, period] of SIDES_HALVES) {
+      const foe: Side = kicker === "home" ? "away" : "home"
+      const sts = spots(restartAt("goal_kick", kicker, { x: -47 * dirOf(kicker, period), y: 0 }, period, params)).filter((x) => x.pl.side === foe && x.pl.role === "ST")
+      expect(sts.length).toBeGreaterThan(0)
+      for (const { pl, spot } of sts) {
+        expect(u(kicker, period, spot!)).toBeCloseTo(-35.5, 9)
+        expect(spot!.y).toBeCloseTo(Math.sign(FORMATIONS[formationOf(foe)][pl.slot]!.y * dirOf(foe, period)) * 5, 9)
       }
     }
-    // The away side kicking mirrors: its CBs stand at u -31.5 in its own frame.
-    const a = spots(restartAt("goal_kick", "away", { x: 47, y: 0 }))
-    for (const { pl, spot } of a.filter((x) => x.pl.side === "away" && x.pl.role === "CB")) expect(u("away", "first_half", spot!)).toBeCloseTo(-31.5, 9)
   })
 
   it("kickoffs: the real shapes, own half, 9.15 m", () => {
-    for (const [side, period] of [["home", "first_half"], ["away", "first_half"], ["home", "second_half"]] as const) {
+    for (const [side, period] of SIDES_HALVES) {
+      const foe: Side = side === "home" ? "away" : "home"
       const all = spots(restartAt("kickoff", side, { x: 0, y: 0 }, period))
       const dr = dirOf(side, period)
       expect(all.every((x) => x.spot !== null)).toBe(true)
@@ -93,52 +114,93 @@ describe("restart shapes", () => {
           expect(spot!.x * dr, `${pl.id} defender half`).toBeGreaterThanOrEqual(-1e-9) // restarting frame u >= 0
         }
       }
-      for (const { spot } of all.filter((x) => x.pl.side === side && x.pl.role === "CB")) {
-        expect(u(side, period, spot!)).toBeCloseTo(-17, 9)
-        expect(Math.abs(spot!.y)).toBeCloseTo(8.4, 9)
+      for (const { pl, spot } of all.filter((x) => x.pl.side === side && x.pl.role === "CB")) expect(spot).toEqual(tableSpot(pl, formationOf(side), period, side, [-17, 8.4]))
+      // A defender: CB row [17.3, 5] in the restarting frame, on his own slot's pitch side.
+      for (const { pl, spot } of all.filter((x) => x.pl.side === foe && x.pl.role === "CB")) expect(spot).toEqual(tableSpot(pl, formationOf(foe), period, side, [17.3, 5]))
+    }
+  })
+
+  it("kickoffs: a defender whose table spot is inside the circle is pushed onto it", () => {
+    // Fixture tables put the defending ST 3 m from the centre; removing the push leaves him there.
+    const tables = { ...P.setShapes.kickoff, def: { ...P.setShapes.kickoff.def, ST: [0.5, 3] as const } }
+    const params = { ...on, setShapes: { ...on.setShapes, kickoff: tables } }
+    for (const [side, period] of SIDES_HALVES) {
+      const foe: Side = side === "home" ? "away" : "home"
+      const sts = spots(restartAt("kickoff", side, { x: 0, y: 0 }, period, params)).filter((x) => x.pl.side === foe && x.pl.role === "ST")
+      expect(sts.length).toBeGreaterThan(0)
+      for (const { pl, spot } of sts) {
+        expect(dist(spot!, { x: 0, y: 0 })).toBeCloseTo(9.15, 9)
+        expect(spot!.y).toBeCloseTo(Math.sign(FORMATIONS[formationOf(foe)][pl.slot]!.y * dirOf(foe, period)) * 3, 9)
+        expect(u(foe, period, spot!)).toBeLessThan(0) // still the defender's own half
       }
     }
   })
 
-  // The home side takes a throw-in at `at`; positions as at kickoff, so the nearest three are well defined.
-  const throwAt = (at: Vec2, period: Period = "first_half") => {
-    const s = restartAt("throw_in", "home", at, period)
-    const w = workAt(s)
-    const home = s.players.filter((p) => p.side === "home")
-    const taker = home.filter((p) => p.role !== "GK").sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0]!
-    return { s, w, all: spots(s), taker, ids: throwShortIds(home, taker.id, at, 3) }
+  // `side` takes a throw-in at `at`; players stand as at kickoff, so the anchors rank the teammates.
+  const throwAt = (side: Side, at: Vec2, period: Period = "first_half") => {
+    const s = restartAt("throw_in", side, at, period)
+    return { s, all: spots(s) }
   }
+  // Teammates ranked by the distance from their restart anchor (positioning rule 0, ball at the throw) to the throw, taker
+  // excluded, worked by hand from anchorFor:
+  //   home, first half, throw (-12, 34): taker home-fc-09 (nearest live); anchors 02 11.2, 06 12.4, 09 21.1, 03 21.6, 07 22.1 ...
+  //   away, second half, throw (10, -34): taker away-fc-06 (nearest live); anchors 09 10.3, 11 18.4, 08 20.9, 10 26.5 ...
+  const THROWS = [
+    { side: "home", period: "first_half", at: { x: -12, y: 34 }, supporters: ["home-fc-02", "home-fc-06", "home-fc-03"], taker: "home-fc-09" },
+    { side: "away", period: "second_half", at: { x: 10, y: -34 }, supporters: ["away-fc-09", "away-fc-11", "away-fc-08"], taker: "away-fc-06" }
+  ] as const
 
   it("throw-ins: three nearest come short to about 10 m and are marked", () => {
-    const at = { x: -12, y: 34 }
-    const { s, all, taker, ids } = throwAt(at)
-    const by = new Map(all.map((x) => [x.pl.id, x] as const))
-    const support = ids.map((id) => by.get(id)!.spot!)
-    for (const sp of support) {
-      expect(dist(sp, at)).toBeGreaterThanOrEqual(9)
-      expect(dist(sp, at)).toBeLessThanOrEqual(11)
+    for (const { side, period, at, supporters, taker } of THROWS) {
+      const def: Side = side === "home" ? "away" : "home"
+      const { s, all } = throwAt(side, at, period)
+      const by = new Map(all.map((x) => [x.pl.id, x] as const))
+      const support = supporters.map((id) => by.get(id)!.spot!)
+      for (const sp of support) {
+        expect(dist(sp, at)).toBeGreaterThanOrEqual(9)
+        expect(dist(sp, at)).toBeLessThanOrEqual(11)
+      }
+      // Nobody else on the throwing side gets a spot (the taker keeps his own target in the dispatcher).
+      for (const { pl, spot } of all.filter((x) => x.pl.side === side && !(supporters as readonly string[]).includes(x.pl.id))) expect(spot, pl.id).toBeNull()
+      expect(by.get(taker)!.spot).toBeNull()
+      // Defenders: an assigned marker stands where markTarget puts him against his supporter; the rest, and the keeper, get nothing.
+      const team = makeConfig(7, { params: on })[def]
+      const anchors = all.filter((x) => x.pl.side === def && x.pl.role !== "GK").map((x) => ({ id: x.pl.id, anchor: anchorFor(team.formation, x.pl.slot, def, period, at, team.style, false, on.shape) }))
+      const sup = supporters.map((id, i) => ({ ...s.players.find((p) => p.id === id)!, pos: support[i]! }))
+      const marks = assignMarks(anchors, sup, 15)
+      expect(marks.size).toBeGreaterThan(0)
+      expect(marks.size).toBeLessThanOrEqual(3)
+      for (const { pl, spot } of all.filter((x) => x.pl.side === def)) {
+        const a = marks.get(pl.id)
+        if (!a) expect(spot, pl.id).toBeNull()
+        else expect(spot, pl.id).toEqual(markTarget(anchors.find((d) => d.id === pl.id)!.anchor, a.pos, def, period, 1, 0.75))
+      }
     }
-    // Nobody else on the throwing side gets a spot (the taker keeps his own target in the dispatcher).
-    for (const { pl, spot } of all.filter((x) => x.pl.side === "home" && !ids.includes(x.pl.id))) expect(spot, pl.id).toBeNull()
-    expect(by.get(taker.id)!.spot).toBeNull()
-    // Defenders: an assigned marker stands where markTarget puts him against the supporter he was assigned; the rest, and the keeper, get nothing.
-    const team = makeConfig(7, { params: on }).away
-    const anchors = all.filter((x) => x.pl.side === "away" && x.pl.role !== "GK").map((x) => ({ id: x.pl.id, anchor: anchorFor(team.formation, x.pl.slot, "away", "first_half", at, team.style, false, on.shape) }))
-    const sup = ids.map((id, i) => ({ ...s.players.find((p) => p.id === id)!, pos: support[i]! }))
-    const marks = assignMarks(anchors, sup, 15)
-    expect(marks.size).toBeGreaterThan(0)
-    expect(marks.size).toBeLessThanOrEqual(3)
-    for (const { pl, spot } of all.filter((x) => x.pl.side === "away")) {
-      const a = marks.get(pl.id)
-      if (!a) expect(spot, pl.id).toBeNull()
-      else expect(spot).toEqual(markTarget(anchors.find((d) => d.id === pl.id)!.anchor, a.pos, "away", "first_half", 1, 0.75))
+  })
+
+  it("throw-ins: the trio and the marking pairs hold for the whole dead time", () => {
+    for (const { side, period, at, supporters } of THROWS) {
+      let s = restartAt("throw_in", side, at, period)
+      s = { ...s, phase: { kind: "restart", restart: "throw_in", side, at, resumeTick: s.tick + 400 } }
+      const seen = new Set<string>()
+      let ticks = 0
+      for (let i = 0; i < 200 && s.phase.kind === "restart"; i++) {
+        const given = spots(s).filter((x) => x.spot !== null).map((x) => x.pl.id).sort().join(",")
+        seen.add(given)
+        ticks++
+        s = step(s).state
+      }
+      expect(ticks).toBeGreaterThanOrEqual(150)
+      // Supporters on the throwing side, and the same markers throughout (one set of ids at every tick).
+      expect(seen.size, `${side} ${period}: ${[...seen].join(" | ")}`).toBe(1)
+      const first = [...seen][0]!.split(",")
+      for (const id of supporters) expect(first).toContain(id)
     }
   })
 
   it("a throw-in at the halfway line near the touchline keeps spots on the pitch", () => {
     for (const [period, y] of [["first_half", 34], ["second_half", -34]] as const) {
-      const { all, ids } = throwAt({ x: 0, y }, period)
-      expect(ids).toHaveLength(3)
+      const { all } = throwAt("home", { x: 0, y }, period)
       const given = all.filter((x) => x.spot !== null)
       expect(given.length).toBeGreaterThanOrEqual(4)
       for (const { pl, spot } of given) expect(inPitch(spot!), `${pl.id} ${JSON.stringify(spot)}`).toBe(true)
@@ -184,5 +246,6 @@ describe("restart shapes in matches", () => {
     // rule 1), because P2's positioning already keeps most opponents out. The precondition is the bound itself: off is
     // above the on bound, so the rule's effect is what separates the arms. Reported to the controller.
     expect(mean(b)).toBeGreaterThanOrEqual(0.4)
+    expect(mean(b) - mean(a)).toBeGreaterThanOrEqual(0.3)
   }, 120_000)
 })
