@@ -5,7 +5,10 @@ from pathlib import Path
 
 import numpy as np
 
-from touchline_analytics.shots import fit_xg, match_shots, minute_bin, shot_clips, shots_report, shots_section, summarize
+import pytest
+
+from touchline_analytics.idsse import filenames
+from touchline_analytics.shots import fit_xg, match_shots, minute_bin, real_shot_rows, shot_clips, shots_report, shots_section, summarize
 
 TARGETS = Path(__file__).resolve().parents[3] / "data/params/targets-idsse.json"
 OUTFIELD = ["CB", "CB", "FB", "FB", "CM", "CM", "AM", "W", "W", "ST"]
@@ -39,12 +42,12 @@ def _pass(f, pid, to, f_end, ok=True, period="first_half", x=20.0, y=0.0, x_end=
                restart=attrs.pop("restart", None), kind=attrs.pop("kind", "short"), intended_receiver_id=to, **({"receiver_id": to} if ok else {}), **attrs)
 
 
-def _write(tmp_path, sub, events, frames=None):
+def _write(tmp_path, sub, events, frames=None, fps=FPS):
     """A match folder at 10 Hz. frames: {(period, frame_id): (home moves, away moves[, ball (x, y)])}; tracking holds only
     those frames; the ball is live and loose."""
     d = tmp_path / sub
     d.mkdir()
-    (d / "meta.json").write_text(json.dumps({"teams": {"home": {"id": "H"}, "away": {"id": "A"}}, "meta": {"tracking": {"fps": FPS}}}))
+    (d / "meta.json").write_text(json.dumps({"teams": {"home": {"id": "H"}, "away": {"id": "A"}}, "meta": {"tracking": {"fps": fps}}}))
     lines = []
     for (period, f), fr in sorted((frames or {}).items()):
         hm, am, ball = fr if len(fr) == 3 else (*fr, (0.0, 0.0))
@@ -74,6 +77,17 @@ def test_first_time_by_frames_not_attrs(tmp_path):
     m = match_shots(_first_time_match(tmp_path), ROLES)
     assert [s["first_time"] for s in m["shots"]] == [True, False, False]
     assert math.isclose(summarize([m])["first_time_share"], 1 / 3)
+
+
+def test_first_time_boundary_is_exclusive_at_10_and_25_fps(tmp_path):
+    # round(0.3 fps) frames: 3 at 10 fps, 8 at 25 fps (7.5 rounds up, as JS Math.round does). One frame less counts; exactly that many does not.
+    for fps, n in ((10, 3), (25, 8)):
+        d = _write(tmp_path, f"b{fps}", [
+            KICKOFF,
+            _pass(30 * fps, "h5", "h10", 31 * fps), _shot(31 * fps + n - 1, "h10"),
+            _pass(60 * fps, "h5", "h10", 61 * fps), _shot(61 * fps + n, "h10"),
+        ], fps=fps)
+        assert [s["first_time"] for s in match_shots(d, ROLES)["shots"]] == [True, False], fps
 
 
 def test_header_and_conversion_by_technique(tmp_path):
@@ -140,6 +154,8 @@ def test_completion_by_bin_counts_added_time_in_last_bin(tmp_path):
     assert m["bins"] == [[1, 2], [0, 0], [1, 1], [0, 0], [0, 0], [1, 2]]
     assert summarize([m])["late_completion_drop"] == 0.0
     assert [minute_bin(1, 46 * 60.0), minute_bin(2, 0.0), minute_bin(2, 47 * 60.0), minute_bin(1, 14.99 * 60)] == [2, 3, 5, 0]
+    with pytest.raises(ValueError):
+        minute_bin(2, -100.0)  # kloppy gives a few second-half events negative times: never index a bin from the end
 
 
 def test_setups_follow_the_analysis_order(tmp_path):
@@ -174,6 +190,11 @@ def test_fit_xg_recovers_known_coefficients():
     assert set(fit) == set(true)
     for k, v in true.items():
         assert abs(fit[k] - v) < 0.05, (k, fit[k], v)
+    # Fractional logit with an intercept keeps the mean xG of the fitted rows.
+    use = rows[:-1]
+    pred = [1 / (1 + math.exp(-(fit["b0"] + fit["bDist"] * r["dist"] + fit["bAngle"] * r["angle"] + fit["bHeader"] * r["header"]
+                                 + fit["bDefenders"] * r["defenders"]))) for r in use]
+    assert math.isclose(sum(pred) / len(pred), sum(r["xg"] for r in use) / len(use), rel_tol=1e-9)
 
 
 def test_shot_clips_categories(tmp_path):
@@ -209,3 +230,45 @@ def test_report_without_matches_marks_the_simulated_column_pending():
     t = json.loads(TARGETS.read_text())
     md = shots_report([], t, "pending P4 merge", {})
     assert "| Shots per match (all) | 24.4 | pending P4 merge | 21.0–28.0 | — |" in md
+
+
+def _dfl_event(t, body, x=None, y=None, track=None, eid=[0]):
+    eid[0] += 1
+    pos = f' X-Position="{x}" Y-Position="{y}"' if x is not None else ""
+    if track:
+        pos += f' X-PositionFromTracking="{track[0]}" Y-PositionFromTracking="{track[1]}"'
+    return f'<Event MatchId="DFL-MAT-J03WMX" EventId="{eid[0]}" EventTime="2023-05-27T15:{t // 60:02d}:{t % 60:02d}.000+02:00"{pos}>{body}</Event>'
+
+
+def _dfl_shot(result, defenders="2", kind="rightLeg", xg="0.1"):
+    nd = f' AmountOfDefenders="{defenders}"' if defenders is not None else ""
+    return f'<ShotAtGoal Team="T1" Player="P1" TypeOfShot="{kind}" xG="{xg}"{nd}><{result}/></ShotAtGoal>'
+
+
+def test_real_shot_rows_from_synthetic_dfl_xml(tmp_path):
+    # Synthetic DFL events (no real data): times in seconds after 15:00:00, listed out of order to check the sort.
+    events = [
+        _dfl_event(0, '<KickOff GameSection="firstHalf"/>', 52.5, 34.0),
+        # Toward the goal at x = 105; the tracking position wins over the event position.
+        _dfl_event(60, _dfl_shot("ShotWide", defenders="3", kind="head", xg="0.2"), 90.0, 40.0, track=(95.0, 34.0)),
+        _dfl_event(111, _dfl_shot("SuccessfulShot", defenders=None), 10.0, 30.0),  # 11 s after the throw-in: open play
+        _dfl_event(100, '<ThrowIn Team="T1"><Play Team="T1" Player="P2"/></ThrowIn>', 30.0, 68.0),
+        _dfl_event(109, _dfl_shot("SavedShot", defenders="0"), 10.0, 30.0),  # 9 s after the throw-in: not open play
+        _dfl_event(200, f'<FreeKick Team="T1">{_dfl_shot("BlockedShot")}</FreeKick>', 80.0, 34.0),
+        _dfl_event(300, f'<Penalty Team="T1">{_dfl_shot("SuccessfulShot", defenders=None, xg="0.767")}</Penalty>', 94.0, 34.0),
+        _dfl_event(310, "<Delete/>"),
+    ]
+    (tmp_path / filenames("J03WMX")["event"]).write_text('<?xml version="1.0" encoding="utf-8"?><PutDataRequest>' + "".join(events) + "</PutDataRequest>")
+    rows = real_shot_rows(tmp_path, "J03WMX")
+    assert len(rows) == 5
+    assert [r["open"] for r in rows] == [True, False, True, False, False]
+    assert [r["restart"] for r in rows] == [False, False, False, True, True]
+    assert [r["penalty"] for r in rows] == [False, False, False, False, True]
+    assert [r["defenders"] for r in rows] == [2, 0, None, 1, None]
+    assert [r["header"] for r in rows] == [True, False, False, False, False]
+    assert [(r["goal"], r["on_target"], r["blocked"]) for r in rows[1:4]] == [(False, True, False), (True, True, False), (False, False, True)]
+    # Flipped into the shooter's attacking frame (+x): (95, 34) is 10 m out; (10, 30) toward the goal at x = 0 is u 42.5, v 4.
+    assert (rows[0]["u"], rows[0]["v"], rows[0]["dist"]) == (42.5, 0.0, 10.0)
+    assert (rows[1]["u"], rows[1]["v"]) == (42.5, 4.0) and math.isclose(rows[1]["dist"], math.hypot(10, 4))
+    assert math.isclose(rows[0]["angle"], 2 * math.atan(3.66 / 10))
+    assert rows[4]["xg"] == 0.767 and rows[3]["in_box"] is False and rows[0]["in_box"] is True

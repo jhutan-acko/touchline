@@ -332,12 +332,12 @@
    "setup_through": {"label": "Setup: through ball, share", "real": 0.025, "lo": 0.0, "hi": 0.05, "fmt": "{:.3f}"},
    "gk_off_line_at_shot": {"label": "Keeper off his line at open-play shots, median (m; info)", "real": 2.23, "lo": null, "hi": null, "fmt": "{:.2f}"},
    "gk_off_bisector_at_shot": {"label": "Keeper off the ball–goal line at open-play shots, median (m; info)", "real": 0.32, "lo": null, "hi": null, "fmt": "{:.2f}"},
-   "late_completion_drop": {"label": "Open-play pass completion, 75–90+ minus 0–15", "real": -0.064, "lo": -0.084, "hi": -0.044, "fmt": "{:.3f}"},
+   "late_completion_drop": {"label": "Open-play pass completion, 75–90+ minus 0–15", "real": -0.063, "lo": -0.083, "hi": -0.043, "fmt": "{:.3f}"},
    "xg_per_shot": {"label": "xG per open-play shot (real: DFL model; info)", "real": 0.101, "lo": null, "hi": null, "fmt": "{:.3f}"}
   },
-  "xgFit": {"b0": -3.3108, "bDist": -0.0348, "bAngle": 3.9214, "bHeader": -1.543, "bDefenders": -0.1973},
-  "xgFitMean": 0.076,
-  "xgDflMean": 0.092,
-  "xgFitScope": "least squares of logit(DFL xG) on xgOf's features from the shot position (distance to the goal centre in m, goal-mouth angle in rad), header = TypeOfShot head, defenders = max(0, AmountOfDefenders - 1); every ShotAtGoal of the 7 IDSSE matches with AmountOfDefenders, 159 of 171 (the 3 penalties and 9 others have none); least squares in logit space lowers the mean: fitted 0.076 (xgFitMean) against DFL 0.092 (xgDflMean) on the same shots"
+  "xgFit": {"b0": -3.0038, "bDist": -0.0392, "bAngle": 4.0588, "bHeader": -1.617, "bDefenders": -0.3416},
+  "xgFitMean": 0.0916,
+  "xgDflMean": 0.0916,
+  "xgFitScope": "fractional logit of DFL xG, 159 IDSSE shots with a defender count; method in shots.fit_xg"
  }
 }

@@ -3,7 +3,7 @@
 No synthetic matches yet (baseline pending P4 merge).
 
 
-Note: the simulated column is pending P4's final result. No sim measurement is taken before the P6 branch is merged with P4 (user decision 2026-10-19; plan 8f ruling 18). Fill it with `pnpm realism --matches 16 --only shots --set <ruling 18 base> --runs out/p6-t2-runs --out docs/realism/p6-shots-baseline.md && rm -rf out/p6-t2-runs`, then check by hand that `header_share` reads 0 and record `first_time_share`, which should be a few percent, not 0: a pressed receiver can release 0.2 s after the reception, under ruling 16's 0.3 s (preflight F11). Real rows computed in-repo from data/raw/idsse (header share 0.152 against the tracking-based 0.14 as a parse check; late completion drop −0.064, from completion 0.804 over 0–15 and 0.740 over 75–90+); the rest are copied from finalthird-report.md A3.
+Note: the simulated column is pending P4's final result. No sim measurement is taken before the P6 branch is merged with P4 (user decision 2026-10-19; preflight F10). After the merge, fill it with `pnpm realism --matches 16 --only shots --runs out/p6-t2-runs --out docs/realism/p6-shots-baseline.md && rm -rf out/p6-t2-runs`, then check by hand that `header_share` reads 0 and record `first_time_share`, which should be a few percent, not 0: a pressed receiver can release 0.2 s after the reception, under ruling 16's 0.3 s (preflight F11). Real rows computed in-repo from data/raw/idsse (header share 0.152 against the tracking-based 0.14 as a parse check; late completion drop −0.063, from completion 0.804 over 0–15 and 0.741 over 75–90+); the rest are copied from finalthird-report.md A3.
 
 ## Shots (realism v2, P6)
 
@@ -35,9 +35,9 @@ Note: the simulated column is pending P4's final result. No sim measurement is t
 | Setup: through ball, share | 0.025 | pending P4 merge | 0.000–0.050 | — |
 | Keeper off his line at open-play shots, median (m; info) | 2.23 | pending P4 merge | — | — |
 | Keeper off the ball–goal line at open-play shots, median (m; info) | 0.32 | pending P4 merge | — | — |
-| Open-play pass completion, 75–90+ minus 0–15 | -0.064 | pending P4 merge | -0.084–-0.044 | — |
+| Open-play pass completion, 75–90+ minus 0–15 | -0.063 | pending P4 merge | -0.083–-0.043 | — |
 | xG per open-play shot (real: DFL model; info) | 0.101 | pending P4 merge | — | — |
 
 - conversion splits: judge on ≥ 64 matches (`pnpm realism:deep`); this report has 0 matches and 0 open-play shots.
-- xG refit to DFL model xG (least squares of logit(DFL xG) on xgOf's features from the shot position (distance to the goal centre in m, goal-mouth angle in rad), header = TypeOfShot head, defenders = max(0, AmountOfDefenders - 1); every ShotAtGoal of the 7 IDSSE matches with AmountOfDefenders, 159 of 171 (the 3 penalties and 9 others have none); least squares in logit space lowers the mean: fitted 0.076 (xgFitMean) against DFL 0.092 (xgDflMean) on the same shots): b0 -3.311, bDist -0.0348/m, bAngle +3.921/rad, bHeader -1.543, bDefenders -0.197; `shotModel.xg` under `shotModel.rule` 1.
+- xG refit (fractional logit of DFL xG, 159 IDSSE shots with a defender count; method in shots.fit_xg): b0 -3.004, bDist -0.0392/m, bAngle +4.059/rad, bHeader -1.617, bDefenders -0.342; `shotModel.xg` under `shotModel.rule` 1.
 

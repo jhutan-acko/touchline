@@ -19,7 +19,7 @@ Simulated side (domain.jsonl and tracking.jsonl):
 
 Real side (DFL event XML in data/raw/idsse, read by ElementTree; never committed): ShotAtGoal attributes and the shot's
 position (from tracking when DFL gives it). Real open play: no restart tag, not a penalty, more than 10 s after the last
-restart event. The xG fit is least squares of logit(DFL xG) on xgOf's features (ruling 13).
+restart event. The xG fit is a fractional logit of DFL xG on xgOf's features (see fit_xg).
 
 Usage:
   uv run --project python/analytics python -m touchline_analytics.shots real            # real rows and the xG fit
@@ -55,6 +55,8 @@ def _attack(side: str, period: str) -> int:
 
 def minute_bin(period: int, seconds: float) -> int:
     """15-minute bin 0-5 of a time `seconds` into period 1 or 2; added time joins the half's last bin."""
+    if seconds < 0:
+        raise ValueError(f"negative time into the period: {seconds}")
     return 3 * (period - 1) + min(int(seconds // 900), 2)
 
 
@@ -302,7 +304,7 @@ def shots_section(ms: list[dict], t: dict) -> list[str]:
                      "first-time share is a few percent at most: pressed receivers who release within 0.3 s.")
     c = t.get("xgFit")
     if c:
-        notes.append(f"xG refit to DFL model xG ({t.get('xgFitScope', '')}): b0 {c['b0']:+.3f}, bDist {c['bDist']:+.4f}/m, bAngle {c['bAngle']:+.3f}/rad, "
+        notes.append(f"xG refit ({t.get('xgFitScope', '')}): b0 {c['b0']:+.3f}, bDist {c['bDist']:+.4f}/m, bAngle {c['bAngle']:+.3f}/rad, "
                      f"bHeader {c['bHeader']:+.3f}, bDefenders {c['bDefenders']:+.3f}; `shotModel.xg` under `shotModel.rule` 1.")
     return lines + [""] + [f"- {x}" for x in notes] + [""]
 
@@ -363,26 +365,11 @@ def _goal_angle(u: float, v: float) -> float:
     return 2 * math.pi - a if a > math.pi else a
 
 
-def _real_starts(evr) -> dict[int, float]:
-    starts = {}
-    for e in evr.iter("Event"):
-        k = e.find("KickOff")
-        if k is not None and k.get("GameSection") in ("firstHalf", "secondHalf"):
-            starts[1 if k.get("GameSection") == "firstHalf" else 2] = _ts(e.get("EventTime"))
-    return starts
-
-
-def _period_of(starts: dict[int, float], wall: float) -> tuple[int, float]:
-    per = 2 if 2 in starts and wall >= starts[2] - 60 else 1
-    return per, max(0.0, wall - starts[per])
-
-
 def real_shot_rows(root: Path, match_id: str) -> list[dict]:
     """One row per DFL ShotAtGoal: DFL attributes and the shot's position in the shooter's attacking frame (+x)."""
     from .idsse import filenames
 
     evr = ET.parse(root / filenames(match_id)["event"]).getroot()
-    starts = _real_starts(evr)
     recs = []
     for e in evr.iter("Event"):
         kids = list(e)
@@ -403,10 +390,9 @@ def real_shot_rows(root: Path, match_id: str) -> list[dict]:
             y = float(e.get("Y-PositionFromTracking") or e.get("Y-Position"))
             flip = -1.0 if x < HL else 1.0  # the goal nearer the shot is the one attacked
             u, v = flip * (x - HL), flip * (y - 34.0)
-            per, sec = _period_of(starts, wall)
             nd = sh.get("AmountOfDefenders")
             rows.append({
-                "match": match_id, "period": per, "seconds": sec, "u": u, "v": v,
+                "match": match_id, "u": u, "v": v,
                 "dist": math.hypot(HL - u, v), "angle": _goal_angle(u, v),
                 "header": sh.get("TypeOfShot") == "head", "defenders": max(0, int(nd) - 1) if nd is not None else None,
                 "xg": float(sh.get("xG")) if sh.get("xG") else None,
@@ -422,12 +408,22 @@ def real_shot_rows(root: Path, match_id: str) -> list[dict]:
 
 
 def fit_xg(rows: list[dict]) -> dict[str, float]:
-    """Least squares of logit(xG) on [1, dist, angle, header, defenders] over the rows with an xG and a defender count
-    (ruling 13; preflight F8). Penalties are dropped too: in this feed none has a defender count."""
+    """Fractional logit of DFL xG on [1, dist, angle, header, defenders]: the Bernoulli quasi-likelihood with DFL's xG as
+    soft labels, by Newton's method. With an intercept its score equation makes the mean fitted xG equal DFL's mean
+    exactly (controller ruling, P6 Task 2 fix round 1, replacing ruling 13's least squares on logit(xG), which lowered
+    the mean to 0.076 against 0.092 and flattened the defender slope). Rows: those with an xG and a defender count
+    (preflight F8); penalties are dropped too, and in this feed none has a defender count."""
     use = [r for r in rows if not r["penalty"] and r.get("xg") is not None and r.get("defenders") is not None]
     X = np.array([[1.0, r["dist"], r["angle"], float(r["header"]), float(r["defenders"])] for r in use])
-    p = np.clip(np.array([r["xg"] for r in use]), 1e-4, 1 - 1e-4)
-    b, *_ = np.linalg.lstsq(X, np.log(p / (1 - p)), rcond=None)
+    p = np.array([r["xg"] for r in use], dtype=float)
+    b = np.zeros(X.shape[1])
+    b[0] = math.log(p.mean() / (1 - p.mean()))
+    for _ in range(100):
+        q = 1 / (1 + np.exp(-(X @ b)))
+        step = np.linalg.solve((X * (q * (1 - q))[:, None]).T @ X, X.T @ (p - q))
+        b += step
+        if np.abs(step).max() < 1e-10:
+            break
     return dict(zip(("b0", "bDist", "bAngle", "bHeader", "bDefenders"), (float(x) for x in b)))
 
 
@@ -445,7 +441,10 @@ def real_completion_by_bin(root: Path, match_id: str) -> list[tuple[int, int]]:
             continue
         if any(type(q).__name__ == "SetPieceQualifier" for q in e.qualifiers or []):
             continue
-        b = minute_bin(e.period.id, e.timestamp.total_seconds())
+        t = e.timestamp.total_seconds()
+        if t < 0:  # kloppy gives a few second-half events negative times (9 open-play passes in the 7 matches); they are left out
+            continue
+        b = minute_bin(e.period.id, t)
         bins[b][0] += e.result is not None and e.result.name == "COMPLETE"
         bins[b][1] += 1
     return [(c, n) for c, n in bins]
