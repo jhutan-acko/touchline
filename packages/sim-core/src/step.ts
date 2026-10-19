@@ -94,6 +94,7 @@ import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from
 import { CONTROL, OPEN_SHOT, type ContactPlan, type ShotHow } from "./contact.js"
 
 // ---- P6 imports, first-time seam (plan 8f Task 3 inserts below this line)
+import { firstTimeChoice, firstTimeEligible, goalDistM } from "./firsttime.js"
 
 // ---- P6 imports, header seam (plan 8f Task 4 inserts below this line)
 
@@ -1262,8 +1263,32 @@ export const headerPlan = (_w: Work, _f: Flight, _receiver: PlayerState): Contac
 /**
  * SH1: shoot first time, lay off or control. Checks its own switch: contactPlan runs when either P6 contact rule is 1,
  * so this returns CONTROL while firstTime.rule is 0. rule 0: CONTROL (the old behaviour).
+ * Eligible (ruling 3): within firstTime.maxGoalM of the goal he attacks, the ball at foot height, not a keeper, and the
+ * flight's restart (its pass attrs) open play, or a corner or free kick under setPieces. Then one draw on the contact
+ * stream (firstTimeChoice), with his pressure at contact (pressureFrom) and the ball as it arrives (w.ball).
  */
-export const firstTimePlan = (_w: Work, _f: Flight, _receiver: PlayerState): ContactPlan => CONTROL
+export const firstTimePlan = (w: Work, f: Flight, receiver: PlayerState): ContactPlan => {
+  const p = w.p
+  if (p.firstTime.rule === 0) return CONTROL
+  const side = receiver.side
+  const restart = (f.pending.attrs.restart ?? null) as RestartKind | null
+  if (!firstTimeEligible(goalDistM(receiver, w.period), w.ball.pos.z, restart, receiver.role === "GK", p)) return CONTROL
+  const opps = w.active(other(side))
+  const opp = nearestOpponent(receiver.pos, opps)
+  const input = {
+    period: w.period,
+    owner: receiver,
+    teammates: w.active(side),
+    opponents: opps,
+    style: teamOf(w.cfg, side).style,
+    scoreDiff: w.score[side] - w.score[other(side)],
+    minute: w.minute(),
+    restart: null,
+    scriptBias: scriptBias(w, side),
+    tick: w.tick
+  }
+  return firstTimeChoice(input, w.ball, pressureFrom(opp ? dist(opp.pos, receiver.pos) : 50), p, w.rng.contact)
+}
 
 // ===== end of P6 first-time seam
 
