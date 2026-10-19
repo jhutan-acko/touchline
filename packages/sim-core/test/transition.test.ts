@@ -336,7 +336,7 @@ describe("A4 transitions: the seam", () => {
 })
 
 describe("A4 transitions in a match", () => {
-  it("rule 0 is inert: a match is identical whatever the other transition values (seed 7, 1500 ticks)", () => {
+  it("rule 0 is inert: a match is identical whatever the other transition values (seed 7, 6000 ticks)", () => {
     const perturbed: Params = {
       ...P,
       transition: {
@@ -348,7 +348,7 @@ describe("A4 transitions in a match", () => {
       const md = createHash("sha256")
       let s: MatchState = initMatch(makeConfig(7, { params: p }))
       let losses = 0
-      for (let i = 0; i < 1500 && !isFinished(s); i++) {
+      for (let i = 0; i < 6000 && !isFinished(s); i++) {
         const r = step(s)
         s = r.state
         md.update(JSON.stringify(r.frame)).update(JSON.stringify(r.events))
@@ -358,7 +358,8 @@ describe("A4 transitions in a match", () => {
       return { h: md.digest("hex"), losses }
     }
     const a = hash(off)
-    // Non-vacuous: live-play losses happen in the window (each would draw joiners under rule 1).
+    // Non-vacuous: live-play losses happen in the window (each would draw joiners under rule 1). 6000 ticks (Task 10):
+    // with every P4 rule on, 1500 ticks held only 4 possession changes.
     expect(a.losses).toBeGreaterThan(10)
     expect(hash(perturbed).h).toBe(a.h)
   })
@@ -378,7 +379,11 @@ describe("A4 transitions in a match", () => {
             const pl = s.players.find((x) => x.id === id)!
             expect(pl.side).toBe(s.transition.loser)
             expect(pl.role).not.toBe("GK")
-            expect(dist(pl.pos, s.transition.at)).toBeLessThan(30)
+            // His distance when noteLoss ran (Task 10): a loss in ownedTick (a tackle) comes before this tick's movement,
+            // so his position in the previous state; an interception resolves in ballTick, after the movement, so his
+            // position now. Measured after the step regardless, joiners were seen at 30.002 and 30.26 m.
+            const atLoss = prev.possession.kind === "in_flight" ? pl : (prev.players.find((x) => x.id === id) ?? pl)
+            expect(dist(atLoss.pos, s.transition.at)).toBeLessThan(30)
           }
         }
         const poss = s.possession

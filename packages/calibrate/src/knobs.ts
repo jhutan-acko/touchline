@@ -70,7 +70,8 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, defending: { ...p.defending, tackleRatePerS: v } }) },
   { name: "foul_per_tackle", what: "share of tackles that are fouls (fouls, free kicks)", init: 0.18, min: 0.05, max: 0.6, step: 0.06,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, foulPerTackle: v } }) },
-  { name: "yellow_per_foul", what: "share of fouls booked (cards)", init: 0.15, min: 0.05, max: 0.5, step: 0.05,
+  // P4 ruling 26: 0.10-0.25, so the tuner cannot buy back cards when fouls miss (real 3.29 foul yellows / 22.9 fouls = 0.144).
+  { name: "yellow_per_foul", what: "share of fouls booked (cards)", init: 0.15, min: 0.1, max: 0.25, step: 0.05,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, yellowPerFoul: v } }) },
   { name: "box_intensity", what: "extra pressing and tackling near a team's own goal (shot quality, goals)", init: 0, min: 0, max: 8, step: 1,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, boxIntensity: v } }) },
@@ -119,7 +120,23 @@ export const KNOBS: ReadonlyArray<Knob> = [
   // The file records the tuner's value, not the clamped one: with support_space_att above support_space the engine uses
   // support_space, so the tuner can sit on a flat stretch there (harmless at the calibrated 16 and 11).
   { name: "support_space_att", what: "space teammates keep from the carrier in the attacking third (chances, crosses, support)", init: DEFAULT_PARAMS.support.spaceAttM, min: 7, max: 15, step: 2,
-    apply: (p, v) => ({ ...p, support: { ...p.support, spaceAttM: Math.min(v, p.support.spaceM) } }) }
+    apply: (p, v) => ({ ...p, support: { ...p.support, spaceAttM: Math.min(v, p.support.spaceM) } }) },
+  // P4 (ruling 26): narrow scales on measured values. No knob on tackle.base, the foul zone and angle factors or the shape
+  // of the join table: they are fitted.
+  { name: "attacker_foul", what: "scale on the shielding-foul chance of a slow carrier (attacker fouls, fouls, free kicks)", init: 1, min: 0.5, max: 1.5, step: 0.25,
+    apply: (p, v) => ({ ...p, fouls: { ...p.fouls, attackerShare: share(p.fouls.attackerShare * v) } }) },
+  { name: "aerial_contest", what: "metres a nearly-reaching opponent may miss a high ball by and still contest it (aerial duels)", init: DEFAULT_PARAMS.aerial.contestM, min: DEFAULT_PARAMS.aerial.contestM - 0.5, max: DEFAULT_PARAMS.aerial.contestM + 0.5, step: 0.25,
+    apply: (p, v) => ({ ...p, aerial: { ...p.aerial, contestM: v } }) },
+  { name: "aerial_foul", what: "scale on the chance an aerial duel ends in a foul by the loser (aerial fouls, fouls)", init: 1, min: 0.5, max: 1.5, step: 0.25,
+    apply: (p, v) => ({ ...p, aerial: { ...p.aerial, foulShare: share(p.aerial.foulShare * v) } }) },
+  { name: "counter_join", what: "scale on every counter-press join chance after a loss (counter-press joiners, regains within 5 s)", init: 1, min: 0.75, max: 1.25, step: 0.125,
+    apply: (p, v) => ({ ...p, transition: { ...p.transition, joinP: p.transition.joinP.map((x) => share(x * v)) } }) },
+  { name: "recovery_rate", what: "scale on the recovery-sprint hazard after a loss (recovery share at 5-6 s, distance)", init: 1, min: 0.5, max: 1.5, step: 0.25,
+    apply: (p, v) => ({ ...p, transition: { ...p.transition, recoverRatePerS: p.transition.recoverRatePerS * v } }) },
+  { name: "press_rate", what: "scale on the team-press hazard (press episodes, tackles, fouls, ball pressure)", init: 1, min: 0.75, max: 1.25, step: 0.125,
+    apply: (p, v) => ({ ...p, press: { ...p.press, rateScale: p.press.rateScale * v } }) }
+  // No lane_share knob: zonal marking (marking.rule) ships off (user ruling, P4 Task 10), so laneShare is inert;
+  // marking_weight stays as the lever for ball pressure.
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

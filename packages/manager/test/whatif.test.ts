@@ -3,9 +3,9 @@ import { WhatIfSummary } from "@touchline/schema"
 import { describe, expect, it } from "vitest"
 import { NO_CHANGE, type DecisionOption } from "../src/decision.js"
 import { testOptions, whatIfSummary } from "../src/whatif.js"
-import { leagueConfig, playMoments } from "./helpers.js"
+import { leagueConfig, playMoments, MOMENTS_SEED } from "./helpers.js"
 
-const m = playMoments(leagueConfig(11), (x) => x.reasons.includes("minute_60")).moments.at(-1)!
+const m = playMoments(leagueConfig(MOMENTS_SEED), (x) => x.reasons.includes("minute_60")).moments.at(-1)!
 const st = m.state.players.find((p) => p.side === "home" && p.role === "ST")!
 const option = (index: number, label: string, orders: DecisionOption["orders"]): DecisionOption => ({ ...NO_CHANGE, index, label, source: "agent", orders, rationale: "r", xg_diff_vs_no_change: null, goal_diff_vs_no_change: null })
 const options = [

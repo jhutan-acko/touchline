@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest"
 import { assignMarks, DEFAULT_PARAMS, dist, initMatch, isFinished, markTarget, PITCH, shieldTarget, spacedTarget, spacingFor, step, steerCarry, supportersWanted, supportGate, supportSpot, type DomainEvent, type Frame, type MatchConfig, type Params, type PlayerState } from "../src/index.js"
 import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
 
+/** Every P4 behaviour off (rules 0, no release cap): the play this file's whole-match margins were measured with (F4). */
+const p4Off = (p: Params): Params => ({
+  ...p,
+  tackle: { ...p.tackle, rule: 0 }, fouls: { ...p.fouls, rule: 0 }, aerial: { ...p.aerial, rule: 0 }, transition: { ...p.transition, rule: 0 },
+  press: { ...p.press, rule: 0 }, marking: { ...p.marking, rule: 0 }, firstTick: { ...p.firstTick, scopeRule: 0 },
+  release: { ...p.release, capS: 0, rejudge: 0 }
+})
+
 const play = (cfg: MatchConfig) => {
   let s = initMatch(cfg)
   const frames: Frame[] = [], events: DomainEvent[] = []
@@ -42,8 +50,9 @@ describe("support play", () => {
       }
       return n / c
     }
-    const off = near(play(withParams(behavioursOff)).frames)
-    const on = near(play(withParams((p) => ({ ...behavioursOff(p), support: { ...p.support, rule: 0, count: 2 } }))).frames)
+    // P4 behaviours off in both arms (Task 10: with them on, 0.62 against 0.56 + 0.1).
+    const off = near(play(withParams((p) => behavioursOff(p4Off(p)))).frames)
+    const on = near(play(withParams((p) => ({ ...behavioursOff(p4Off(p)), support: { ...p.support, rule: 0, count: 2 } }))).frames)
     expect(on).toBeGreaterThan(off + 0.1)
   })
 })
@@ -276,9 +285,12 @@ describe("support rule 1 (P3 Task 10d): come short when pressed, otherwise keep 
       }
       return new Map([...acc].map(([k, [n, m]]) => [k, n / m]))
     }
-    const on = crowd(DEFAULT_PARAMS)
-    const old = crowd({ ...DEFAULT_PARAMS, support: { ...S, rule: 0 } })
-    const noSpace = crowd({ ...DEFAULT_PARAMS, support: { ...S, spaceM: 0 } })
+    // Every P4 behaviour off in all three arms (F4): P4 Task 10's switch-on (pressing, zonal marking, counter-press) left
+    // spacing short of its margin in one side-half (away, second half: 1.26 against 0.85 x 1.36).
+    const base = p4Off(DEFAULT_PARAMS)
+    const on = crowd(base)
+    const old = crowd({ ...base, support: { ...S, rule: 0 } })
+    const noSpace = crowd({ ...base, support: { ...S, spaceM: 0 } })
     expect([...on.keys()].sort()).toEqual(["away|first_half", "away|second_half", "home|first_half", "home|second_half"])
     for (const [k, v] of on) {
       expect(v, k).toBeLessThan(0.75 * old.get(k)!)

@@ -13,7 +13,11 @@ export interface Resolution {
   /** Ball state at resolution: the contact point for "reached", the crossing point for "goal"/"out". */
   readonly ball: BallState
   readonly aerial: { readonly winnerId: string; readonly loserId: string } | null
-  /** T4 aerial duels (realism v2 P4, aerial.rule 1): the opponent who contests an aerial contact, and his reach slack (m). */
+  /**
+   * T4 aerial duels (realism v2 P4, aerial.rule 1): the other side's outfielder who contests an aerial contact, and his
+   * slack relative to the player who takes it (m): his reach slack minus the winner's, so <= 0 when he also qualifies and
+   * < 0 (minus his miss, at most aerial.contestM, minus the winner's slack) when he only nearly reaches it.
+   */
   readonly contest?: { readonly id: string; readonly slack: number }
 }
 

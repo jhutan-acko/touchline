@@ -10,7 +10,7 @@ import { a2aSender } from "@touchline/agent-gateway"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { agentManager } from "../src/agent.js"
 import { situationAt, situationHash } from "../src/situation.js"
-import { leagueConfig, playMoments, root } from "./helpers.js"
+import { leagueConfig, playMoments, root, MOMENTS_SEED } from "./helpers.js"
 
 const freePort = () => new Promise<number>((ok) => {
   const s = createServer().listen(0, "127.0.0.1", () => {
@@ -38,7 +38,7 @@ afterAll(() => {
 
 describe("the manager agent service", () => {
   it("takes a situation built by the engine, proposes, and chooses among the tested options", async () => {
-    const run = playMoments(leagueConfig(11), (m) => m.reasons.includes("minute_60"))
+    const run = playMoments(leagueConfig(MOMENTS_SEED), (m) => m.reasons.includes("minute_60"))
     const m = run.moments.at(-1)!
     for (const side of ["home", "away"] as const) {
       const situation = situationAt(m.state, side, m.reasons, run.watch)
