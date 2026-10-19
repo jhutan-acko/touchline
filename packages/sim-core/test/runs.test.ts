@@ -182,7 +182,7 @@ describe("A6 role-run seam (runMove)", () => {
     const FB: Spot = { role: "FB", at: { x: 2, y: 22 } }
     for (let seed = 1; seed <= 50; seed++) {
       const { w, carrierId, runnerId } = fixture(both, seed, WC, FB, 30)
-      const rot = { kind: "rotate" as const, target: { x: 2, y: 12 } }
+      const rot = { kind: "rotate" as const, target: { x: 2, y: 12 }, since: 0 }
       w.setPlayer({ ...w.player(runnerId), intent: rot, intentUntil: w.tick + 10 })
       const roles = w.rng.roles.state
       expect(runMove(w, w.player(runnerId), w.player(carrierId))).toBeNull()

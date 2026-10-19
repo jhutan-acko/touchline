@@ -101,7 +101,7 @@ import { boxLayout, inSetPieceBox, wallPoint, wallSize, wallSpots } from "./setp
 import { roleSpot, ySignOf } from "./setpiece.js"
 
 // ---- P5 imports, restart-shape seam (plan 8e Task 5 inserts below this line)
-import { roleSpot, ySignOf } from "./setpiece.js"
+// (roleSpot and ySignOf from ./setpiece.js are imported under the Task 4 marker above.)
 import { kickoffLegal, outsideBox, throwShortIds } from "./setpiece-shapes.js"
 
 // ---- P5 imports, dead-ball seam (plan 8e Task 6 inserts below this line)
