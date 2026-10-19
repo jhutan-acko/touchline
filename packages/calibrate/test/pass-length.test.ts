@@ -44,11 +44,35 @@ describe("pass length is measured to the receiver's next action", () => {
   })
 })
 
+/**
+ * The members of the `export type EventType =` union, written one `| "name"` member per line after the declaration line:
+ * blank and comment lines inside the union are skipped, and the first other line ends it.
+ */
+const eventTypes = (src: string): string[] => {
+  const start = src.indexOf("export type EventType =")
+  if (start < 0) return []
+  const out: string[] = []
+  for (const line of src.slice(start).split("\n").slice(1)) {
+    const t = line.trim()
+    if (t === "" || t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")) continue
+    const m = /^\|\s*"([a-z_]+)"/.exec(t)
+    if (!m) break
+    out.push(m[1]!)
+  }
+  return out
+}
+
+describe("event type parse", () => {
+  it("reads the whole union, past a blank line inside it, to its terminating line", () => {
+    const fixture = ['export type EventType =', '  | "a"', '  | "b_c"', '', '  // a group comment', '  | "d"', '', '  | "e"', '', 'export type Other = "zzz"'].join("\n")
+    expect(eventTypes(fixture)).toEqual(["a", "b_c", "d", "e"])
+  })
+})
+
 describe("event type classification", () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
   const src = readFileSync(join(root, "packages/sim-core/src/types.ts"), "utf8")
-  const union = src.slice(src.indexOf("export type EventType ="))
-  const types = [...union.slice(0, union.indexOf("\n\n")).matchAll(/\|\s*"([a-z_]+)"/g)].map((m) => m[1]!)
+  const types = eventTypes(src)
 
   it("puts every sim EventType in exactly one of the on-ball and skip lists", () => {
     expect(types.length).toBeGreaterThan(25)
