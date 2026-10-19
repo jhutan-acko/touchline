@@ -98,7 +98,8 @@ import { CONTROL, OPEN_SHOT, type ContactPlan, type ShotHow } from "./contact.js
 // ---- P6 imports, header seam (plan 8f Task 4 inserts below this line)
 import { coneCount, contactDecision } from "./contact.js"
 import { xgOf } from "./decide.js"
-import { headerEligible, headerHow, headShare, inAttackingBox } from "./header.js"
+import { actionZone } from "./geometry.js"
+import { headerEligible, headerHow, headShare } from "./header.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -1263,7 +1264,7 @@ export const headerPlan = (w: Work, _f: Flight, receiver: PlayerState): ContactP
   const h = w.p.header
   if (h.rule === 0) return null
   const contactZ = w.ball.pos.z
-  if (!headerEligible(contactZ, inAttackingBox(receiver.side, w.period, receiver.pos), receiver.role === "GK", h)) return null
+  if (!headerEligible(contactZ, actionZone(receiver.side, w.period, receiver.pos) === "box", receiver.role === "GK", h)) return null
   const opps = w.active(other(receiver.side))
   const xg = xgOf(w.p, receiver.side, w.period, receiver.pos, true, coneCount(receiver.side, w.period, receiver.pos, opps))
   const share = headShare(xg, receiver.attrs.heading, scriptBias(w, receiver.side).shot ?? 0, h)

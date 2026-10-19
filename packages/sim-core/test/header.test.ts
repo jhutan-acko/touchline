@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { contactDecision, type ContactPlan } from "../src/contact.js"
 import { xgOf } from "../src/decide.js"
-import { headerEligible, headerHow, headShare, inAttackingBox } from "../src/header.js"
+import { actionZone } from "../src/geometry.js"
+import { headerEligible, headerHow, headShare } from "../src/header.js"
 import { DEFAULT_PARAMS as P, paramsFromJson, type Params } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
 import { planShot } from "../src/shot.js"
@@ -50,7 +51,8 @@ const crossArriving = (p: Params, to: { x: number; y: number }, z: number): Matc
     kind: "pass", fromId: PASSER, side: "home", releaseTick: s0.tick - 8, resolveTick: s0.tick + 1, winnerId: STRIKER, outcome: "successful",
     pending, extra: [reception], path: null, restartAfter: null, looseBall: null, deflectTo: null
   }
-  // stepBall drops the ball about 5 cm in the resolve tick at dt 0.1.
+  // Released 5 cm above z: stepBall drops it about that much in the resolve tick at dt 0.1, so the header seam sees about
+  // z. A case that calls headerPlan directly (no step) sets the ball's z itself.
   return { ...s0, ball: { pos: { x: to.x - 0.8, y: to.y + 0.6, z: z + 0.05 }, vel: { x: 8, y: -6, z: 0 } }, possession: { kind: "in_flight", flight } }
 }
 
@@ -79,12 +81,12 @@ describe("SH2: who may head (header.ts)", () => {
     expect(headerEligible(1.0, true, false, h)).toBe(true)
     expect(headerEligible(2.4, true, false, h)).toBe(true)
     // Home attacks +x in the first half and -x in the second.
-    expect(inAttackingBox("home", "first_half", { x: 45, y: 0 })).toBe(true)
-    expect(inAttackingBox("home", "first_half", { x: -45, y: 0 })).toBe(false)
-    expect(inAttackingBox("home", "second_half", { x: -45, y: 0 })).toBe(true)
-    expect(inAttackingBox("away", "first_half", { x: -45, y: 0 })).toBe(true)
-    expect(inAttackingBox("home", "first_half", { x: 45, y: 21 })).toBe(false)
-    expect(inAttackingBox("home", "first_half", { x: 30, y: 0 })).toBe(false)
+    expect(actionZone("home", "first_half", { x: 45, y: 0 }) === "box").toBe(true)
+    expect(actionZone("home", "first_half", { x: -45, y: 0 }) === "box").toBe(false)
+    expect(actionZone("home", "second_half", { x: -45, y: 0 }) === "box").toBe(true)
+    expect(actionZone("away", "first_half", { x: -45, y: 0 }) === "box").toBe(true)
+    expect(actionZone("home", "first_half", { x: 45, y: 21 }) === "box").toBe(false)
+    expect(actionZone("home", "first_half", { x: 30, y: 0 }) === "box").toBe(false)
   })
 
   it("header xG is below foot xG at the same spot, and better headers head more", () => {
@@ -205,6 +207,26 @@ describe("SH2: the header seam (step)", () => {
     expect(shot).toBeGreaterThan(duel)
     expect(events[shot]!).toMatchObject({ player_id: STRIKER, attrs: { body_part: "head" } })
     expect(events.some((e) => e.type === "reception")).toBe(false)
+  })
+
+  it("scenario scripts apply to a header: a forced goal scores, a forced save is used up", () => {
+    const p = onWith({ b0: 20 })
+    const outcome = (e: DomainEvent) => e.type === "goal" || e.type === "keeper_save" || e.type === "ball_out" || e.type === "block"
+    // A forced goal for the attackers: the header is scripted and scores, and the force is used up.
+    const sGoal: MatchState = { ...crossArriving(p, { x: 44, y: 1 }, 1.6), forced: [{ window: [0, 95], team: "home", effect: "goal" }] }
+    const g = stepFor(sGoal, 60, outcome)
+    const gShot = g.events.find((e) => e.type === "shot")
+    expect(gShot?.attrs).toMatchObject({ body_part: "head", scripted: true })
+    expect(g.events.some((e) => e.type === "goal" && e.player_id === STRIKER)).toBe(true)
+    expect(g.state.forced).toHaveLength(0)
+    // A forced save by the defending keeper (keeper_heroics): the header is saved and the force is used up.
+    const sSave: MatchState = { ...crossArriving(p, { x: 44, y: 1 }, 1.6), forced: [{ window: [0, 95], team: "away", effect: "keeper_heroics" }] }
+    const v = stepFor(sSave, 60, outcome)
+    const vShot = v.events.find((e) => e.type === "shot")
+    expect(vShot?.attrs).toMatchObject({ body_part: "head", scripted: true, on_target: true })
+    expect(v.events.some((e) => e.type === "keeper_save")).toBe(true)
+    expect(v.events.some((e) => e.type === "goal")).toBe(false)
+    expect(v.state.forced).toHaveLength(0)
   })
 
   it("rule off: no header, nothing drawn", () => {
