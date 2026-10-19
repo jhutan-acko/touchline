@@ -784,3 +784,12 @@ No carry-over was dropped: all fit as Tasks 11–13 and rulings 19, 23–25.
 **Review Focus.** Missing roles: Tasks 3, 4, 9, 10. Second half: Tasks 1, 3, 4, 5, 10. Edges: Tasks 3, 4, 5. Interrupted restarts: Tasks 4, 6. dt 0.04: Tasks 3, 6, 10 (and 12, 13).
 
 **Proportion.** Shorter than plan 8d, with code only as signatures, defaults and assertions.
+
+## User decisions (2026-10-19)
+
+- **Spatial statistics in the gate (P5 Q1):** add the seven spatial statistics to the |z| < 3 check from P5's final task on.
+- **xG (P6 Q2):** refit to DFL's model xG on the 7 matches.
+- **C5 (P6 Q3):** 4 matches plus a clip list, with no LLM.
+- **P5 gate fallback (P5 Q2):** switch off rotations, then runs and overlaps, then zonal marking, then the pause and recovery changes. S1–S9 and G3 are always kept.
+- **Every other question in either plan:** the plan's recommended option, as written.
+- **Execution:** P5 and P6 run in parallel with subagent-driven development. Wave 0 starts on 79d6088 before P4 merges, and no measurement is taken until the branch is merged with P4's result (P5 plan line 38; P6 Task 8).
