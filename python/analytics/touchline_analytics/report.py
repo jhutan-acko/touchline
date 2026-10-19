@@ -299,6 +299,10 @@ def build(run_dirs: list[Path], targets: dict, params_note: str, physics: dict |
         from .duels import duels_section, match_duels
 
         lines += duels_section([match_duels(d, roles) for d in run_dirs], targets["duels"])
+    if roles and "setpieces" in targets:
+        from .setpieces import match_setpieces, setpieces_section
+
+        lines += setpieces_section([match_setpieces(d, roles) for d in run_dirs], targets["setpieces"])
     lines += balance_section([balance(d) for d in run_dirs])
     return "\n".join(lines)
 
@@ -314,7 +318,9 @@ if __name__ == "__main__":
     ap.add_argument("--physics", default="", help="data/params/physics.json: adds player movement against real tracking")
     ap.add_argument("--league", default="data/league/league.json", help="player roles, for the physics section")
     ap.add_argument("--carriers", default="", help="data/params/still-carriers.json: adds frozen ball carriers against real matches")
-    ap.add_argument("--only", default="", choices=["", "passing", "duels"], help="passing or duels: write only the P3 passing or the P4 duels section")
+    only = ["", "passing", "duels"]
+    only += ["setpieces"]  # P5 (plan 8e): the set-pieces section
+    ap.add_argument("--only", default="", choices=only, help="write only that section: passing (P3), duels (P4), setpieces (P5)")
     a = ap.parse_args()
     physics = json.loads(Path(a.physics).read_text()) if a.physics else None
     carriers = json.loads(Path(a.carriers).read_text()) if a.carriers else None
@@ -327,6 +333,10 @@ if __name__ == "__main__":
         from .duels import duels_report
 
         md = duels_report([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note, roles)
+    elif a.only == "setpieces":
+        from .setpieces import setpieces_report
+
+        md = setpieces_report([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note, roles)
     else:
         md = build([Path(r) for r in a.runs], json.loads(Path(a.targets).read_text()), a.note, physics, roles, carriers)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)

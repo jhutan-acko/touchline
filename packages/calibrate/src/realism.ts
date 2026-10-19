@@ -10,6 +10,9 @@ import { FIXTURES } from "./evaluate.js"
 import { applySets, parseSets } from "./overrides.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
+// Sections the report can write alone (--only); each phase appends its own.
+const ONLY = ["passing", "duels"]
+ONLY.push("setpieces") // P5 (plan 8e)
 const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
 const o = cliOptions("realism: simulate held-out matches and write a realism report", {
   // Pass --out docs/realism/realism-report.md to update the committed report.
@@ -17,7 +20,7 @@ const o = cliOptions("realism: simulate held-out matches and write a realism rep
   matches: { default: "10", check: positiveInteger, help: "held-out matches to simulate (seeds 2000+)" },
   params: { default: join(root, "data/params/touchline-params.json"), help: "parameter file, or \"default\" for hand-set priors" },
   set: { default: "", help: "comma-separated key=value overrides on the parameter file, e.g. firstTick.rule=1,firstTick.bootBlock=0.3" },
-  only: { default: "", help: "\"passing\" or \"duels\": write only the P3 passing or the P4 duels section (faster)" },
+  only: { default: "", help: `write only one section (faster): ${ONLY.map((x) => `"${x}"`).join(", ")}` },
   runs: { default: join(root, "out/realism"), help: "folder for the simulated matches; use a separate one for each concurrent run" }
 })
 // Make the report's folder now, before the matches are simulated.
@@ -30,7 +33,7 @@ exitOnUserError(() => {
 })
 const matches = Number(o.matches)
 const sets = exitOnUserError(() => {
-  if (o.only !== "" && o.only !== "passing" && o.only !== "duels") throw new CliError(`--only must be "passing" or "duels", got "${o.only}"`)
+  if (o.only !== "" && !ONLY.includes(o.only)) throw new CliError(`--only must be one of ${ONLY.map((x) => `"${x}"`).join(", ")}, got "${o.only}"`)
   return parseSets(o.set)
 })
 const params: Params = exitOnUserError(() => {

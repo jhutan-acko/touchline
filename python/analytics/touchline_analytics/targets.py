@@ -123,6 +123,7 @@ def build(root: Path, tracking: list[str], spatial: list[str]) -> dict:
 
 # Blocks copied by hand from the 2026-10-13 analysis (aggregates only), which build() does not measure.
 HAND_BLOCKS = ("bands", "passing", "duels")
+HAND_BLOCKS += ("setpieces",)  # P5 (plan 8e)
 
 
 def keep_hand_blocks(new: dict, old_path: Path) -> dict:
