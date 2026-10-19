@@ -467,6 +467,50 @@ export interface Params {
     readonly ownThirdLift: number; readonly ownThirdU: number; readonly roleWeight: Readonly<Record<Exclude<Role, "GK">, number>>
     readonly secondM: number; readonly secondRadiusM: number; readonly secondShare: number; readonly shadowM: number
   }
+  // ---- realism v2 P6 (plan 8f)
+  /**
+   * SH1 first-time finishes (realism v2 P6): at a clean reception within maxGoalM of goal (contact no higher than
+   * kinematics.controlHeightM; corner and free-kick deliveries when setPieces is 1), the receiver shoots first time
+   * (U = b0 + bXg xg + bArrival cos(arrival), cos -1 a cutback), lays off (layOffLogit, a teammate within layOffMaxM) or
+   * controls (0). A first-time shot's aim widens by arrivalAimK (1 + cos) / 2 + speedAimK max(0, ball speed - speedRefMps) / 10.
+   * rule 0: the old behaviour (every reception is controlled).
+   */
+  readonly firstTime: {
+    readonly rule: number; readonly setPieces: number; readonly maxGoalM: number; readonly b0: number; readonly bXg: number; readonly bArrival: number
+    readonly layOffLogit: number; readonly layOffMaxM: number; readonly arrivalAimK: number; readonly speedAimK: number; readonly speedRefMps: number
+  }
+  /**
+   * SH2 headers (realism v2 P6): an attacker who wins a ball at contact height zMin..zMax in the box he attacks heads at
+   * goal (U = b0 + bXg xg(header) + bHeading (heading - 0.6)) or controls (0); the header uses heading for finishing, aim
+   * x aimK, ball speed x speedShare, from the contact height. rule 0: the old behaviour (no headed shots).
+   */
+  readonly header: {
+    readonly rule: number; readonly zMin: number; readonly zMax: number; readonly b0: number; readonly bXg: number; readonly bHeading: number
+    readonly aimK: number; readonly speedShare: number
+  }
+  /**
+   * SH3 keeper-position saves (realism v2 P6): the save logit adds bOffLine (off line - offLineRefM) + bOffBisector x the
+   * keeper's distance off the shot's line + bFlightS min(flightCapS, flight time - reactionS), in place of the distance term.
+   * rule 0: the old behaviour (shot.save only).
+   */
+  readonly saveGeo: {
+    readonly rule: number; readonly offLineRefM: number; readonly bOffLine: number; readonly bOffBisector: number; readonly reactionS: number
+    readonly bFlightS: number; readonly flightCapS: number
+  }
+  /**
+   * SH4 execution fatigue (realism v2 P6): a kick's error scales by 1 + k max(0, fatigue - ref)^power.
+   * rule 0: the old behaviour (1 + fatigue.executionK x fatigue).
+   */
+  readonly execFatigue: { readonly rule: number; readonly k: number; readonly ref: number; readonly power: number }
+  /**
+   * Shot logit and xG refit (realism v2 P6): open play's shot term is bXg (xg - pivot) + bRisk riskTolerance (a restart
+   * keeps the old term), and xgOf reads xg (refit to DFL's model xG). rule 0: the old behaviour (shot.xg, 3 (xg - 0.1) + 0.3 risk).
+   */
+  readonly shotModel: {
+    readonly rule: number
+    readonly xg: { readonly b0: number; readonly bDist: number; readonly bAngle: number; readonly bHeader: number; readonly bDefenders: number }
+    readonly bXg: number; readonly pivot: number; readonly bRisk: number
+  }
   /**
    * Game state on scoring: a multiplier per 15-minute bin (mean 1; the last bin includes added time), and the
    * red-card factors for the team down to fewer players and for its opponent.
@@ -753,6 +797,17 @@ export const DEFAULT_PARAMS: Params = {
     rule: 0, rateScale: 0.1, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
     roleWeight: { CB: 0.6, FB: 0.8, DM: 1, CM: 0.9, AM: 1.6, W: 1.4, ST: 0.55 }, secondM: 12, secondRadiusM: 15, secondShare: 0.45, shadowM: 4
   },
+  // ---- realism v2 P6 (plan 8f)
+  // P6 SH1 first-time finishes (spec item SH1; rule 0: the old behaviour). bArrival is a prior, not fitted (ruling 4).
+  firstTime: { rule: 0, setPieces: 1, maxGoalM: 25, b0: -1, bXg: 6, bArrival: -0.5, layOffLogit: -1.5, layOffMaxM: 12, arrivalAimK: 0.3, speedAimK: 0.2, speedRefMps: 12 },
+  // P6 SH2 headers (spec item SH2; rule 0: the old behaviour). zMin and zMax are kinematics.controlHeightM and headerHeightM.
+  header: { rule: 0, zMin: 1, zMax: 2.4, b0: -0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
+  // P6 SH3 keeper-position saves (spec item SH3; rule 0: the old behaviour). Priors (ruling 10); offLineRefM is the real median at shots.
+  saveGeo: { rule: 0, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.6, reactionS: 0.2, bFlightS: 2.5, flightCapS: 1 },
+  // P6 SH4 execution fatigue (spec item SH4; rule 0: the old behaviour). k 0.25, ref 0, power 1 equal rule 0 numerically.
+  execFatigue: { rule: 0, k: 0.25, ref: 0, power: 1 },
+  // P6 shot logit and xG refit (spec "P6: shot model"; rule 0: the old behaviour). xg starts as shot.xg; bXg, pivot, bRisk as decide's term.
+  shotModel: { rule: 0, xg: { b0: -1.25, bDist: -0.08, bAngle: 1.2, bHeader: -1, bDefenders: -0.3 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   script: {
@@ -815,7 +870,8 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
  * (fields the file omits keep their defaults; keys the engine does not know are ignored).
  */
 /** Model coefficients and logits, which may take any sign. */
-const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones/, /^distribution\.puntLogit$/, /^tackle\.(base|behindLogit|speedLogit)$/, /^transition\.recoverUpfieldM$/]
+const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones/, /^distribution\.puntLogit$/, /^tackle\.(base|behindLogit|speedLogit)$/, /^transition\.recoverUpfieldM$/,
+  /^firstTime\.(b0|bArrival|layOffLogit)$/, /^header\.b0$/, /^saveGeo\.b/, /^shotModel\.xg\./]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
@@ -827,7 +883,8 @@ const PROBABILITIES = new Set([
   "firstTouch.missedShare", "firstTouch.miscontrolShare", "substitutions.windowChance", "substitutions.halfTimeChance",
   "fatigue.halfTimeRecovery", "script.howlerFumble", "pass.pitchControlWeight", "positioning.drift.deadRate", "positioning.drift.backLineOutU", "positioning.drift.outS",
   "firstTick.bootBlock", "release.tailShare",
-  "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare"
+  "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare",
+  "header.speedShare"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
@@ -847,7 +904,7 @@ const checkSupport = (s: Params["support"]): void => {
   if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
 }
 
-/** The P3 and P4 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
+/** The P3, P4 and P6 rule switches (and firstTime.setPieces) are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
 const checkRuleSwitches = (v: Params): void => {
   const switches: ReadonlyArray<readonly [string, number]> = [
     ["firstTick.rule", v.firstTick.rule],
@@ -864,7 +921,9 @@ const checkRuleSwitches = (v: Params): void => {
     ["press.rule", v.press.rule],
     ["marking.rule", v.marking.rule],
     ["firstTick.scopeRule", v.firstTick.scopeRule],
-    ["release.rejudge", v.release.rejudge]
+    ["release.rejudge", v.release.rejudge],
+    ["firstTime.rule", v.firstTime.rule], ["firstTime.setPieces", v.firstTime.setPieces], ["header.rule", v.header.rule], ["saveGeo.rule", v.saveGeo.rule],
+    ["execFatigue.rule", v.execFatigue.rule], ["shotModel.rule", v.shotModel.rule]
   ]
   for (const [path, x] of switches) if (x !== 0 && x !== 1) throw new ParamsError(`params field ${path} must be 0 or 1 (got ${x})`)
 }
@@ -877,6 +936,13 @@ const checkTransition = (t: Params["transition"]): void => {
     if (!(t.joinM[i]! > t.joinM[i - 1]!)) throw new ParamsError(`params field transition.joinM must be strictly increasing (got ${t.joinM.join(", ")})`)
 }
 
+/** P6: the header band in order, the execution-fatigue threshold in 0..1 and a positive exponent. */
+const checkP6 = (v: Params): void => {
+  if (!(v.header.zMin < v.header.zMax)) throw new ParamsError(`params field header.zMin must be below header.zMax (got ${v.header.zMin} >= ${v.header.zMax})`)
+  if (!(v.execFatigue.ref >= 0 && v.execFatigue.ref < 1)) throw new ParamsError(`params field execFatigue.ref must be at least 0 and below 1 (got ${v.execFatigue.ref})`)
+  if (!(v.execFatigue.power > 0)) throw new ParamsError(`params field execFatigue.power must be positive (got ${v.execFatigue.power})`)
+}
+
 export const paramsFromJson = (json: unknown): Params => {
   if (!isObject(json)) throw new ParamsError("params file must be a JSON object")
   assertProvenance(json as { provenance?: Partial<Provenance> })
@@ -886,5 +952,6 @@ export const paramsFromJson = (json: unknown): Params => {
   checkSupport(merged.support)
   checkRuleSwitches(merged)
   checkTransition(merged.transition)
+  checkP6(merged)
   return merged
 }
