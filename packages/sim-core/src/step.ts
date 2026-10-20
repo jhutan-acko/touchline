@@ -1142,13 +1142,29 @@ const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { techniq
 // ================================================================ P5 keeper-restart seam (plan 8e Task 7 owns this block)
 
 /** G3: the keeper-restart part of a restart's plan (whether the keeper takes an own-third free kick; dead stream). rule 0: nothing, no draw. @internal */
-export const planKeeper = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => ({})
+export const planKeeper = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
+  const k = w.p.keeperRestarts
+  if (k.rule !== 1 || r.restart !== "free_kick" || kind === "penalty") return {}
+  // Own third only (u < fkU in the taking side's frame); one draw per restart, read by keeperTakes until the kick.
+  if (attackX(r.side, r.at.x, w.period) >= k.fkU) return {}
+  return { keeperTaker: w.rng.dead.chance(k.fkShare) }
+}
 
 /** G3: whether the keeper takes this free kick (reads the plan's keeperTaker; no draw). rule 0: never. @internal */
-export const keeperTakes = (w: Work, r: RestartAt): boolean => false
+export const keeperTakes = (w: Work, r: RestartAt): boolean =>
+  w.p.keeperRestarts.rule === 1 && r.restart === "free_kick" && w.restartPlan?.keeperTaker === true
 
 /** G3: the error multiplier of a kick (kickStyle): longErrorScale for a long goal kick or keeper free kick. rule 0: 1. @internal */
-export const longKickScale = (w: Work, d: Decision, restart: RestartKind | null): number => 1
+export const longKickScale = (w: Work, d: Decision, restart: RestartKind | null): number => {
+  const k = w.p.keeperRestarts
+  if (k.rule !== 1 || d.candidate === null) return 1
+  if (restart !== "goal_kick" && restart !== "free_kick") return 1
+  const poss = w.possession
+  if (poss.kind !== "owned") return 1
+  const kicker = w.player(poss.playerId)
+  if (restart === "free_kick" && kicker.role !== "GK") return 1
+  return dist(kicker.pos, d.candidate.target) >= k.longM ? k.longErrorScale : 1
+}
 
 // ================================================================ end of P5 keeper-restart seam
 
