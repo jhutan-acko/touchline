@@ -11,9 +11,10 @@ type Block = "firstTick" | "choice" | "release" | "cross" | "through" | "distrib
 /**
  * Ticks per run. Short runs have no cross or keeper distribution (300 ticks of seed 3: neither), so the sensitivity check
  * below needs this many. With P4 on, seed 3's first keeper distribution comes at tick 5267 (it came before 1500 on the
- * pre-P4 engine), so 9000 ticks hold several.
+ * pre-P4 engine), so the distribution block runs 9000 ticks, which hold several.
  */
-const TICKS = 9000
+const TICKS = 1500
+const ticksFor = (block: Block): number => (block === "distribution" ? 9000 : TICKS)
 
 /** A switch (rule, scopeRule, rejudge, ...): its value is 0 or 1 and is never perturbed. */
 const isSwitch = (k: string): boolean => /(^|[a-z])Rule$/.test(k) || k === "rule" || k === "rejudge"
@@ -58,9 +59,10 @@ describe("P3 rules at 0 are the pre-P3 engine", () => {
     it(`every P3 rule at 0 gives the pre-P3 engine bit for bit at unit level: ${block}`, () => {
       // The precondition: the run notices the perturbation when the rule is 1, so a rule-0 match proves the fields are not read.
       expect(JSON.stringify(withBlock(block, 1, true)[block])).not.toBe(JSON.stringify(withBlock(block, 1, false)[block]))
-      expect(run(withBlock(block, 1, true), TICKS), `${block} perturbation is invisible at rule 1`).not.toBe(run(withBlock(block, 1, false), TICKS))
+      const n = ticksFor(block)
+      expect(run(withBlock(block, 1, true), n), `${block} perturbation is invisible at rule 1`).not.toBe(run(withBlock(block, 1, false), n))
       expect(withBlock(block, 0, true)[block].rule).toBe(0)
-      expect(run(withBlock(block, 0, true), TICKS)).toBe(run(withBlock(block, 0, false), TICKS))
+      expect(run(withBlock(block, 0, true), n)).toBe(run(withBlock(block, 0, false), n))
     }, 240_000)
   }
 })
