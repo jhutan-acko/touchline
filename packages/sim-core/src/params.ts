@@ -842,8 +842,10 @@ export const DEFAULT_PARAMS: Params = {
   transition: {
     rule: 1, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
     recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.05, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9,
-    // P5 pause and recovery (plan 8e ruling 20; rule 0: the old behaviour).
-    pauseRule: 0, pauseDip: 0.87, pauseEndS: 0.5
+    // P5 pause and recovery (plan 8e ruling 20; rule 0: the old behaviour). Task 12 (16 held-out matches, every wave-1
+    // rule, keeperRestarts, directFk and marking.rule 1 at maxGapM 5): pause_speed_ratio 0.985 off; pauseDip 0.87 0.886,
+    // 0.855 0.868 / 0.872 (two runs), 0.84 0.854 (real 0.87, band 0.80-0.90). pauseEndS stays the spec's 0.5 (no row).
+    pauseRule: 0, pauseDip: 0.855, pauseEndS: 0.5
   },
   // P4 A5 team pressing (spec item A5; switched on in P4 Task 10). Task 7 tuned rateScale and roleWeight with tackle,
   // transition, marking and press on (16 held-out matches): press episodes 428/90 (real 405), >=3 engaged 0.060 (0.049);

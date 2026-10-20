@@ -83,7 +83,7 @@ import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 import { angleFactor, zoneFactor } from "./fouls.js"
 
 // ---- P4 imports, transition seam (plan 8d Task 6 inserts below this line)
-import { joinChance, pauseTarget, recoverRate, windowTicks } from "./transition.js"
+import { joinChance, pauseCap, pauseEndCap, pauseTarget, recoverRate, windowTicks } from "./transition.js"
 
 // ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
 import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "./press.js"
@@ -1933,7 +1933,9 @@ export const noteLoss = (w: Work, loser: Side, at: Vec2): void => {
     const p = joinChance(dist(pl.pos, at), t)
     if (p > 0 && w.rng.counter.chance(p)) joiners.push(pl.id)
   }
-  w.transition = { loser, tick: w.tick, at, joiners }
+  // P5 (ruling 20): under pauseRule 1, each losing outfielder's speed at the loss, for his pause cap.
+  const speeds = t.pauseRule > 0 ? Object.fromEntries(w.active(loser).filter((pl) => pl.role !== "GK").map((pl) => [pl.id, len(pl.vel)])) : undefined
+  w.transition = { loser, tick: w.tick, at, joiners, ...(speeds ? { speeds } : {}) }
   const winner = w.active(other(loser)).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0]
   if (!winner) return
   const pos = w.possession
@@ -1997,7 +1999,19 @@ export const transitionMove = (w: Work, pl: PlayerState, base: MoveTarget, possS
       return { target: interceptPoint(cur.pos, Math.min(t.speed, vmax), ballFlat, { x: w.ball.vel.x, y: w.ball.vel.y }), speedCap: t.speed }
     return base
   }
-  if (!joiner && sinceTicks < windowTicks(t.pauseS, w.dt) && dist(cur.pos, ballFlat) > t.pauseRadiusM) return pauseTarget(cur.pos, cur.vel, vmax, t)
+  const pauseTicks = windowTicks(t.pauseS, w.dt)
+  const far = !joiner && dist(cur.pos, ballFlat) > t.pauseRadiusM
+  if (far && sinceTicks < pauseTicks) {
+    const held = pauseTarget(cur.pos, cur.vel, vmax, t)
+    if (t.pauseRule <= 0) return held
+    // P5 (ruling 20): hold course, capped at min(base cap, pauseDip x his speed at the loss).
+    return { target: held.target, speedCap: Math.min(base.speedCap, pauseCap(tr.speeds?.[pl.id] ?? len(cur.vel), t)) }
+  }
+  // P5 (ruling 20): over pauseEndS after the pause, base's target with the cap ramping from the pause cap to base's.
+  if (t.pauseRule > 0 && far && sinceTicks - pauseTicks < windowTicks(t.pauseEndS, w.dt)) {
+    const pc = Math.min(base.speedCap, pauseCap(tr.speeds?.[pl.id] ?? len(cur.vel), t))
+    return { target: base.target, speedCap: pauseEndCap((sinceTicks - pauseTicks) * w.dt, pc, base.speedCap, t) }
+  }
   // A recovery run: not while counter-pressing or on a live press, and only while the ball is still lost.
   if (cur.intent.kind === "press" && w.tick < cur.intentUntil) return base
   const uRel = attackX(pl.side, cur.pos.x, w.period) - attackX(pl.side, ballFlat.x, w.period)

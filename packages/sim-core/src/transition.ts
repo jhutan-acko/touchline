@@ -41,3 +41,15 @@ export const pauseTarget = (pos: Vec2, vel: Vec2, vmax: number, t: T): { target:
   target: add(pos, vel),
   speedCap: Math.min(len(vel), t.pauseShare * vmax)
 })
+
+/** P5 pause (plan 8e ruling 20): a paused player's cap from his speed at the loss, pauseDip x that speed (the caller takes min with base's cap). */
+export const pauseCap = (speedAtLoss: number, t: T): number => t.pauseDip * speedAtLoss
+
+/**
+ * P5 end of the pause (plan 8e ruling 20): `sinceS` seconds after the pause ended, the cap ramps linearly from
+ * `pauseCapV` to `baseCap` over pauseEndS (sinceS clamped to 0..pauseEndS; base's cap from pauseEndS on).
+ */
+export const pauseEndCap = (sinceS: number, pauseCapV: number, baseCap: number, t: T): number => {
+  const f = t.pauseEndS > 0 ? Math.min(1, Math.max(0, sinceS / t.pauseEndS)) : 1
+  return f >= 1 ? baseCap : pauseCapV + (baseCap - pauseCapV) * f
+}
