@@ -8,8 +8,12 @@ import { makeConfig } from "../src/testing.js"
 // same engine bit for bit. Every other rule stays at its default; only the block under test is switched and perturbed.
 type Block = "firstTick" | "choice" | "release" | "cross" | "through" | "distribution"
 
-/** Ticks per run. Short runs have no cross or keeper distribution (300 ticks of seed 3: neither), so the sensitivity check below needs this many. */
-const TICKS = 1500
+/**
+ * Ticks per run. Short runs have no cross or keeper distribution (300 ticks of seed 3: neither), so the sensitivity check
+ * below needs this many. With P4 on, seed 3's first keeper distribution comes at tick 5267 (it came before 1500 on the
+ * pre-P4 engine), so 9000 ticks hold several.
+ */
+const TICKS = 9000
 
 /** A switch (rule, scopeRule, rejudge, ...): its value is 0 or 1 and is never perturbed. */
 const isSwitch = (k: string): boolean => /(^|[a-z])Rule$/.test(k) || k === "rule" || k === "rejudge"
