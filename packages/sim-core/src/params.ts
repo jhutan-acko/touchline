@@ -658,7 +658,7 @@ export const DEFAULT_PARAMS: Params = {
     capS: 6,
     rejudge: 1,
     // P5 release median (plan 8e ruling 22; rule 0: the old behaviour).
-    freeRule: 0, freeS: [0.9, 2.2]
+    freeRule: 0, freeS: [0.6, 1.9]
   },
   actions: {
     logits: {
