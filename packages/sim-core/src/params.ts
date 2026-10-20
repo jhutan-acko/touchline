@@ -894,8 +894,10 @@ export const DEFAULT_PARAMS: Params = {
   },
   // P5 G3 keeper restarts (plan 8e rulings 12, 13; rule 0: the old behaviour).
   keeperRestarts: { rule: 0, fkU: -17.5, fkShare: 1, longShift: 0, longM: 32, longErrorScale: 1 },
-  // P5 S9 direct free kicks (plan 8e ruling 14; rule 0: the old behaviour).
-  directFk: { rule: 0, shotShift: 0, xgLogit: 0, maxDistanceM: 35 },
+  // P5 S9 direct free kicks (plan 8e ruling 14; rule 0: the old behaviour). Task 8, 32 matches with setAttack, setDefend
+  // and directFk on: shotShift 0 / 1 / 2 / 3.5 / 4 gave a central free-kick shot share of 0.04 / 0.05 / 0.07 / 0.27 / 0.37
+  // (real 0.36); xgLogit 0 / 0.45 / 0.6 gave a mean direct free-kick xG of 0.039 / 0.060 / 0.069 (real 0.06).
+  directFk: { rule: 0, shotShift: 4, xgLogit: 0.45, maxDistanceM: 35 },
   // P5 A6 role moves (plan 8e rulings 15, 16; runRule 0 and rotateRule 0: the old behaviour).
   roleMoves: {
     runRule: 0, rotateRule: 0,

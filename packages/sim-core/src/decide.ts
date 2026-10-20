@@ -12,6 +12,7 @@ import { add, clampToPitch, norm, scale, sub } from "./geometry.js"
 import type { Intent } from "./types.js"
 
 // ---- P5 imports, direct-free-kick seam (plan 8e Task 8 inserts below this line)
+import { setPieceKind } from "./setpiece.js"
 
 // ---- P5 imports, goal-kick seam (plan 8e Task 7 inserts below this line)
 
@@ -548,8 +549,20 @@ export interface RestartShot {
 /**
  * S9: the shot at a central attacking-third free kick (goalDist from goal, ax the owner's team-frame u); null leaves the
  * shot as it is. rule 0: null.
+ *
+ * Ruling 14: a free kick in the taker's attacking third (u > 17.5) with |y| <= 20.16 (setPieceKind "fk_central", the
+ * diagnostic's definition) and goalDist <= directFk.maxDistanceM may be shot; its logit gains shotShift; its xG is the
+ * open-play xG with no defender in the cone, offset by xgLogit on the logit scale (the wall still blocks in planShot).
+ * Built on xgOf, so a refit of the shot model flows through (Cross-phase contacts).
  */
-export const restartShot = (_input: DecisionInput, _p: Params, _goalDist: number, _ax: number): RestartShot | null => null
+export const restartShot = (input: DecisionInput, p: Params, goalDist: number, _ax: number): RestartShot | null => {
+  const fk = p.directFk
+  if (fk.rule === 0 || input.restart !== "free_kick") return null
+  const { owner, period } = input
+  if (setPieceKind("free_kick", owner.pos, owner.side, period) !== "fk_central" || goalDist > fk.maxDistanceM) return null
+  const open = xgOf(p, owner.side, period, owner.pos, false, 0)
+  return { available: true, shift: fk.shotShift, xg: sigmoid(Math.log(open / (1 - open)) + fk.xgLogit) }
+}
 
 // ================================================================ end of P5 direct-free-kick seam
 
