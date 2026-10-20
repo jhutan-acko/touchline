@@ -10,7 +10,7 @@ import { rulesManager, rulesOption } from "../src/rules.js"
 import { runManaged } from "../src/run.js"
 import { leagueConfig, models, xt } from "./helpers.js"
 
-const golden = JSON.parse(readFileSync(join(import.meta.dirname, "golden/situation-m-11-minute_60.json"), "utf8")) as Situation
+const golden = JSON.parse(readFileSync(join(import.meta.dirname, "golden/situation-m-13-minute_60.json"), "utf8")) as Situation
 /** The reviewed situation with some fields changed. */
 const sit = (over: { score?: [number, number]; minute?: number; energy?: number; windows?: number; halfTime?: boolean }): Situation => ({
   ...golden,

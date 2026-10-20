@@ -335,8 +335,45 @@ describe("A4 transitions: the seam", () => {
   })
 })
 
+describe("A4 transitions at half-time (P4 final review)", () => {
+  it("a loss in the last 8 s of the first half carries nothing into the second-half kickoff", () => {
+    // Shipped defaults (every P4 rule as it ships). Seeds 1-6, played to 8 s into the second half; at least one must lose
+    // the ball in the last 8 s of the first half (non-vacuous; the review's probe found seed 2 at 0.4 s).
+    let late = 0
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      let s: MatchState = initMatch(makeConfig(seed, { params: on }))
+      let last: MatchState = s
+      while (!isFinished(s) && s.period === "first_half") {
+        last = s
+        s = step(s).state
+      }
+      expect(s.period).toBe("second_half")
+      if (last.transition && (last.tick - last.transition.tick) * last.config.dt < 8) late++
+      // At the second-half kickoff: no transition, no press state.
+      expect(s.transition, `seed ${seed}`).toBeUndefined()
+      expect(s.press, `seed ${seed}`).toBeUndefined()
+      // No joiner press and no recovery run is live at the kickoff (the first-half loss's joiners are gone).
+      for (const pl of s.players) expect((pl.intent.kind === "press" || pl.intent.kind === "recover") && s.tick < pl.intentUntil, `seed ${seed} ${pl.id}`).toBe(false)
+      const start = s.tick
+      for (let i = 0; i < Math.round(8 / s.config.dt) && !isFinished(s); i++) {
+        s = step(s).state
+        // Anything live comes from a loss in the second half itself.
+        const fresh = s.transition !== undefined && s.transition.tick >= start
+        if (!fresh) {
+          expect(s.transition, `seed ${seed}`).toBeUndefined()
+          for (const pl of s.players) {
+            // No recovery run, and (with no transition) the team press is not switched off by a counter-press window.
+            expect(pl.intent.kind === "recover" && s.tick < pl.intentUntil, `seed ${seed} ${pl.id} recovering`).toBe(false)
+          }
+        }
+      }
+    }
+    expect(late).toBeGreaterThanOrEqual(1)
+  }, 600_000)
+})
+
 describe("A4 transitions in a match", () => {
-  it("rule 0 is inert: a match is identical whatever the other transition values (seed 7, 1500 ticks)", () => {
+  it("rule 0 is inert: a match is identical whatever the other transition values (seed 7, 6000 ticks)", () => {
     const perturbed: Params = {
       ...P,
       transition: {
@@ -349,7 +386,7 @@ describe("A4 transitions in a match", () => {
       const md = createHash("sha256")
       let s: MatchState = initMatch(makeConfig(7, { params: p }))
       let losses = 0
-      for (let i = 0; i < 1500 && !isFinished(s); i++) {
+      for (let i = 0; i < 6000 && !isFinished(s); i++) {
         const r = step(s)
         s = r.state
         md.update(JSON.stringify(r.frame)).update(JSON.stringify(r.events))
@@ -359,7 +396,8 @@ describe("A4 transitions in a match", () => {
       return { h: md.digest("hex"), losses }
     }
     const a = hash(off)
-    // Non-vacuous: live-play losses happen in the window (each would draw joiners under rule 1).
+    // Non-vacuous: live-play losses happen in the window (each would draw joiners under rule 1). 6000 ticks (Task 10):
+    // with every P4 rule on, 1500 ticks held only 4 possession changes.
     expect(a.losses).toBeGreaterThan(10)
     expect(hash(perturbed).h).toBe(a.h)
   })
@@ -379,7 +417,13 @@ describe("A4 transitions in a match", () => {
             const pl = s.players.find((x) => x.id === id)!
             expect(pl.side).toBe(s.transition.loser)
             expect(pl.role).not.toBe("GK")
-            expect(dist(pl.pos, s.transition.at)).toBeLessThan(30)
+            // His distance when noteLoss ran (Task 10): a loss in ownedTick (a tackle) comes before this tick's movement,
+            // so his position in the previous state; an interception and a loose-ball recovery resolve in ballTick, after
+            // the movement, so his position now (P4 final review). Measured after the step regardless, joiners were seen
+            // at 30.002 and 30.26 m.
+            const afterMove = prev.possession.kind === "in_flight" || prev.possession.kind === "loose"
+            const atLoss = afterMove ? pl : (prev.players.find((x) => x.id === id) ?? pl)
+            expect(dist(atLoss.pos, s.transition.at)).toBeLessThan(30)
           }
         }
         const poss = s.possession

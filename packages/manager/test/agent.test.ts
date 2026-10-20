@@ -7,10 +7,10 @@ import type { DecideInput } from "../src/decision.js"
 import { replayManager } from "../src/replay.js"
 import { runManaged } from "../src/run.js"
 import { situationAt, situationHash } from "../src/situation.js"
-import { leagueConfig, models, playMoments, xt } from "./helpers.js"
+import { leagueConfig, models, playMoments, xt, MOMENTS_SEED } from "./helpers.js"
 
 const whatif = { seeds: 2, horizonS: 30, runner: "inline" as const }
-const run = playMoments(leagueConfig(11), (m) => m.reasons.includes("minute_60"))
+const run = playMoments(leagueConfig(MOMENTS_SEED), (m) => m.reasons.includes("minute_60"))
 const m = run.moments.at(-1)!
 const situation = situationAt(m.state, "home", m.reasons, run.watch)
 const input: DecideInput = { state: m.state, side: "home", reasons: m.reasons, situation, situationHash: situationHash(situation) }
