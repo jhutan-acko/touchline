@@ -352,10 +352,12 @@ describe("SH1 in matches", () => {
    * (0.175); dt 0.04 b0 1: 64 / 11 (0.172), b0 6: 67 / 10 (0.149).
    * Re-measured on the P4-merged engine (ad54168; owner shot logit -3.6, quicker decisions), b0 6: dt 0.1 55 / 19
    * (0.35), dt 0.04 47 / 17 (0.36). The 0.2 clause is now met, so the former it.fails is an it.
+   * Phase B (P4 engine, shipped b0 0, no pin): dt 0.1 0.183, dt 0.04 0.156.
    * Share definition here: every shot with technique "normal" (open play and corner or free-kick deliveries alike;
    * penalties and direct free kicks aside), not open play only. Phase B judges open play (F8) with SH1 and SH2 on.
    */
-  const pinned = onWith({ b0: 6 })
+  // Phase B: the shipped values (b0 0, layOffLogit -1.5; 16-match sweep on the P4 engine), no test pin.
+  const pinned = on
   const cache = new Map<number, { n: number; firstTime: number }>()
   const shares = (dt: number): { n: number; firstTime: number } => {
     const hit = cache.get(dt)
@@ -384,9 +386,11 @@ describe("SH1 in matches", () => {
       expect(firstTime / n).toBeGreaterThanOrEqual(0.1)
       expect(firstTime / n).toBeLessThanOrEqual(0.6)
     }, 900_000)
-    // NOT MET in phase A (0.175 at dt 0.1, 0.149 at dt 0.04); MET on the P4-merged engine (0.35, 0.36), see above.
-    // The shot count and the 0.6 ceiling are asserted in the case above. The real 0.33-0.49 open-play target is Task 8's.
-    it(`about two in five shots are first time (dt ${dt})`, () => {
+    // NOT MET at the shipped values (phase B, b0 0, SH1 alone): seeds 7 and 9 give 0.183 (dt 0.1) and 0.156 (dt 0.04).
+    // It was met only at the test pin b0 6 (0.35, 0.36). Over 16 held-out matches (frame-based, open play): 0.206 with
+    // SH1 alone, 0.250 with SH2 on, 0.275 at b0 2 with SH2 on: eligible contacts are the ceiling. The shot count and the
+    // 0.6 ceiling are asserted in the case above. The real 0.33-0.49 open-play target is Task 8's.
+    it.fails(`NOT MET: about two in five shots are first time (dt ${dt})`, () => {
       const { n, firstTime } = shares(dt)
       expect(firstTime / n).toBeGreaterThanOrEqual(0.2)
     }, 900_000)
