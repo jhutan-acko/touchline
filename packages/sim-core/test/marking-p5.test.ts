@@ -220,9 +220,9 @@ describe("landing-spot marking (ruling 18)", () => {
     }
   })
 
-  it("only a CB that marksFor pairs is reached (preflight F25 row 11): an unassigned CB keeps his own move", () => {
-    // markSpot runs only for defenders assignMarks pairs (radiusM 15 m from their anchor), so a CB with no assignment
-    // gets no landing spot. One step under on and off: the assigned case moves CB1 differently, the unassigned one does not.
+  it("marksFor gives the landing CB his mark even when assignMarks leaves him unpaired (F25 row 11); landingRule 0 is unchanged", () => {
+    // assignMarks pairs only within radiusM 15 m of the anchor; under landingRule 1 marksFor adds the landing CB's entry on
+    // his man (controller ruling). One step under on and off: CB1 moves toward the landing spot in both cases under on.
     const oneStep = (p: Params, place: Record<string, Vec2>) => step(state(p, { place, carrier: AGK, inHands: true })).state.players.find((x) => x.id === HCB1)!.pos
     const s = state(on(1), { place: LANDING, carrier: AGK, inHands: true })
     const a1 = shapeTargetAt(s, HCB1)
@@ -246,7 +246,19 @@ describe("landing-spot marking (ruling 18)", () => {
     expect(landingTarget(wu.active("home"), wu.active("away"), "home", "first_half")).toEqual({ defId: HCB1, attackerId: AST1 })
     const au = shapeTargetAt(su, HCB1)
     for (const x of wu.active("away")) if (x.role !== "GK") expect(dist(au, x.pos), x.id).toBeGreaterThan(15)
-    expect(oneStep(on(1), unassigned)).toEqual(oneStep(off(1), unassigned))
+    const onU = oneStep(on(1), unassigned)
+    const offU = oneStep(off(1), unassigned)
+    const st1u = su.players.find((x) => x.id === AST1)!.pos
+    const spotU = markTarget(au, st1u, "home", "first_half", 1, 1)
+    expect(dist(onU, offU)).toBeGreaterThan(1e-6)
+    expect(dist(onU, spotU)).toBeLessThan(dist(offU, spotU))
+    // landingRule 0 with the other landing fields changed: identical to off (the marksFor extension draws nothing and adds nothing)
+    const zero = (p: Params): Params => ({ ...p, marking: { ...p.marking, landingRule: 0, landingGoalSideM: 3, landingReactM: 30 } })
+    expect(step(state(zero(on(1)), { place: unassigned, carrier: AGK, inHands: true })).state.players).toEqual(step(state(off(1), { place: unassigned, carrier: AGK, inHands: true })).state.players)
+    expect(step(state(zero(on(1)), { place: assigned, carrier: AGK, inHands: true })).state.players).toEqual(step(state(off(1), { place: assigned, carrier: AGK, inHands: true })).state.players)
+    // a CM on the ball in midfield: no landing pair, so the same step under on and off
+    const mid = { ...unassigned, [ACM]: { x: 0, y: 0 } }
+    expect(step(state(on(1), { place: mid, carrier: ACM })).state.players).toEqual(step(state(off(1), { place: mid, carrier: ACM })).state.players)
   })
 })
 

@@ -2153,14 +2153,24 @@ const landingSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, attack
     const contact = { x: pe.x_end, y: pe.y_end }
     return dist(w.player(defId).pos, contact) <= m.landingReactM ? contact : null
   }
+  const lt = landingPair(w, defSide)
+  if (!lt || lt.defId !== defId) return null
+  return markTarget(anchor, w.player(lt.attackerId).pos, defSide, w.period, m.landingGoalSideM, 1)
+}
+
+/**
+ * P5 ruling 18: the landing pair (landingTarget) for `defSide` while the opponents' keeper (hands or feet), or a CB or FB
+ * of theirs in his own third, has the ball; null otherwise. marksFor also uses it to give the landing CB his mark when
+ * assignMarks left him unpaired (controller ruling on preflight F25 row 11).
+ */
+const landingPair = (w: Work, defSide: Side): { defId: string; attackerId: string } | null => {
+  const pos = w.possession
   if (pos.kind !== "owned") return null
   const owner = w.player(pos.playerId)
   if (owner.side === defSide) return null
   const deep = owner.role === "GK" || ((owner.role === "CB" || owner.role === "FB") && attackX(owner.side, owner.pos.x, w.period) < -OWN_THIRD_U)
   if (!deep) return null
-  const lt = landingTarget(w.active(defSide), w.active(other(defSide)), defSide, w.period)
-  if (!lt || lt.defId !== defId) return null
-  return markTarget(anchor, w.player(lt.attackerId).pos, defSide, w.period, m.landingGoalSideM, 1)
+  return landingTarget(w.active(defSide), w.active(other(defSide)), defSide, w.period)
 }
 
 /** The own third ends at team-frame u -17.5 (the analysis zones). */
@@ -2448,6 +2458,9 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   const out = new Map<string, Vec2>()
   for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
     out.set(id, markSpot(w, defSide, id, anchors.get(id)!, a, ballFlat))
+  // P5 (plan 8e ruling 18; controller ruling on F25 row 11): the landing CB marks his man even if assignMarks left him unpaired.
+  const lp = w.p.marking.landingRule === 1 ? landingPair(w, defSide) : null
+  if (lp && anchors.has(lp.defId)) out.set(lp.defId, markSpot(w, defSide, lp.defId, anchors.get(lp.defId)!, w.player(lp.attackerId), ballFlat))
   return out
 }
 

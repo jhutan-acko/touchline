@@ -775,8 +775,8 @@ export const DEFAULT_PARAMS: Params = {
     // P4 A5 zonal marking (spec item A5). Built, but ships off (user ruling, P4 Task 10): with it on, free space was 9.6 m
     // against 6.0 real and the recalibrated gate loss 47.79; carried to P5.
     rule: 0, laneShare: 0.4, cbStepM: 10, dropMps: 1,
-    // P5 zonal cap (plan 8e ruling 17; 0: no cap, the old behaviour).
-    maxGapM: 0,
+    // P5 zonal cap (plan 8e ruling 17; 0: no cap, the old behaviour). 5 (Task 11, 16 matches): free space 7.0 m, tight 0.114.
+    maxGapM: 5,
     // P5 landing-spot marking and reaction (plan 8e ruling 18; rule 0: the old behaviour).
     landingRule: 0, landingGoalSideM: 1, landingReactM: 10
   },
