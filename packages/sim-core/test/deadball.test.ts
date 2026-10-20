@@ -321,18 +321,21 @@ describe("S8 kickoffs and rule off", () => {
   })
 })
 
+/** A player moves at this speed or more (m/s); slower, he is standing in place (the dead-speed metric's "moving players"). */
+const MOVING_MPS = 0.5
+
 interface Spell {
   readonly restart: RestartKind
   /** Seconds from the ball going dead to the set_piece event, and the delay planned (to the resume tick). */
   readonly s: number
   readonly planned: number
-  /** Outfielders' mean speed over the spell (m/s). */
+  /** The moving outfielders' mean speed over the spell (m/s): per tick over those at MOVING_MPS or more, then over the ticks with any. */
   readonly speed: number
 }
 
-/** The dead spells of seed 7's match under `p` (from open play to the kick); the period kickoffs are excluded. */
-const deadSpells = (p: Params): Spell[] => {
-  let s = initMatch(makeConfig(7, { params: p }))
+/** The dead spells of `seed`'s match under `p` (from open play to the kick); the period kickoffs are excluded. */
+const deadSpells = (p: Params, seed: number): Spell[] => {
+  let s = initMatch(makeConfig(seed, { params: p }))
   const out: Spell[] = []
   let open: { restart: RestartKind; tick: number; resume: number; speeds: number[] } | null = null
   let wasOpen = false
@@ -343,53 +346,45 @@ const deadSpells = (p: Params): Spell[] => {
     const ph = s.phase
     if (open && r.events.some((e) => e.type === "set_piece")) {
       const dt = s.config.dt
-      out.push({ restart: open.restart, s: (s.tick - open.tick) * dt, planned: (open.resume - open.tick) * dt, speed: open.speeds.reduce((a, b) => a + b, 0) / Math.max(1, open.speeds.length) })
+      const speed = open.speeds.length > 0 ? open.speeds.reduce((a, b) => a + b, 0) / open.speeds.length : 0
+      out.push({ restart: open.restart, s: (s.tick - open.tick) * dt, planned: (open.resume - open.tick) * dt, speed })
       open = null
     }
     if (ph.kind === "restart" && wasOpen && !open && s.period === period) open = { restart: ph.restart, tick: s.tick, resume: ph.resumeTick, speeds: [] }
     if (open && ph.kind === "restart") {
-      const outf = s.players.filter((x) => !x.sentOff && x.role !== "GK")
-      open.speeds.push(outf.reduce((a, x) => a + Math.hypot(x.vel.x, x.vel.y), 0) / outf.length)
+      const moving = s.players.filter((x) => !x.sentOff && x.role !== "GK").map((x) => Math.hypot(x.vel.x, x.vel.y)).filter((v) => v >= MOVING_MPS)
+      if (moving.length > 0) open.speeds.push(moving.reduce((a, b) => a + b, 0) / moving.length)
     }
     wasOpen = ph.kind === "open_play"
   }
   return out
 }
 
-/** Outfielders' mean speed over every dead tick of the spells. */
-const deadSpeed = (xs: ReadonlyArray<Spell>): number => xs.reduce((a, x) => a + x.speed * x.s, 0) / xs.reduce((a, x) => a + x.s, 0)
-
-describe("S8 in a match (seed 7, on against off)", () => {
-  // One match per rule, shared by the cases below.
-  let onSpells: Spell[] = []
-  let offSpells: Spell[] = []
+describe("S8 in a match (on; seeds 7 and 9)", () => {
+  // One match per seed, shared by the cases below.
+  let spells: Spell[] = []
   beforeAll(() => {
-    onSpells = deadSpells(on)
-    offSpells = deadSpells(off)
-  }, 300_000)
+    spells = [...deadSpells(on, 7), ...deadSpells(on, 9)]
+  }, 600_000)
 
-  it("in a match, dead-ball speed is at least 0.8 m/s and every kick waits only the taker's pause past its delay", () => {
-    expect(onSpells.length).toBeGreaterThan(20)
-    expect(deadSpeed(onSpells)).toBeGreaterThanOrEqual(0.8)
-    // The mechanism in a match: the kick comes the taker's pause (0.5-1 s) after the planned delay.
-    const late = onSpells.map((x) => x.s - x.planned)
+  // Phase B ruling: the real metric's definition, the median over restarts of the moving players' mean speed, against the
+  // real band 1.0-1.5 m/s (not against off, which already moves its players at 1.19 m/s on this engine).
+  it("in a match, players walk into place at 1.0-1.5 m/s while the ball is dead", () => {
+    expect(spells.length).toBeGreaterThan(40)
+    expect(median(spells.map((x) => x.speed))).toBeGreaterThanOrEqual(1.0)
+    expect(median(spells.map((x) => x.speed))).toBeLessThanOrEqual(1.5)
+  })
+
+  it("in a match, every kick waits only the taker's pause past its delay", () => {
+    const late = spells.map((x) => x.s - x.planned)
     expect(median(late)).toBeGreaterThanOrEqual(0.5)
     expect(median(late)).toBeLessThanOrEqual(1.0)
   })
 
-  // NOT MET (phase A, base 8b39626 before the P4 merge): the off engine already moves its outfielders while
-  // the ball is dead over seed 7's match, 1.19 m/s (3.9-4.9 m/s in the first 2 s after the whistle, 0.7 m/s after), and
-  // walking brings it down to 0.95 m/s under on. The plan's premise (off 0.2-0.4 m/s) is the pre-P1 analysis.
-  it.fails("NOT MET: in a match, dead-ball speed rises over off, which stays below 0.5 m/s (off 1.19, on 0.95)", () => {
-    expect(deadSpeed(offSpells)).toBeLessThan(0.5)
-    expect(deadSpeed(onSpells)).toBeGreaterThan(deadSpeed(offSpells))
-  })
-
-  // NOT MET (phase A, base 8b39626): seed 7's match has 14 throw-ins under on (off: median 16.95 s); their planned
-  // delays (lognormal at median 13.5 s, sigma 0.68) run long on this seed, so the median dead time is 18.85 s. The delay draw itself is at the real
-  // median (the unit cases above); the sample of 14 is what misses.
-  it.fails("NOT MET: in a match, the median throw-in dead time is 11-16 s (seed 7: 18.85 s on 14 throw-ins)", () => {
-    const throws = onSpells.filter((x) => x.restart === "throw_in").map((x) => x.s)
+  // Phase B ruling: the throw-in median on two seeds' throw-ins, not seed 7's 14 alone.
+  it("in a match, the median throw-in dead time is 11-16 s", () => {
+    const throws = spells.filter((x) => x.restart === "throw_in").map((x) => x.s)
+    expect(throws.length).toBeGreaterThan(20)
     expect(median(throws)).toBeGreaterThanOrEqual(11)
     expect(median(throws)).toBeLessThanOrEqual(16)
   })

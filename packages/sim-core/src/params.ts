@@ -890,7 +890,7 @@ export const DEFAULT_PARAMS: Params = {
     rule: 0,
     medianS: { throw_in: 13.5, goal_kick: 22, corner: 33, free_kick_att: 42, free_kick: 28, kickoff: 70 },
     sigma: { throw_in: 0.68, goal_kick: 0.47, corner: 0.18, free_kick_att: 0.31, free_kick: 0.57, kickoff: 0.22 },
-    minS: 3, lateGrowth: 0, walkMps: [1, 1.5], settleS: [2.5, 3.5], settleAttS: [6, 7], settleDefS: [13, 19], takerPauseS: [0.5, 1]
+    minS: 3, lateGrowth: 0.8, walkMps: [1, 1.5], settleS: [2.5, 3.5], settleAttS: [6, 7], settleDefS: [13, 19], takerPauseS: [0.5, 1]
   },
   // P5 G3 keeper restarts (plan 8e rulings 12, 13; rule 0: the old behaviour).
   keeperRestarts: { rule: 0, fkU: -17.5, fkShare: 1, longShift: 0, longM: 32, longErrorScale: 1 },
