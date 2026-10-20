@@ -10,7 +10,8 @@ import type { FormationName, MatchState, PlayerState, RestartKind } from "../src
 
 // Explicit arms (never DEFAULT_PARAMS as "off"); positioning pinned to the old template so a throw-in marker's anchor is
 // anchorFor(...) the test can recompute.
-const arm = (rule: number): Params => ({ ...P, setShapes: { ...P.setShapes, rule }, positioning: { ...P.positioning, rule: 0 } })
+// The shipped throw-in count is 1 at 10 m (tuned to the real rows); the seam tests pin the plan's three supporters at 9.5 m.
+const arm = (rule: number): Params => ({ ...P, setShapes: { ...P.setShapes, rule, throwShort: 3, throwShortM: 9.5 }, positioning: { ...P.positioning, rule: 0 } })
 const on = arm(1)
 const off = arm(0)
 

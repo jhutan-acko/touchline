@@ -883,7 +883,7 @@ export const DEFAULT_PARAMS: Params = {
       att: { GK: [-37.4, 0], CB: [-17, 8.4], FB: [-7.2, 21.4], DM: [-6.1, 9], CM: [-6.1, 9], AM: [-1.9, 12], W: [-0.7, 19.5], ST: [0.3, 9.6] },
       def: { GK: [44, 0], CB: [17.3, 5], FB: [14, 14.6], DM: [8.8, 5], CM: [8.8, 5], AM: [4.8, 10.6], W: [4.5, 15.2], ST: [0.5, 9.4] }
     },
-    throwShort: 3, throwShortM: 9.5, throwMarkWeight: 0.75
+    throwShort: 1, throwShortM: 10, throwMarkWeight: 0.75
   },
   // P5 S8 dead-ball timing (plan 8e ruling 11; rule 0: the old behaviour). sigma = ln(q75 / q25) / 1.349 from the report's IQRs.
   deadBall: {
