@@ -271,10 +271,11 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
     }
   })
 
-  // PHASE B (plan 8e wave 1): skipped until the branch carries P4's final result. On the phase-A base (8b39626, P4's
-  // switches off) the off arm's precondition misses by a hair: off 2.55 (11 corners: 3,1,4,0,3,5,0,4,1,3,4) against
-  // < 2.5; on 5.78 (9 corners: 6,6,5,6,6,6,6,5,6) against >= 4. The pinned values stay as the brief gives them.
-  it.skip("in matches, corners load the box", { timeout: 600_000 }, () => {
+  // Phase B (ledger rulings, Task 3). On the P4 engine the brief's off < 2.5 no longer holds: P4 positioning already puts
+  // attackers in the box (Task 2's 16-match baseline 3.32). The test pins the mechanism's effect instead: on >= 4 (the
+  // brief) and on - off >= 2. Seed 11 joins 7 and 9 so both arms keep >= 8 corners (with fkWideShiftU 3, seeds 7 and 9
+  // gave the on arm 6). Measured: on 5.64 (11 corners), off 3.46 (13 corners), difference 2.18.
+  it("in matches, corners load the box", { timeout: 600_000 }, () => {
     /** The restarting side's outfielders in the box at each corner's set_piece frame, the taker excluded (Task 2's att_box). */
     const boxCounts = (p: Params, seed: number): number[] => {
       let s = initMatch(makeConfig(seed, { params: p }))
@@ -291,13 +292,13 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
       }
       return out
     }
-    const arm = (p: Params) => [7, 9].flatMap((seed) => boxCounts(p, seed))
+    const arm = (p: Params) => [7, 9, 11].flatMap((seed) => boxCounts(p, seed))
     const mean = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length
     const a = arm(on)
     const b = arm(off)
     expect(a.length).toBeGreaterThanOrEqual(8)
     expect(b.length).toBeGreaterThanOrEqual(8)
-    expect(mean(b)).toBeLessThan(2.5)
+    expect(mean(a) - mean(b)).toBeGreaterThanOrEqual(2)
     expect(mean(a)).toBeGreaterThanOrEqual(4)
   })
 })

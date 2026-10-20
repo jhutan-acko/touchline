@@ -861,7 +861,7 @@ export const DEFAULT_PARAMS: Params = {
     rule: 0,
     corner: { GK: [-12, 0], CB: [42, 4], FB: [30, 7], DM: [39, 10], CM: [39, 10], AM: [43, 16], W: [37, 11], ST: [43, 4] },
     fk: { GK: [-13, 0], CB: [34, 5], FB: [22, 8], DM: [32.5, 11], CM: [32.5, 11], AM: [28, 13], W: [30, 9], ST: [37, 4] },
-    fkWideShiftU: 0, holdBackM: 2, runWindowS: 2, runSpeedShare: 0.75,
+    fkWideShiftU: 3, holdBackM: 2, runWindowS: 2, runSpeedShare: 0.75,
     restKeep: { corner: 1.4, fk_wide: 2.7, fk_central: 2.3, throw_att: 4.1 },
     restU: [20, 25], restSpreadM: 12
   },
