@@ -117,7 +117,7 @@ describe("saveChance under saveGeo", () => {
 })
 
 // In matches (replaces a conversion comparison that also held with SH3 off): the same on-target shots and keepers, scored under
-// off and under on. Two matches at dt 0.1 with the rule off; each shot is rebuilt at release from its flight (origin, crossing
+// off and under on. Eight matches at dt 0.1 with the rule off; each shot is rebuilt at release from its flight (origin, crossing
 // point, speed) and the defending keeper as he stood at the start of that tick. Match-level conversion is Task 8's.
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const calibrated = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
@@ -150,7 +150,8 @@ const pairedShots = (seed: number): Paired[] => {
 
 describe("SH3 on in-match shots", () => {
   it("paired on minus off: quick shots lose more save chance than slow ones", { timeout: 300_000 }, () => {
-    const shots = [7, 9].flatMap(pairedShots).sort((a, b) => a.flightS - b.flightS)
+    // Eight matches (F17): on the P4 engine (shot logit -3.6) seeds 7 and 9 give only 8 such shots; the eight give 53.
+    const shots = [7, 9, 11, 13, 15, 17, 19, 21].flatMap(pairedShots).sort((a, b) => a.flightS - b.flightS)
     expect(shots.length).toBeGreaterThanOrEqual(10)
     const half = Math.floor(shots.length / 2)
     const mean = (xs: ReadonlyArray<Paired>): number => xs.reduce((t, x) => t + x.delta, 0) / xs.length

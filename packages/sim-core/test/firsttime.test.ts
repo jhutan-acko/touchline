@@ -350,6 +350,8 @@ describe("SH1 in matches", () => {
    * receptions within 25 m in the match, 2 of them on the ground), so the share saturates below 0.2.
    * Measured on seeds 7 and 9 (shots with technique normal / first time): dt 0.1 b0 1: 52 / 6 (0.115), b0 6: 57 / 10
    * (0.175); dt 0.04 b0 1: 64 / 11 (0.172), b0 6: 67 / 10 (0.149).
+   * Re-measured on the P4-merged engine (ad54168; owner shot logit -3.6, quicker decisions), b0 6: dt 0.1 55 / 19
+   * (0.35), dt 0.04 47 / 17 (0.36). The 0.2 clause is now met, so the former it.fails is an it.
    * Share definition here: every shot with technique "normal" (open play and corner or free-kick deliveries alike;
    * penalties and direct free kicks aside), not open play only. Phase B judges open play (F8) with SH1 and SH2 on.
    */
@@ -382,10 +384,9 @@ describe("SH1 in matches", () => {
       expect(firstTime / n).toBeGreaterThanOrEqual(0.1)
       expect(firstTime / n).toBeLessThanOrEqual(0.6)
     }, 900_000)
-    // NOT MET in phase A: measured 0.175 (dt 0.1) and 0.149 (dt 0.04) at b0 6, see above. Re-checked in phase B on the
-    // P4-merged engine; when it passes there, this it.fails goes red and becomes an it.
-    // Only the one clause that is not met: the shot count and the 0.6 ceiling are asserted in the passing case above.
-    it.fails(`NOT MET: about two in five shots are first time (dt ${dt})`, () => {
+    // NOT MET in phase A (0.175 at dt 0.1, 0.149 at dt 0.04); MET on the P4-merged engine (0.35, 0.36), see above.
+    // The shot count and the 0.6 ceiling are asserted in the case above. The real 0.33-0.49 open-play target is Task 8's.
+    it(`about two in five shots are first time (dt ${dt})`, () => {
       const { n, firstTime } = shares(dt)
       expect(firstTime / n).toBeGreaterThanOrEqual(0.2)
     }, 900_000)

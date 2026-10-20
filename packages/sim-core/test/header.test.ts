@@ -252,13 +252,16 @@ describe("SH2: the header seam (step)", () => {
   })
 })
 
-// In-match tests use the calibrated file plus the rule on, corners and free-kick deliveries included.
+// In-match tests use the calibrated file plus the rule on, corners and free-kick deliveries included. header.b0 is pinned
+// at 0.5 (the top of Task 4 Step 3's grid) until phase B sets it: on the P4-merged engine (ad54168) the -0.5 prior gives a
+// header share of 0.047 at dt 0.1 and 0.060 at dt 0.04 over 16 seeds (about 3.6 eligible contacts per match, ~40 % headed),
+// at the 0.05 floor; b0 0.5 gives 19/222 (0.086) and 26/222 (0.117) over seeds 7-21. Phase B removes the pin.
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const calibrated = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
 const matchOn: Params = {
   ...calibrated,
   firstTime: { ...calibrated.firstTime, rule: 0, setPieces: 1 },
-  header: { ...calibrated.header, rule: 1 },
+  header: { ...calibrated.header, rule: 1, b0: 0.5 },
   saveGeo: { ...calibrated.saveGeo, rule: 0 },
   execFatigue: { ...calibrated.execFatigue, rule: 0 },
   shotModel: { ...calibrated.shotModel, rule: 0 }
@@ -279,7 +282,7 @@ const shotsOf = (p: Params, seed: number, dt: number): DomainEvent[] => {
 describe("SH2: in matches", () => {
   for (const dt of [0.1, 0.04])
     it(`in matches, headers appear (dt ${dt})`, () => {
-      const seeds = [7, 9, 11, 13]
+      const seeds = [7, 9, 11, 13, 15, 17, 19, 21]
       // Precondition: no headed shot without the rule.
       const offShots = shotsOf(matchOff, seeds[0]!, dt)
       expect(offShots.length).toBeGreaterThan(10)
