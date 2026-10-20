@@ -812,8 +812,9 @@ export const DEFAULT_PARAMS: Params = {
   saveGeo: { rule: 0, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.3, reactionS: 0.2, bFlightS: 3.5, flightCapS: 1 },
   // P6 SH4 execution fatigue (spec item SH4; rule 0: the old behaviour). k 0.25, ref 0, power 1 equal rule 0 numerically.
   execFatigue: { rule: 0, k: 0.25, ref: 0, power: 1 },
-  // P6 shot logit and xG refit (spec "P6: shot model"; rule 0: the old behaviour). xg starts as shot.xg; bXg, pivot, bRisk as decide's term.
-  shotModel: { rule: 0, xg: { b0: -1.25, bDist: -0.08, bAngle: 1.2, bHeader: -1, bDefenders: -0.3 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
+  // P6 shot logit and xG refit (spec "P6: shot model"; rule 0: the old behaviour). xg: Task 2's fractional-logit fit to DFL model xG
+  // (159 IDSSE shots, fitted mean 0.0916 = DFL). bXg 3, pivot 0.1 from Task 7 Step 3 (grid 2/3/4 x 0.05/0.1): open-play shots and loose setups nearest real.
+  shotModel: { rule: 0, xg: { b0: -3.004, bDist: -0.0392, bAngle: 4.059, bHeader: -1.617, bDefenders: -0.342 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   // Script nudges re-set in P4 Task 10 (scripts only, never the bounds): pressSurge 4 -> 20, since press.rateScale

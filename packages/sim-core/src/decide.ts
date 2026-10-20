@@ -133,13 +133,16 @@ export const xgOf = (p: Params, side: Side, period: Period, pos: Vec2, header: b
 // ================================================================ P6 shot-model seam (plan 8f Task 7 owns this block)
 
 /** The xG model's coefficients (P6 xG refit: shotModel.xg under shotModel.rule 1). rule 0: the old behaviour, shot.xg. */
-export const xgCoefs = (p: Params): Params["shot"]["xg"] => p.shot.xg
+export const xgCoefs = (p: Params): Params["shot"]["xg"] => (p.shotModel.rule === 1 ? p.shotModel.xg : p.shot.xg)
 
 /**
  * The shot's term in decide's action logits (P6 shot logit: bXg (xg - pivot) + bRisk riskTolerance in open play under
  * shotModel.rule 1; a restart keeps the old term). rule 0: the old behaviour, 3 (xg - 0.1) + 0.3 riskTolerance.
  */
-export const shotTerm = (xg: number, style: TeamStyle, _restart: RestartKind | null, _p: Params): number => 3 * (xg - 0.1) + 0.3 * style.riskTolerance
+export const shotTerm = (xg: number, style: TeamStyle, restart: RestartKind | null, p: Params): number => {
+  const m = p.shotModel
+  return m.rule === 1 && restart === null ? m.bXg * (xg - m.pivot) + m.bRisk * style.riskTolerance : 3 * (xg - 0.1) + 0.3 * style.riskTolerance
+}
 
 // ================================================================ end of P6 shot-model seam
 
