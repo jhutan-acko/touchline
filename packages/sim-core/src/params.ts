@@ -581,8 +581,8 @@ export const DEFAULT_PARAMS: Params = {
   // P3 X1 (rule 1 ships; the values are the calibrated ones).
   firstTick: {
     rule: 1, alongM: 0.5, coneDeg: 60, bootM: 1, bootBlock: 0.1,
-    // P4 M5 (spec item M5; rule 0: the old behaviour).
-    scopeRule: 0
+    // P4 M5 (spec item M5; switched on in P4 Task 10).
+    scopeRule: 1
   },
   ball: { gravity: 9.81, substeps: 4 },
   physics: {
@@ -607,9 +607,9 @@ export const DEFAULT_PARAMS: Params = {
   // P3 D2 (rule 1 ships; the values are the calibrated ones).
   release: {
     rule: 1, pressedM: 2, pressedS: [0.2, 0.7], tailShare: 0.35, tailMeanS: 2.5,
-    // P4 M6 (spec item M6; capS 0 and rejudge 0: the old behaviour).
-    capS: 0,
-    rejudge: 0
+    // P4 M6 (spec item M6; switched on in P4 Task 10, capS 6 from Task 9; capS 0 and rejudge 0 are the old behaviour).
+    capS: 6,
+    rejudge: 1
   },
   actions: {
     logits: {
@@ -723,7 +723,8 @@ export const DEFAULT_PARAMS: Params = {
   support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
   marking: {
     weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
-    // P4 A5 zonal marking (spec item A5; rule 0: the old behaviour).
+    // P4 A5 zonal marking (spec item A5). Built, but ships off (user ruling, P4 Task 10): with it on, free space was 9.6 m
+    // against 6.0 real and the recalibrated gate loss 47.79; carried to P5.
     rule: 0, laneShare: 0.4, cbStepM: 10, dropMps: 1
   },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
@@ -778,23 +779,26 @@ export const DEFAULT_PARAMS: Params = {
   fatigue: { drainBase: 0.00004, drainSpeed2: 0.000012, staminaSlope: 0.8, halfTimeRecovery: 0.1, executionK: 0.25, tiring: 1, hiSpeedMs: 5.56, loadWindowS: 300, loadFreeM: 45, loadDamp: 0.5, loadFloor: 0.5 },
   firstTouch: { b0: -3.9, bSpeed: 1.0, bHigh: 1.2, bPressure: 1.5, bSkill: -3.5, missedShare: 0.15, miscontrolShare: 0.35 },
   groundDuel: { bSkill: 3, bReach: 2, contestM: 0.6 },
-  // P4 T2 tackle success (spec item T2; rule 0: the old behaviour).
-  tackle: { rule: 0, base: 0.25, frontLogit: 0.35, behindLogit: -0.35, frontDeg: 60, behindDeg: 120, supportLogit: 0.4, supportM: 5, supportMax: 2, speedLogit: -0.1, boxLogit: 0.3, headingMinMps: 1 },
-  // P4 T3/T4 fouls (spec items T3, T4; rule 0: the old behaviour).
-  fouls: { rule: 0, finalThirdU: 17.5, finalThird: 0.4, box: 0.12, side: 1.6, behind: 2.4, attackerShare: 0.05, shieldSpeedMax: 2, takeOnShare: 0.15 },
-  // P4 T4 aerial duels (spec item T4; rule 0: the old behaviour).
-  aerial: { rule: 0, contestM: 2, bHeading: 3, bSlack: 1, foulShare: 0.13 },
-  // P4 A4 transitions (spec item A4; rule 0: the old behaviour).
+  // P4 T2 tackle success (spec item T2; switched on in P4 Task 10).
+  tackle: { rule: 1, base: 0.25, frontLogit: 0.35, behindLogit: -0.35, frontDeg: 60, behindDeg: 120, supportLogit: 0.4, supportM: 5, supportMax: 2, speedLogit: -0.1, boxLogit: 0.3, headingMinMps: 1 },
+  // P4 T3/T4 fouls (spec items T3, T4; switched on in P4 Task 10).
+  fouls: { rule: 1, finalThirdU: 17.5, finalThird: 0.4, box: 0.12, side: 1.6, behind: 2.4, attackerShare: 0.05, shieldSpeedMax: 2, takeOnShare: 0.15 },
+  // P4 T4 aerial duels (spec item T4; switched on in P4 Task 10).
+  aerial: { rule: 1, contestM: 2, bHeading: 3, bSlack: 1, foulShare: 0.13 },
+  // P4 A4 transitions (spec item A4; switched on in P4 Task 10).
   transition: {
-    rule: 0, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
+    rule: 1, windowS: 3, joinM: [5, 10, 15, 20, 30], joinP: [0.8, 0.3, 0.23, 0.13, 0.07], speed: 4.5, pauseS: 1.5, pauseShare: 0.55, pauseRadiusM: 10,
     recoverFromS: 2.5, recoverPeakS: [5, 6], recoverToS: 8, recoverRatePerS: 0.05, recoverBehindFactor: 0.33, recoverUpfieldM: -10, recoverS: [1.5, 3], recoverSpeedShare: 0.9
   },
-  // P4 A5 team pressing (spec item A5; rule 0: the old behaviour). Task 7 tuned rateScale and roleWeight with tackle,
+  // P4 A5 team pressing (spec item A5; switched on in P4 Task 10). Task 7 tuned rateScale and roleWeight with tackle,
   // transition, marking and press on (16 held-out matches): press episodes 428/90 (real 405), >=3 engaged 0.060 (0.049);
   // team-press starts (counter-press joiners excluded) CM .334 W .216 FB .151 AM .060 ST .123 CB .116 (real .37/.19/.13/.11/.11/.10).
   // secondShare stays 0.45 (offball-report B2): 0.35 left the >=3 engaged share unchanged.
+  // rateScale 0.1 -> 0.5 (user ruling, P4 Task 10): with zonal marking off, 0.1 left the nearest defender 7.2 m from the
+  // ball (real 5.1, z +4.1); swept 0.2 / 0.3 / 0.5 on the gate seeds, 0.5 is the lowest with |z| < 3 (6.59, z 2.95),
+  // and press episodes stay 391/90 (16 held-out matches).
   press: {
-    rule: 0, rateScale: 0.1, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
+    rule: 1, rateScale: 0.5, backToGoalLift: 2, backToGoalS: 1.5, backToGoalBallMps: 5, ownThirdLift: 2, ownThirdU: 17.5,
     roleWeight: { CB: 0.6, FB: 0.8, DM: 1, CM: 0.9, AM: 1.6, W: 1.4, ST: 0.55 }, secondM: 12, secondRadiusM: 15, secondShare: 0.45, shadowM: 4
   },
   // ---- realism v2 P6 (plan 8f)
@@ -810,9 +814,14 @@ export const DEFAULT_PARAMS: Params = {
   shotModel: { rule: 0, xg: { b0: -1.25, bDist: -0.08, bAngle: 1.2, bHeader: -1, bDefenders: -0.3 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
+  // Script nudges re-set in P4 Task 10 (scripts only, never the bounds): pressSurge 4 -> 20, since press.rateScale
+  // scales the team-press hazard. Pressures per opponent pass (sim-core scenario test, bound x1.3): at rateScale 0.1 on the
+  // pre-tuned params x1.30 at 4 and x1.71 at 20; on the final params (rateScale 0.5) x1.36 at 4, x1.44 at 10, x1.47 at 20.
+  // The stats pressure-shift signal (final params, bound 5 of 6 seeds): 4 at 10, 5 at 15, 20 and 30. howlerSave 1.5 -> 2, since the
+  // recalibrated keeper lets in 44 % of shots on target (howlers 0.62 against 1.5 x 0.44; 0.74 at 2).
   script: {
     goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
-    momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 4, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 1.5, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
+    momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 20, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
   substitutions: { windowMinutes: [64, 75, 84], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 0.15, FB: 0.4, DM: 0.7, CM: 0.7, AM: 0.9, W: 1, ST: 0.9 } },

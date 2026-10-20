@@ -13,7 +13,11 @@ export interface Resolution {
   /** Ball state at resolution: the contact point for "reached", the crossing point for "goal"/"out". */
   readonly ball: BallState
   readonly aerial: { readonly winnerId: string; readonly loserId: string } | null
-  /** T4 aerial duels (realism v2 P4, aerial.rule 1): the opponent who contests an aerial contact, and his reach slack (m). */
+  /**
+   * T4 aerial duels (realism v2 P4, aerial.rule 1): the other side's outfielder who contests an aerial contact, and his
+   * slack relative to the player who takes it (m): his reach slack minus the winner's, so <= 0 when he also qualifies and
+   * < 0 (minus his miss, at most aerial.contestM, minus the winner's slack) when he only nearly reaches it.
+   */
   readonly contest?: { readonly id: string; readonly slack: number }
 }
 
@@ -159,7 +163,10 @@ export const resolveFlight = (
       // T4 (aerial.rule 1): no draw here. The first to the contact (the best by slack when both sides reach it, else the
       // old choice) takes it, and the other side's best outfielder, qualifying or within contestM of his disc, contests
       // it; the step's aerial seam draws the duel. contest.slack is his slack minus the first's (<= 0 when he qualifies
-      // too, < 0 otherwise). Keepers neither win nor make contests: keeper claims belong to keeperComes (pre-flight G27).
+      // too, < 0 otherwise). Keepers never contest (the rival and near-miss filters skip them; keeper claims belong to
+      // keeperComes, pre-flight G27). But a keeper who is first to the contact (the best slack when both sides reach it)
+      // takes the ball outright, with no duel, where rule 0 made a heading draw; a keeper who qualifies but is not first is
+      // ignored. Untested, carried to P5 with keeper catch volume (P4 final review).
       const bySlack = [...qualifiers].sort((x, y) => y.slack - x.slack)
       const intendedQ = sides.size === 1 ? qualifiers.find((q) => q.pl.id === intendedId) : undefined
       const first = sides.size === 2 ? bySlack[0]! : (intendedQ ?? [...qualifiers].sort((x, y) => x.f - y.f || y.slack - x.slack)[0]!)

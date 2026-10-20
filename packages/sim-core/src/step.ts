@@ -28,7 +28,7 @@ import {
 import { assignMarks, laneMarkTarget, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, stepsOut, supportersWanted, supportGate, supportSpot } from "./offball.js"
 import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
 import type { Action, Params } from "./params.js"
-import { goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight, type Resolution } from "./resolve.js"
+import { aerialWinShare, goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight, type Resolution } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
 import { MAX_SUBS, MAX_SUB_WINDOWS, type SubOrder } from "./orders.js"
 import { anchorFor, kickoffAnchor } from "./shape.js"
@@ -79,16 +79,11 @@ import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 // ---- P4 imports, foul seam (plan 8d Task 4 inserts below this line)
 import { angleFactor, zoneFactor } from "./fouls.js"
 
-// ---- P4 imports, aerial seam (plan 8d Task 5 inserts below this line)
-import { aerialWinShare } from "./resolve.js"
-
 // ---- P4 imports, transition seam (plan 8d Task 6 inserts below this line)
 import { joinChance, pauseTarget, recoverRate, windowTicks } from "./transition.js"
 
 // ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
 import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "./press.js"
-
-// ---- P4 imports, marking seam (plan 8d Task 8 inserts below this line)
 
 // ---- P6 imports, contact executor (plan 8f Task 1; no wave task inserts below this line)
 import { CONTROL, OPEN_SHOT, type ContactPlan, type ShotHow } from "./contact.js"
@@ -643,12 +638,12 @@ export const foulChance = (w: Work, def: PlayerState, owner: PlayerState): numbe
 }
 
 /**
- * T4: whether the carrier `owner` fouls the tackler `def` (shielding or holding): only a carrier slower than
+ * T4: whether the carrier `owner` fouls the tackler (shielding or holding): only a carrier slower than
  * shieldSpeedMax, with chance attackerShare x his booked factor x his side's mods.foul (foul stream, drawn only then).
  * rule 0: never, no draw.
  * @internal
  */
-export const shieldingFoul = (w: Work, _def: PlayerState, owner: PlayerState): boolean => {
+export const shieldingFoul = (w: Work, owner: PlayerState): boolean => {
   const f = w.p.fouls
   if (f.rule !== 1 || Math.hypot(owner.vel.x, owner.vel.y) >= f.shieldSpeedMax) return false
   return w.rng.foul.chance(Math.min(1, f.attackerShare * bookedFoul(w, owner) * w.mods(owner.side).foul))
@@ -683,7 +678,7 @@ const duels = (w: Work, owner: PlayerState): boolean => {
   const style = teamOf(w.cfg, def.side).style
   const rate = w.p.defending.tackleRatePerS * (0.5 + style.pressIntensity) * (1 + w.p.defending.boxIntensity * danger(def.side, w.period, owner.pos)) * w.mods(def.side).tackle
   if (!w.rng.duel.chance(hazard(rate, w.dt))) return false
-  if (shieldingFoul(w, def, owner)) {
+  if (shieldingFoul(w, owner)) {
     finishCarry(w, owner)
     foulAndCards(w, owner, def, "shielding", def.pos)
     return true
@@ -807,7 +802,7 @@ const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { techniq
  * decided at release. rule 0: the resolution unchanged, no foul.
  * @internal
  */
-export const aerialDuel = (w: Work, res: Resolution, _owner: PlayerState): { res: Resolution; foul: FlightFoul | null } => {
+export const aerialDuel = (w: Work, res: Resolution): { res: Resolution; foul: FlightFoul | null } => {
   const a = w.p.aerial
   if (a.rule <= 0 || !res.contest || !res.winnerId) return { res, foul: null }
   // The first to the contact against his contender (resolveFlight: contest.slack is the contender's slack minus his).
@@ -876,7 +871,7 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const fp = flightParams(w, isClear)
   const raw = keeperLetsRun(start, owner.id, intended, w.active(), resolveFlight(start, owner.id, intended, w.active(), fp, w.dt, w.rng.duel), w.period, fp, w.dt, w.rng.duel)
   // An aerial contact may be contested (T4, aerial seam); a foul in the duel is given when the flight resolves.
-  const ad = aerialDuel(w, raw, owner)
+  const ad = aerialDuel(w, raw)
   const res = ad.res
   const lastDef = lastDefenderAttackX(side, w.period, opps)
   const winner = res.winnerId ? w.player(res.winnerId) : null
@@ -2137,6 +2132,12 @@ const endPeriod = (w: Work): StepResult => {
   w.phase = { kind: "restart", restart: "kickoff", side: "away", at: { x: 0, y: 0 }, resumeTick: w.tick }
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
+  // Half-time is a restart, not a loss (P4 A4, ruling 9): no transition or press state crosses into the second half
+  // (P4 final review: a loss in the last seconds of the first half held the pause, recovery runs and the team-press-off
+  // window into the second-half kickoff).
+  w.transition = undefined
+  w.press = undefined
+  w.pressedBy = []
   w.emit(w.pending("period_start", null, null, { period: "second_half" }))
   for (const side of ["home", "away"] as const)
     if ((teamOf(w.cfg, side).bench ?? []).length > 0 && w.rng.bench.chance(w.p.substitutions.halfTimeChance) && !isManaged(w.cfg, side)) makeSubs(w, side, 1, true)

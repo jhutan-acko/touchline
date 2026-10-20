@@ -143,10 +143,12 @@ describe("realism v2 P3 params", () => {
 
 describe("realism v2 P4 params", () => {
   const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
-  it("ship switched off, with the spec's join table, tackle terms and foul factors, and four new RNG streams", () => {
+  it("ship switched on (Task 10) except zonal marking, with the spec's join table, tackle terms and foul factors, a 6 s release cap, and four new RNG streams", () => {
     const P = DEFAULT_PARAMS
-    for (const r of [P.tackle.rule, P.fouls.rule, P.aerial.rule, P.transition.rule, P.press.rule, P.marking.rule, P.firstTick.scopeRule, P.release.rejudge]) expect(r).toBe(0)
-    expect(P.release.capS).toBe(0)
+    for (const r of [P.tackle.rule, P.fouls.rule, P.aerial.rule, P.transition.rule, P.press.rule, P.firstTick.scopeRule, P.release.rejudge]) expect(r).toBe(1)
+    // Zonal marking (A5) is built but ships off, carried to P5 (user ruling after the Task 10 gate: free space 9.6 m against 6.0).
+    expect(P.marking.rule).toBe(0)
+    expect(P.release.capS).toBe(6)
     expect(P.transition.joinP).toEqual([0.8, 0.3, 0.23, 0.13, 0.07])
     expect([P.tackle.frontLogit, P.tackle.behindLogit, P.tackle.supportLogit, P.tackle.boxLogit]).toEqual([0.35, -0.35, 0.4, 0.3])
     expect([P.fouls.finalThird, P.fouls.box, P.fouls.behind]).toEqual([0.4, 0.12, 2.4])

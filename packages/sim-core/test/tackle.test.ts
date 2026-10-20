@@ -10,12 +10,13 @@ import type { MatchState, PlayerState } from "../src/types.js"
 const off: Params = { ...P, tackle: { ...P.tackle, rule: 0 } }
 const on: Params = { ...P, tackle: { ...P.tackle, rule: 1 } }
 const t = on.tackle
-// The in-match test measures T2 alone: every other P4 switch is pinned to 0, so Task 10's switch-on cannot move it.
+// The in-match test measures T2 alone: every other P4 switch is pinned to 0, and release.capS to 0 (no cap; Task 10
+// pinned it when the switch-on moved the support gap to 0.069), so Task 10's switch-on cannot move it.
 const onAlone: Params = {
   ...on,
   fouls: { ...on.fouls, rule: 0 }, aerial: { ...on.aerial, rule: 0 }, transition: { ...on.transition, rule: 0 },
   press: { ...on.press, rule: 0 }, marking: { ...on.marking, rule: 0 },
-  firstTick: { ...on.firstTick, scopeRule: 0 }, release: { ...on.release, rejudge: 0 }
+  firstTick: { ...on.firstTick, scopeRule: 0 }, release: { ...on.release, rejudge: 0, capS: 0 }
 }
 
 const base = kickoffPlayersFor(makeConfig(1))

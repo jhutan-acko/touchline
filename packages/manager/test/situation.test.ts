@@ -5,9 +5,9 @@ import { initMatch, step, type MatchState } from "@touchline/sim-core"
 import { Situation } from "@touchline/schema"
 import { describe, expect, it } from "vitest"
 import { MAX_SITUATION_TOKENS, MatchWatch, payloadTokens, situationAt, situationHash, situationJson } from "../src/situation.js"
-import { leagueConfig, models, playMoments, xt } from "./helpers.js"
+import { leagueConfig, models, playMoments, xt, MOMENTS_SEED } from "./helpers.js"
 
-const cfg = leagueConfig(11)
+const cfg = leagueConfig(MOMENTS_SEED)
 const run = playMoments(cfg, (m) => m.reasons.includes("minute_60"))
 const at60 = run.moments.find((m) => m.reasons.includes("minute_60"))!
 const sit = situationAt(at60.state, "home", at60.reasons, run.watch)
@@ -87,7 +87,7 @@ describe("the situation sent to the manager agent", () => {
     expect(s12.players.on_pitch.reduce((a, p) => a + p.shots, 0)).toBe(s12.team.stats.shots)
   })
   it("matches the reviewed example (UPDATE_GOLDEN=1 rewrites it after a deliberate change)", () => {
-    const file = join(import.meta.dirname, "golden/situation-m-11-minute_60.json")
+    const file = join(import.meta.dirname, "golden/situation-m-13-minute_60.json")
     const text = JSON.stringify(sit, null, 1) + "\n"
     if (process.env.UPDATE_GOLDEN === "1") writeFileSync(file, text)
     expect(text).toBe(readFileSync(file, "utf8"))

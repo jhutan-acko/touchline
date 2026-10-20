@@ -5,8 +5,16 @@ import { kickoffPlayersFor, makeConfig, STYLES } from "../src/testing.js"
 // These cases test the old engine's pass knobs (pitch-control weight, safety lean), which D1 retires from the choice
 // (plan 8c rulings 9 and 10): pinned to choice.rule 0 (ruling F6), since Task 10 switched D1 on in the defaults.
 // Also pinned to support.rule 0 (the support play its whole-match margin was measured with), since Task 10d switched
-// support rule 1 on.
-const OLD: Params = { ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 }, support: { ...DEFAULT_PARAMS.support, rule: 0 } }
+// support rule 1 on. And every P4 behaviour off (P4 Task 10 switched them on: with them, the whole-match gain fell to
+// +0.4 points on seeds 35-38).
+/** Every P4 behaviour off (rules 0, no release cap): the play this file's whole-match margins were measured with (F4). */
+const p4Off = (p: Params): Params => ({
+  ...p,
+  tackle: { ...p.tackle, rule: 0 }, fouls: { ...p.fouls, rule: 0 }, aerial: { ...p.aerial, rule: 0 }, transition: { ...p.transition, rule: 0 },
+  press: { ...p.press, rule: 0 }, marking: { ...p.marking, rule: 0 }, firstTick: { ...p.firstTick, scopeRule: 0 },
+  release: { ...p.release, capS: 0, rejudge: 0 }
+})
+const OLD: Params = p4Off({ ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 }, support: { ...DEFAULT_PARAMS.support, rule: 0 } })
 const withPass = (p: Params, pass: Partial<Params["pass"]>): Params => ({ ...p, pass: { ...p.pass, ...pass } })
 
 /** The home centre-back on the ball at (-20, 0), two midfielders 15 m ahead, one with a defender closing in on him. */

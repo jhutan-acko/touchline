@@ -82,7 +82,9 @@ describe("player statistics parity", () => {
   // In CI the test must run: a missing uv fails it rather than skipping it.
   it.skipIf(!hasUv && !process.env.CI)("TypeScript and Python give the same histograms for a simulated match", () => {
     const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
-    const cfg = { matchId: "phys-parity", seed: 4243, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[1]!, away: league.clubs[2]!, params: DEFAULT_PARAMS, dt: 0.1 }
+    // Seed 4244: the first from 4243 on with at least 10 full-match outfielders for the work-rate parity (P4 Task 10:
+    // 4243 now has 8, after substitutions and sendings-off).
+    const cfg = { matchId: "phys-parity", seed: 4244, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[1]!, away: league.clubs[2]!, params: DEFAULT_PARAMS, dt: 0.1 }
     const tracks = simTracks(runMatch(cfg).frames, rolesOf(cfg))
     expect(tracks.size).toBeGreaterThanOrEqual(22)
     const file = join(mkdtempSync(join(tmpdir(), "touchline-physics-")), "tracks.json")

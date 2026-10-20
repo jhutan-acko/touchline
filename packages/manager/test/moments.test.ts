@@ -1,9 +1,9 @@
 import { initMatch, isFinished, step } from "@touchline/sim-core"
 import { describe, expect, it } from "vitest"
 import { keyMoment, minuteOf, NO_MOMENTS } from "../src/moments.js"
-import { leagueConfig, playMoments } from "./helpers.js"
+import { leagueConfig, playMoments, MOMENTS_SEED } from "./helpers.js"
 
-const run = playMoments(leagueConfig(11))
+const run = playMoments(leagueConfig(MOMENTS_SEED))
 const withReason = (r: string) => run.moments.filter((m) => m.reasons.includes(r as never))
 
 describe("key moments", () => {
@@ -24,7 +24,7 @@ describe("key moments", () => {
       const ms = withReason(reason)
       expect(ms).toHaveLength(1)
       // An independent scan of the same match: the first state at a restart from that minute on.
-      let s = initMatch(leagueConfig(11))
+      let s = initMatch(leagueConfig(MOMENTS_SEED))
       while (!isFinished(s) && !(s.phase.kind === "restart" && minuteOf(s) >= at)) s = step(s).state
       expect(ms[0]!.state.tick).toBe(s.tick)
     }
