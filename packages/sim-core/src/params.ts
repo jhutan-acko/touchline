@@ -805,7 +805,8 @@ export const DEFAULT_PARAMS: Params = {
   // P6 SH1 first-time finishes (spec item SH1; rule 0: the old behaviour). bArrival is a prior, not fitted (ruling 4).
   firstTime: { rule: 0, setPieces: 1, maxGoalM: 25, b0: -1, bXg: 6, bArrival: -0.5, layOffLogit: -1.5, layOffMaxM: 12, arrivalAimK: 0.3, speedAimK: 0.2, speedRefMps: 12 },
   // P6 SH2 headers (spec item SH2; rule 0: the old behaviour). zMin and zMax are kinematics.controlHeightM and headerHeightM.
-  header: { rule: 0, zMin: 1, zMax: 2.4, b0: -0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
+  // b0 0.5: the top of Task 4 Step 3's grid (-1.5, -0.5, 0.5), nearest the real share on the refit xG scale (phase B).
+  header: { rule: 0, zMin: 1, zMax: 2.4, b0: 0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
   // P6 SH3 keeper-position saves (spec item SH3; rule 0: the old behaviour). Priors (ruling 10); offLineRefM is the real median at shots.
   saveGeo: { rule: 0, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.6, reactionS: 0.2, bFlightS: 2.5, flightCapS: 1 },
   // P6 SH4 execution fatigue (spec item SH4; rule 0: the old behaviour). k 0.25, ref 0, power 1 equal rule 0 numerically.
