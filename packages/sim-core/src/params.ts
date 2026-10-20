@@ -901,7 +901,7 @@ export const DEFAULT_PARAMS: Params = {
     runRule: 0, rotateRule: 0,
     run: { roleWeight: { ST: 0.45, W: 1.4, AM: 0.5, FB: 0.6 }, holdM: 1, wideShare: 0.6, spaceBehindM: 10 },
     overlap: { ratePerS: 0.2, behindM: 15, outsideM: 3, aheadM: 6, speed: 5, durS: [1, 2] },
-    inside: { ratePerS: 0.1, halfSpaceY: [5, 8], durS: [1.5, 3.5] },
+    inside: { ratePerS: 0.5, halfSpaceY: [5, 8], durS: [4, 6] },
     invert: { ratePerS: 0.1, inM: [5, 10], aboveLastM: 15, durS: [1.5, 4.5] },
     cmDrop: { ratePerS: 0.3, winS: 5, durS: [1.5, 3] },
     jogMps: 3.5
