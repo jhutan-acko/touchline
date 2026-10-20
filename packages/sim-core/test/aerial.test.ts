@@ -111,7 +111,7 @@ describe("T4: the aerial duel (step seam)", () => {
       let firstWins = 0
       for (let i = 0; i < n; i++) {
         const before = w.rng.aerial.state
-        const r = aerialDuel(w, contested(a, b, slack, 10, 0), w.player(a)).res
+        const r = aerialDuel(w, contested(a, b, slack, 10, 0)).res
         expect(w.rng.aerial.state).not.toEqual(before)
         if (r.winnerId === a) firstWins++
         else expect(r.winnerId).toBe(b)
@@ -127,7 +127,7 @@ describe("T4: the aerial duel (step seam)", () => {
     const w = workAt(s)
     const res = contested(s.players[10]!.id, s.players[13]!.id, -0.5, 10, 0)
     const before = [w.rng.aerial.state, w.rng.foul.state]
-    const out = aerialDuel(w, res, w.player(s.players[10]!.id))
+    const out = aerialDuel(w, res)
     expect(out.res).toBe(res)
     expect(out.foul).toBeNull()
     expect([w.rng.aerial.state, w.rng.foul.state]).toEqual(before)
@@ -146,7 +146,7 @@ describe("T4: the aerial duel (step seam)", () => {
       const w = workAt({ ...s, config: { ...s.config, params: sure } })
       withHeading(w, attacker.id, 0.9)
       withHeading(w, defender.id, 0.3)
-      const ad = aerialDuel(w, contested(attacker.id, defender.id, 0, 47, 2), w.player(attacker.id))
+      const ad = aerialDuel(w, contested(attacker.id, defender.id, 0, 47, 2))
       expect(ad.res.aerial).toEqual({ winnerId: attacker.id, loserId: defender.id })
       expect(ad.foul).toEqual({ offenderId: defender.id, victimId: attacker.id, at: { x: 47, y: 2 }, offenderYellow: 0 })
       expect(applyFlightFoul(w, ad.foul!)).toBe(true)
@@ -158,7 +158,7 @@ describe("T4: the aerial duel (step seam)", () => {
       const w = workAt({ ...s, config: { ...s.config, params: sure } })
       withHeading(w, attacker.id, 0.3)
       withHeading(w, defender.id, 0.9)
-      const ad = aerialDuel(w, contested(attacker.id, defender.id, 0, 47, 2), w.player(attacker.id))
+      const ad = aerialDuel(w, contested(attacker.id, defender.id, 0, 47, 2))
       expect(ad.res.winnerId).toBe(defender.id)
       expect(ad.res.ball.pos).toMatchObject({ x: 47, y: 2 })
       expect(ad.foul).toMatchObject({ offenderId: attacker.id, victimId: defender.id })
@@ -169,7 +169,7 @@ describe("T4: the aerial duel (step seam)", () => {
     {
       const w = workAt({ ...s, config: { ...s.config, params: onWith({ foulShare: 0 }) } })
       const before = w.rng.foul.state
-      expect(aerialDuel(w, contested(attacker.id, defender.id, 0, 47, 2), w.player(attacker.id)).foul).toBeNull()
+      expect(aerialDuel(w, contested(attacker.id, defender.id, 0, 47, 2)).foul).toBeNull()
       expect(w.rng.foul.state).not.toEqual(before)
     }
   })
@@ -184,7 +184,7 @@ describe("T4: the aerial duel (step seam)", () => {
     w.setPlayer({ ...w.player(defender.id), yellow: 1 })
     let fouls = 0
     const n = 2000
-    for (let i = 0; i < n; i++) if (aerialDuel(w, contested(attacker.id, defender.id, 0, 10, 2), w.player(attacker.id)).foul) fouls++
+    for (let i = 0; i < n; i++) if (aerialDuel(w, contested(attacker.id, defender.id, 0, 10, 2)).foul) fouls++
     expect(Math.abs(fouls / n - 0.5)).toBeLessThan(0.04)
     // Booked since release (yellow 1 now, 0 at release): kept about half the time.
     let kept = 0

@@ -335,6 +335,43 @@ describe("A4 transitions: the seam", () => {
   })
 })
 
+describe("A4 transitions at half-time (P4 final review)", () => {
+  it("a loss in the last 8 s of the first half carries nothing into the second-half kickoff", () => {
+    // Shipped defaults (every P4 rule as it ships). Seeds 1-6, played to 8 s into the second half; at least one must lose
+    // the ball in the last 8 s of the first half (non-vacuous; the review's probe found seed 2 at 0.4 s).
+    let late = 0
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      let s: MatchState = initMatch(makeConfig(seed, { params: on }))
+      let last: MatchState = s
+      while (!isFinished(s) && s.period === "first_half") {
+        last = s
+        s = step(s).state
+      }
+      expect(s.period).toBe("second_half")
+      if (last.transition && (last.tick - last.transition.tick) * last.config.dt < 8) late++
+      // At the second-half kickoff: no transition, no press state.
+      expect(s.transition, `seed ${seed}`).toBeUndefined()
+      expect(s.press, `seed ${seed}`).toBeUndefined()
+      // No joiner press and no recovery run is live at the kickoff (the first-half loss's joiners are gone).
+      for (const pl of s.players) expect((pl.intent.kind === "press" || pl.intent.kind === "recover") && s.tick < pl.intentUntil, `seed ${seed} ${pl.id}`).toBe(false)
+      const start = s.tick
+      for (let i = 0; i < Math.round(8 / s.config.dt) && !isFinished(s); i++) {
+        s = step(s).state
+        // Anything live comes from a loss in the second half itself.
+        const fresh = s.transition !== undefined && s.transition.tick >= start
+        if (!fresh) {
+          expect(s.transition, `seed ${seed}`).toBeUndefined()
+          for (const pl of s.players) {
+            // No recovery run, and (with no transition) the team press is not switched off by a counter-press window.
+            expect(pl.intent.kind === "recover" && s.tick < pl.intentUntil, `seed ${seed} ${pl.id} recovering`).toBe(false)
+          }
+        }
+      }
+    }
+    expect(late).toBeGreaterThanOrEqual(1)
+  }, 600_000)
+})
+
 describe("A4 transitions in a match", () => {
   it("rule 0 is inert: a match is identical whatever the other transition values (seed 7, 6000 ticks)", () => {
     const perturbed: Params = {
@@ -380,9 +417,11 @@ describe("A4 transitions in a match", () => {
             expect(pl.side).toBe(s.transition.loser)
             expect(pl.role).not.toBe("GK")
             // His distance when noteLoss ran (Task 10): a loss in ownedTick (a tackle) comes before this tick's movement,
-            // so his position in the previous state; an interception resolves in ballTick, after the movement, so his
-            // position now. Measured after the step regardless, joiners were seen at 30.002 and 30.26 m.
-            const atLoss = prev.possession.kind === "in_flight" ? pl : (prev.players.find((x) => x.id === id) ?? pl)
+            // so his position in the previous state; an interception and a loose-ball recovery resolve in ballTick, after
+            // the movement, so his position now (P4 final review). Measured after the step regardless, joiners were seen
+            // at 30.002 and 30.26 m.
+            const afterMove = prev.possession.kind === "in_flight" || prev.possession.kind === "loose"
+            const atLoss = afterMove ? pl : (prev.players.find((x) => x.id === id) ?? pl)
             expect(dist(atLoss.pos, s.transition.at)).toBeLessThan(30)
           }
         }

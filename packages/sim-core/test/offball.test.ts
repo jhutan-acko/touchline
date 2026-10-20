@@ -285,9 +285,9 @@ describe("support rule 1 (P3 Task 10d): come short when pressed, otherwise keep 
       }
       return new Map([...acc].map(([k, [n, m]]) => [k, n / m]))
     }
-    // Every P4 behaviour off in all three arms (F4): P4 Task 10's switch-on (pressing, zonal marking, counter-press) left
-    // spacing short of its margin in one side-half (away, second half: 1.26 against 0.85 x 1.36).
-    const base = p4Off(DEFAULT_PARAMS)
+    // On the shipped defaults (P4 final review: the P4-off pin was needed only while zonal marking was on, which left
+    // spacing short in one side-half, away second half 1.26 against 0.85 x 1.36; marking ships off).
+    const base = DEFAULT_PARAMS
     const on = crowd(base)
     const old = crowd({ ...base, support: { ...S, rule: 0 } })
     const noSpace = crowd({ ...base, support: { ...S, spaceM: 0 } })

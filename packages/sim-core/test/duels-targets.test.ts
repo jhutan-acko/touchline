@@ -133,6 +133,8 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
     expect(v).toBeLessThanOrEqual(0.53)
   }, 600_000)
   // Non-vacuity floor (F11): at least 10 attempts in each arm (Task 10: 13 front against 75 behind on these seeds).
+  // Fragile (P4 final review): front − behind and supported − alone rest on few attempts and flip sign when read before
+  // the step's movement; an unrelated engine change can flip them. The mechanism guard is tackle.test.ts.
   it("front approaches win more than those from behind (T2)", () => {
     const front = tackles().filter((r) => r.front)
     const behind = tackles().filter((r) => !r.front)

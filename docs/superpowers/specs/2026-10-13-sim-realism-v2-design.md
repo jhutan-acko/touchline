@@ -1145,11 +1145,22 @@ Changes made on measurement:
    Defender fouls are already on target at 0.45 (14.6). The shortfall is attacker and aerial fouls, which follow duel
    volume. The tuner started at 0.45.
 7. **Task 10, test changes** (no bound widened):
-   - **Mechanism tests on `DEFAULT_PARAMS` pin P4 off (F4):** offball support (two tests), `passing` completion, the aerial
-     in-match test, and `tackle.test` `onAlone` (`capS` 0).
+   - **Mechanism tests of retired or single rules pin P4 off (F4):** the offball rule-0 support test, `passing` completion,
+     the aerial in-match test, and `tackle.test` `onAlone` (`capS` 0). The support-rule-1 crowd test runs on the shipped
+     defaults (its pin was only needed while zonal marking was on; final review).
    - **`transition.test`:** the inert-rule window is 6000 ticks. Joiner distances are read where `noteLoss` runs: before
-     movement for a tackle, after it for an interception (`ballTick`).
+     movement for a tackle (`ownedTick`), after it for an interception or a loose-ball recovery (`ballTick`).
    - **`params.test`:** asserts the switches and marking off.
+8. **Final review, half-time fix.** The half-time reset cleared players' intents but not the A4 transition or the A5
+   press state. A loss in the last seconds of the first half carried into the second-half kickoff: its pause, its
+   recovery runs and its team-press-off window (3 of 12 seeds in the review's probe). The reset now clears `transition`,
+   `press` and `pressedBy` (ruling 9: a restart is not a loss). New test: no carry-over on seeds 1–6, at least one with a
+   loss in the last 8 s. It moved the gate from 20.26 to 20.49 and the reports by noise.
+9. **Final review, code tidy.**
+   - The `resolve.ts` keeper comment is corrected: a keeper first to a contact takes it outright, with no duel, and
+     keepers never contest.
+   - The unused `_def` and `_owner` parameters are removed, and the `./resolve.js` imports merged.
+   - `duels-targets.test` notes that its two passing T2 comparisons are fragile.
 
 ### Zonal marking and the press (user rulings)
 
@@ -1219,28 +1230,36 @@ parameters, free kicks are 27.0 against 18.6 fouls (8.8 offsides) on the gate se
 |---|---|---|---|---|
 | 1 (from P3, all P4 on incl. marking; 24 matches, 1 round) | 52.13 | 35.29 | **47.79** (blocked) | decision_scale 1.1 → 1.35, shot_bias 1.2 → 0.8, long_shift 0 → −1, cross_shift 0 → 0.5, yellow_per_foul 0.15 → 0.2, restart_scale 1.25 → 1.05, shape_width 1.4 → 1.5, deflect_behind 2 → 1.75, aerial_contest 2 → 2.25, aerial_foul 1 → 1.25 |
 | 2 (from run 1, marking off) | 24.09 | 23.71 | **29.26** (blocked: physics, ball pressure) | save_b0 1.8 → 1.55 |
-| 3 (from run 2, `rateScale` 0.5) | 32.55 | **19.37** | **20.26** | decision_scale 1.35 → 0.85, shot_bias 0.8 → 0.4, long_shift −1 → −0.5, xg_b0 −1.5 → −1.25, exec_scale 1.15 → 2.05, **tackle_rate 0.275 → 0.1 (min)**, **foul_per_tackle 0.45 → 0.6 (max)**, **yellow_per_foul 0.2 → 0.1 (min)**, deflect_behind 1.75 → 1.25, relax_cap 0.6 → 0.55, marking_weight 0.75 → 1, support_space 16 → 20, support_space_att 11 → 13, attacker_foul → 1.5 (max), aerial_foul 1.25 → 1.5 (max), counter_join → 1.25 (max) |
+| 3 (from run 2, `rateScale` 0.5) — **ships** | 32.55 | **19.37** | **20.26**; **20.49** after the half-time fix | decision_scale 1.35 → 0.85, shot_bias 0.8 → 0.4, long_shift −1 → −0.5, xg_b0 −1.5 → −1.25, exec_scale 1.15 → 2.05, **tackle_rate 0.275 → 0.1 (min)**, **foul_per_tackle 0.45 → 0.6 (max)**, **yellow_per_foul 0.2 → 0.1 (min)**, deflect_behind 1.75 → 1.25, relax_cap 0.6 → 0.55, marking_weight 0.75 → 1, support_space 16 → 20, support_space_att 11 → 13, attacker_foul → 1.5 (max), aerial_foul 1.25 → 1.5 (max), counter_join → 1.25 (max) |
+
+| 4 (from run 3; `tackle_rate` 0.2–0.4, `foul_per_tackle` ≤ 0.4; final review) | 27.47 | 20.32 | **26.56** (blocked: physics 1 inside, hsr25 61.7 against 51.05) | decision_scale 0.85 → 0.6 (min), shot_bias 0.4 → 0.8, choice_temp 1 → 1.2, xg_b0 −1.25 → −1, save_b0 1.55 → 1.3, clear_to_touch 0.05 → 0 (min); tackle_rate stayed 0.275, foul_per_tackle 0.4 (max) |
 
 - **The tuner buys fouls with fewer tackles that foul more often, and cards with the lowest booking rate.** Ground duels
   fall to 112 against 155 real.
+- **Run 4 (not shipped; user ruling: keep run 3 plus the half-time fix).** With `tackle_rate` narrowed to 0.2–0.4 the tuner
+  stayed at 0.275, about 2.75 × the tackle attempts, and `hsr25` (metres above 25 km/h) left its real envelope: 61.7 against
+  51.05. Setting only `tackleRatePerS` back to 0.1 on run 4's params brought it inside again (45.6, loss 23.19). Run 3's
+  params on the fixed engine give 20.49 with `hsr25` 42.4. So `tackle_rate` 0.1 is what keeps sprinting inside the
+  envelope, at the cost of duel volume: a **tackle–sprint link**, carried to P5.
 - `counter_join` 1.25 makes the 0–5 m join chance exactly 1.0 (0.8 × 1.25), so the knob's `min(1, x)` never clips and
   the table keeps its shape. The cost: the 0–5 m row is now deterministic, and its reach is 0.933 against 0.79 real
   (further from real). A higher `counter_join` would clip, change the shape and need a ruling.
 - `box_intensity`, `recovery_rate` and `press_rate` did not move.
 
-**Knobs on their bounds (pending the user's decision).** In run 3 three discipline knobs sit on their range limits:
-- `tackle_rate` at its minimum (0.1);
-- `foul_per_tackle` at its maximum (0.6);
-- `yellow_per_foul` at its minimum (0.10).
+**Knobs on their bounds (user ruling: accepted as shipped, carried to P5).** In the shipped calibration (run 3) nine knobs
+sit on a range limit:
 
-The tuner bought fouls with fewer tackles that foul more often, and lower cards with the booking floor. The consequences:
-- ground duels 153.5 before the tuner (MET) → 112 (64 matches; real 155);
-- yellows 3.30 against 5.0;
-- cards per foul 0.101 against 0.14;
-- the T2 real-target test goes NOT MET (0.568 on 88 attempts).
-
-The options are to accept this as recorded, or to narrow `tackle_rate` (for example 0.2–0.4 around the P3 value 0.275) and
-run one more round; the gate has a 9.7-point margin. The user decides before the merge.
+| Knob | Value (bound) | What it costs |
+|---|---|---|
+| `tackle_rate` | 0.1 (min) | ground duels 153.5 before the tuner (MET) → 112 (real 155); T2 test NOT MET (0.568 on 88 attempts); attacker fouls 0.9 against 3 (they follow tackle volume). Raising it pushes `hsr25` out of its envelope (run 4) |
+| `foul_per_tackle` | 0.6 (max) | the T3 chance **saturates**: in the carrier's own half (zone 1) a foul from behind is 0.6 × 2.4 = 1.44, clipped to 1, and from the side 0.96, so nearly every lost side or behind tackle there is a foul and the fitted angle shape 1 : 1.6 : 2.4 collapses to about 1 : 1.6 : 1.67. Ruling 26 gave the angle factors no knob; the base flattened them. Side and behind are 75 of the 88 test-team attempts, so the clip covers most tackle fouls, which is why fouls respond weakly near the top (16.8 at 0.45, 17.9 at 0.6) |
+| `yellow_per_foul` | 0.10 (min) | yellows 3.30 against 5.0, cards per foul 0.101 against 0.14: the floor did not keep cards near real, the tuner went to it |
+| `marking_weight` | 1 (max) | the lever for ball pressure is at its limit: ball pressure z +2.70 is held at a bound |
+| `support_space` | 20 (max) | supporters keep the widest space allowed; support within 15 m 1.92 against 2.10 |
+| `attacker_foul` | 1.5 (max) | shielding fouls 0.9 against 3 even at the top of the range |
+| `aerial_foul` | 1.5 (max) | `foulShare` 0.195 (Task 5's ruling 0.13 reversed through the knob); aerial fouls 4.0 MET but per duel above real |
+| `counter_join` | 1.25 (max) | 0–5 m join chance exactly 1.0 (no clipping, shape kept); 0–5 m reach 0.934 against 0.79 |
+| `switch_shift` | 2 (max, since P3) | switches 0.144 against 0.061 (P3 gap) |
 
 **Pre/post-tuner duels** (16 matches, seeds 2000–2015):
 - **MET → NOT MET because of a knob:**
@@ -1261,109 +1280,107 @@ run one more round; the gate has a 9.7-point margin. The user decides before the
 ### Results
 
 - **Gate: MET.**
-  - Held-out loss **20.26**, maxDrift 0 against the refreshed baseline.
-  - Physics 2 of 13 inside (`max_speed`, `hsr25`).
-  - Of the 19 scalars, 15 within 1 SD and 18 within 2 SD.
+  - Held-out loss **20.49** (run 3 plus the half-time fix), maxDrift 0 against the refreshed baseline.
+  - Physics 2 of 13 inside (`max_speed`, `hsr25` 42.4 against 51.05).
+  - Of the 19 scalars, 13 within 1 SD and 18 within 2 SD (completion −2.11 the one beyond).
   - **Every gated statistic, spatial ones included, has |z| < 3.** The largest:
 
     | Statistic | z |
     |---|---|
-    | Ball pressure | +2.72 |
-    | Completion | −2.08 |
+    | Ball pressure | +2.70 |
+    | Completion | −2.11 |
     | Free space | +1.89 |
     | Line height | −1.88 |
     | Peak speed | −1.70 |
-    | Width in possession | +1.66 |
+    | Width in possession | +1.65 |
 
   - **Concern, recorded only, the gate unchanged:** the gate's |z| < 3 assertion (`GATE_Z`) covers only the 19 scalar
     statistics. The seven spatial ones enter the loss but are never bounded on their own. Ball pressure at z +4.11 passed
     that check in the second candidate.
-- **C1: NOT MET.** 13 of 19 within 1 SD (needs 16), 19 within 2 SD (MET part; P3 17). Outside 1 SD:
+- **C1: NOT MET.** 15 of 19 within 1 SD (needs 16; P3 12), 19 within 2 SD (MET part; P3 17). Outside 1 SD:
 
   | Statistic | z |
   |---|---|
-  | Completion | −1.91 |
-  | Peak speed | −1.74 |
-  | Distance | −1.63 |
-  | In-play share | −1.25 |
-  | Blocked share | −1.10 |
-  | Fouls | −1.02 |
+  | Completion | −1.94 |
+  | Peak speed | −1.72 |
+  | Distance | −1.68 |
+  | In-play share | −1.35 |
 
-- **C2: NOT MET**, by a hair:
+- **C2: MET** (P3 NOT MET):
 
   | Statistic | z |
   |---|---|
-  | Free kicks | +0.90 |
-  | Goals | +0.23 |
-  | Shots on target | −0.75 |
-  | Fouls | **−1.02** (18.2 against 22.9; P3 −2.05) |
+  | Free kicks | +0.93 |
+  | Goals | +0.43 |
+  | Shots on target | −0.78 |
+  | Fouls | −0.92 (18.6 against 22.9; P3 −2.05) |
 
-- **C3: MET.** Team shot-share SD 0.174 on 64 matches (P3 0.227; needs ≤ 0.18).
+- **C3: MET.** Team shot-share SD 0.175 on 64 matches (P3 0.227; needs ≤ 0.18).
 - **C4: MET** (contract |z| < 3):
 
   | Metric | z |
   |---|---|
-  | Width in possession | +1.66 |
-  | Width out of possession | +1.12 |
-  | Defending length | −1.49 |
-  | Line height | −1.77 |
-  | Ball pressure | +2.44 |
-  | Support within 15 m | −1.36 |
-  | Free space | +1.68 |
+  | Width in possession | +1.70 |
+  | Width out of possession | +1.18 |
+  | Defending length | −1.51 |
+  | Line height | −1.78 |
+  | Ball pressure | +2.36 |
+  | Support within 15 m | −1.31 |
+  | Free space | +1.70 |
 
 - **Free space, width and length** (16-match report):
 
   | Measure | P3 | Task 8 (marking on) | P4 final (marking off) | Real |
   |---|---|---|---|---|
   | Free space (m) | 6.6 | 9.0 | 6.8 | 6.0 |
-  | Width out of possession (m) | 38.2 | 30.9 | 39.5 | 37.0 |
-  | Defending length (m) | 29.6 | 27.1 | 29.8 | 32.2 |
+  | Width out of possession (m) | 38.2 | 30.9 | 39.6 | 37.0 |
+  | Defending length (m) | 29.6 | 27.1 | 29.7 | 32.2 |
 
 - **P4 targets** (64 matches; Task 2's baseline from `p4-duels-baseline.md`, 16 matches, P3 engine):
 
   | Measure | Real | Task 2 | P4 | Status |
   |---|---|---|---|---|
-  | Tackle attempts won | 0.48 | 0.517 | 0.532 | NOT MET (band top 0.53) |
-  | — from the front | 0.54 | 0.566 | 0.575 | MET |
-  | — from the side or behind | 0.45 | 0.510 | 0.521 | NOT MET |
-  | — tackler alone within 3 m | 0.51 | 0.519 | 0.496 | MET |
-  | — 2+ within 3 m | 0.60 | 0.523 | 0.609 | MET |
-  | Ground duels per match | 154.7 | 150.9 | 112.1 | NOT MET (`tackle_rate` 0.1) |
-  | Aerial duels per match | 47 | 8.1 | 29.7 | NOT MET (P5) |
+  | Tackle attempts won | 0.48 | 0.517 | 0.535 | NOT MET (band top 0.53) |
+  | — from the front | 0.54 | 0.566 | 0.561 | MET |
+  | — from the side or behind | 0.45 | 0.510 | 0.530 | NOT MET |
+  | — tackler alone within 3 m | 0.51 | 0.519 | 0.495 | MET |
+  | — 2+ within 3 m | 0.60 | 0.523 | 0.619 | MET |
+  | Ground duels per match | 154.7 | 150.9 | 111.8 | NOT MET (`tackle_rate` 0.1) |
+  | Aerial duels per match | 47 | 8.1 | 29.5 | NOT MET (P5) |
   | Fouls per match | 22.9 | 13.4 | 18.3 | NOT MET |
-  | Defender fouls | 15 | 13.4 | 13.5 | MET |
+  | Defender fouls | 15 | 13.4 | 13.3 | MET |
   | Attacker fouls | 3 | 0 | 0.9 | NOT MET |
   | Aerial fouls | 5 | 0 | 4.0 | MET |
-  | Free kicks within 30 m | 0.86 | 0.69 | 1.28 | NOT MET (over) |
-  | Penalties (64 only) | 0.43 | 0.12 | 0.22 | NOT MET |
+  | Free kicks within 30 m | 0.86 | 0.69 | 1.30 | NOT MET (over) |
+  | Penalties (64 only) | 0.43 | 0.12 | 0.23 | NOT MET |
   | Yellows | 5.0 | 6.94 | 3.30 | NOT MET (`yellow_per_foul` 0.1) |
-  | Sent off (64 only) | 0.29 | 0.25 | 0.31 | NOT MET (band 0.2–0.3) |
+  | Sent off (64 only) | 0.29 | 0.25 | 0.30 | MET |
   | Cards per foul | 0.14 | 0.414 | 0.101 | NOT MET |
-  | Join (reach 3 m in 3 s), 0–5 m | 0.79 | 0.895 | 0.933 | NOT MET |
-  | — 5–10 m | 0.28 | 0.237 | 0.309 | MET |
+  | Join (reach 3 m in 3 s), 0–5 m | 0.79 | 0.895 | 0.934 | NOT MET |
+  | — 5–10 m | 0.28 | 0.237 | 0.311 | MET |
   | — 10–15 m | 0.23 | 0.101 | 0.120 | NOT MET |
   | — 15–20 m | 0.13 | 0.046 | 0.056 | NOT MET |
   | — 20–30 m | 0.07 | 0.022 | 0.021 | NOT MET |
   | Losers within 5 m in 3 s | 2.29 | 1.85 | 1.95 | NOT MET |
   | — 3 or more | 0.43 | 0.230 | 0.291 | NOT MET |
   | Counter-press peak speed (m/s) | 4.5 | 4.81 | 4.52 | MET |
-  | Regained within 5 s | 0.40 | 0.331 | 0.409 | MET |
-  | Running back, 0–1.4 s | 0.02 | 0.111 | 0.047 | NOT MET |
-  | — at 2 s | 0.06 | 0.135 | 0.099 | NOT MET |
+  | Regained within 5 s | 0.40 | 0.331 | 0.408 | MET |
+  | Running back, 0–1.4 s | 0.02 | 0.111 | 0.048 | NOT MET |
+  | — at 2 s | 0.06 | 0.135 | 0.100 | NOT MET |
   | — at 3 s | 0.10 | 0.153 | 0.203 | NOT MET |
-  | — at 5–6 s | 0.15 | 0.145 | 0.238 | NOT MET |
-  | — at 10 s | 0.12 | 0.062 | 0.099 | MET |
-  | Pause speed ratio | 0.87 | 1.102 | 0.978 | NOT MET |
-  | Press episodes per 90 | 405 | 272 | 409 | MET |
-  | ≥ 3 engaged | 0.049 | 0.031 | 0.057 | MET |
+  | — at 5–6 s | 0.15 | 0.145 | 0.239 | NOT MET |
+  | — at 10 s | 0.12 | 0.062 | 0.098 | MET |
+  | Pause speed ratio | 0.87 | 1.102 | 0.977 | NOT MET |
+  | Press episodes per 90 | 405 | 272 | 410 | MET |
+  | ≥ 3 engaged | 0.049 | 0.031 | 0.058 | MET |
   | Lift, back to goal | 2.08 | 0.81 | 0.84 | NOT MET |
   | Lift, own third | 1.97 | 1.22 | 1.25 | NOT MET |
-  | Pressers CM / W / FB | .37 / .19 / .13 | .408 / .113 / .145 | .378 / .140 / .157 | MET |
-  | Pressers AM / ST / CB | .11 / .11 / .10 | .042 / .165 / .127 | .045 / .149 / .130 | AM NOT MET; ST, CB MET |
+  | Pressers CM / W / FB | .37 / .19 / .13 | .408 / .113 / .145 | .379 / .140 / .155 | CM, FB MET; W NOT MET (0.140 just under 0.14) |
+  | Pressers AM / ST / CB | .11 / .11 / .10 | .042 / .165 / .127 | .045 / .149 / .132 | AM NOT MET; ST, CB MET |
   | Press-run peak speed (m/s; info) | 5.1 | 5.23 | 5.01 | (P4 gap closed) |
-  | Open by 3 m per pass | 7.96 | 8.10 | 8.11 | MET |
+  | Open by 3 m per pass | 7.96 | 8.10 | 8.12 | MET |
   | Clear lanes per pass | 4.95 | 6.01 | 5.99 | NOT MET (zonal marking off) |
-  | Distance per outfielder (km; info) | 10.88 | 9.16 | 10.05 | closer |
+  | Distance per outfielder (km; info) | 10.88 | 9.16 | 10.04 | closer |
 
 - **Discipline** (64 matches, against P3):
 
@@ -1372,30 +1389,30 @@ run one more round; the gate has a 9.7-point margin. The user decides before the
   | Fouls | 13.4 | 18.3 | 22.9 |
   | Cards per foul | 0.414 | 0.101 | 0.14 |
   | Yellows | 6.94 | 3.30 | 5.0 |
-  | Sent off | 0.75 | 0.31 | 0.29 |
-  | Penalties | 0.09 | 0.22 | 0.43 |
+  | Sent off | 0.75 | 0.30 | 0.29 |
+  | Penalties | 0.09 | 0.23 | 0.43 |
 
-  Sending-offs are back near real (0.31 against 0.29). Ruling 26's narrower `yellow_per_foul` range did not keep cards near
+  Sending-offs are back at real (0.30 against 0.29, MET). Ruling 26's narrower `yellow_per_foul` range did not keep cards near
   real: the tuner went to its 0.10 floor and pushed cards below real (yellows 3.30 against 5.0, cards per foul 0.101 against
   0.14).
 - **P3 passing rows** (64 matches, P3 → P4):
   - tightly marked 0.100 → **0.121** (NOT MET by 0.001; zonal marking off);
-  - near-1 completion 0.474 → 0.425;
+  - near-1 completion 0.474 → 0.424;
   - **release median 2.00 → 1.60 (MET)**, over 3 s 0.217 → 0.164 (MET): `decision_scale` 0.85 plus M6;
-  - pressed median 0.50 (MET); pressed within 1 s 0.786 → 0.784;
-  - completion to available 10–20 m 0.902 → 0.852 (NOT MET; `exec_scale` 2.05);
-  - passes 916 (MET).
+  - pressed median 0.50 (MET); pressed within 1 s 0.786 → 0.787;
+  - completion to available 10–20 m 0.902 → 0.851 (NOT MET; `exec_scale` 2.05);
+  - passes 914 (MET).
 - **Physical bands** (64 matches, P3 → P4, real):
 
   | Band | P3 | P4 | Real |
   |---|---|---|---|
   | Walking (km) | 2.24 | 2.00 | 3.50 |
   | High-speed + sprint (km) | 0.80 | 0.71 | 0.69 |
-  | Accelerations | 253 | 298 | 50 |
+  | Accelerations | 253 | 297 | 50 |
   | Live running (m/min) | 140 | 150 | 130–150 |
   | Dead-ball running (m/min) | 45 | 56 | 65 |
   | Sprints | 4.0 | 4.2 | 8.4 |
-  | Distance (km, 16-match report) | 9.16 | **9.99** | 10.88 (z −1.63; P3 −3.17) |
+  | Distance (km, 16-match report) | 9.16 | **9.97** | 10.88 (z −1.68; P3 −3.17) |
 
 - **Territory** (64 matches): territory SD 4.8 m (P3 5.6; real 1.9). Centroid minus ball with the ball −0.6 (P3 −0.4;
   real +3.9), without it −6.4 (P3 −7.2; real −9.5).
@@ -1421,14 +1438,15 @@ run one more round; the gate has a 9.7-point margin. The user decides before the
 - **Zonal marking needs a free-space lever.** Built, it delivers its own targets (tight 0.079 and clear lanes 4.77 in Task
   8), but defenders stand 9.6 m from off-ball attackers. No `laneShare` in 0.3–0.5 restores it.
 - **Duel volume.** Ground duels are 112 against 155, because the tuner pins `tackle_rate` at 0.1 and `foul_per_tackle` at
-  0.6 to buy fouls. Attacker fouls (0.9 against 3) follow tackle volume.
+  0.6 to buy fouls. Attacker fouls (0.9 against 3) follow tackle volume. Raising `tackle_rate` breaks the sprint envelope
+  (run 4).
 - **Aerial duels:** 30 against 47. Landing-spot marking and reaction (P5).
-- **Penalties:** 0.22 against 0.43. Box occupancy (P5, user decision).
+- **Penalties:** 0.23 against 0.43. Box occupancy (P5, user decision).
 - **Counter-press and recovery shape:** joiners from 10 m and further reach the ball half as often as real; recovery runs
   peak early (0.20 at 3 s against 0.10); the pause holds speed (0.98 against 0.87).
 - **Press triggers:** back to goal 0.84 and own third 1.25 against about 2. The lifts multiply a hazard that is rarely what
   starts a press.
-- **Accelerations** are 298 against 50 (P2 carry).
+- **Accelerations** are 297 against 50 (P2 carry).
 
 ### Carried to P5/P6
 
@@ -1437,12 +1455,30 @@ run one more round; the gate has a 9.7-point margin. The user decides before the
 - **A5 press:** triggers and the second presser are on, at `rateScale` 0.5; the trigger lifts are NOT MET. AM presser share
   0.045.
 - **T4 aerial volume** (landing spots), **penalties** (box occupancy), **attacker fouls**.
-- **Duel volume against the foul knobs:** a narrower `tackle_rate` range or a duel-volume statistic in the gate, so the
-  tuner cannot trade tackles for fouls per tackle.
+- **The tackle–sprint link and the discipline knobs** (user ruling: ship run 3).
+  - With `tackle_rate` at 0.275 (run 4), `hsr25` reached 61.7 against 51.05; at 0.1 it is 42.4. More tackles mean more
+    sprinting than real.
+  - So duel volume (112 against 155), yellows (3.30 against 5.0, `yellow_per_foul` at its 0.10 floor) and the T3
+    saturation (`foul_per_tackle` 0.6 × behind 2.4 clips to 1 in the own half) are carried together.
+  - P5 needs a lever on sprinting after a tackle, or a duel-volume statistic in the gate, before narrowing the knobs again.
+- **Keeper claims in aerial contacts** (final review 5): a keeper who is first to a contact takes it outright with no duel
+  (rule 0 drew a header). Untested; it belongs with keeper catch volume.
+- **`resolve.ts` scope** (final review 6): the near-miss collection runs for every contact, ground balls included (identical
+  at rule 0). `aerialWinShare` is a step-side helper living in the sensitive file. Optional: move it to `duel.ts`, and
+  collect near misses only above `controlHeightM`.
+- **A voided flight foul resolves without a reception** (final review 7). If `applyFlightFoul` drops the foul (offender
+  sent off, replaced or booked since release), the pass resolves with no reception event and no first-touch draw. It is
+  rare but breaks "every completed pass has a reception". Decide the fallback.
+- **Python fixture tests** (final review 11) for the recovery curve, the pause ratio, the trigger lifts and the presser
+  roles. The back-to-goal lift reads 0.84, below 1, although the engine doubles the hazard; a measurement bug is not ruled
+  out.
+- **The passing T2 real-target comparisons are fragile** (final review 12): they rest on 13 front attempts and flip sign
+  when read before the step's movement. The mechanism guard is `tackle.test`.
 - **The A4 recovery curve and the pause end** (Task 6).
 - **The release median** reached 1.60 here through `decision_scale`; M6 alone left it at 2.0.
 - **`GATE_Z` omits the spatial statistics** (recorded, not changed).
-- **The `index.ts` seam exports** (final review).
+- **The `index.ts` seam exports** (final review 9): about 20 `@internal` seams are published; acceptable as is, tidy behind
+  `./testing` later.
 
 ### Rulings
 
@@ -1455,6 +1491,8 @@ execution are in the plan's ledger:
 - fouls restored through `foul_per_tackle`;
 - **zonal marking off** and **`lane_share` dropped** (user, Task 10);
 - the **`rateScale` sweep** with press-off as the fallback (user, Task 10);
+- after the final review: fix the half-time leak, and try narrower discipline knobs (run 4); when run 4 failed the physics
+  check, **ship run 3's calibration with the half-time fix** (user);
 - seeds re-picked by each file's rule (below).
 
 **Seeds and fixtures re-picked** (each by its file's rule):
