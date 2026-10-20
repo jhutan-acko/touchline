@@ -169,7 +169,7 @@ describe("realism v2 P5 params", () => {
     const P = DEFAULT_PARAMS
     for (const r of [P.setAttack.rule, P.setDefend.rule, P.setShapes.rule, P.deadBall.rule, P.keeperRestarts.rule, P.directFk.rule,
       P.roleMoves.runRule, P.roleMoves.rotateRule, P.marking.landingRule, P.transition.pauseRule, P.release.freeRule]) expect(r).toBe(0)
-    expect(P.marking.maxGapM).toBe(0)
+    expect(P.marking.maxGapM).toBe(5)
     expect(P.setAttack.corner.CB).toEqual([42, 4])
     expect(P.deadBall.medianS).toEqual({ throw_in: 13.5, goal_kick: 22, corner: 33, free_kick_att: 42, free_kick: 28, kickoff: 70 })
     expect(P.setAttack.restKeep).toEqual({ corner: 1.4, fk_wide: 2.7, fk_central: 2.3, throw_att: 4.1 })

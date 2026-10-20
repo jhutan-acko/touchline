@@ -111,6 +111,9 @@ import { breakTarget, holdLineTarget, overlapEligible, overlapTarget } from "./r
 // ---- P5 imports, rotation seam (plan 8e Task 10 inserts below this line)
 import { dropTarget, insideTarget, invertTarget } from "./rotate.js"
 
+// ---- P5 imports, marking seam (plan 8e Task 11 inserts below this line)
+import { capGap, landingTarget } from "./offball.js"
+
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
 const MATCH_SECONDS_90 = 5400
@@ -2120,11 +2123,58 @@ export const noteReception = (w: Work, receiver: PlayerState, f: Flight): void =
 export const markSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, attacker: PlayerState, ballFlat: Vec2): Vec2 => {
   const m = w.p.marking
   const goalSide = (weight: number) => markTarget(anchor, attacker.pos, defSide, w.period, m.goalSideM, weight, m.widthSlackM)
+  // P5 (plan 8e ruling 18): landing-spot marking and the reaction to a high ball, under either marking.rule.
+  if (m.landingRule === 1) {
+    const ls = landingSpot(w, defSide, defId, anchor, attacker)
+    if (ls) return ls
+  }
   if (m.rule !== 1) return goalSide(m.weight)
   // Ruling 16: a CB follows a dropping ST or AM tightly (the old goal-side spot at weight 1) while he is within cbStepM of the anchor.
   if (w.player(defId).role === "CB" && (attacker.role === "ST" || attacker.role === "AM") && stepsOut(anchor, attacker, defSide, w.period, m)) return goalSide(1)
-  return laneMarkTarget(anchor, ballFlat, attacker.pos, m.weight, m.laneShare, m.widthSlackM)
+  // P5 (plan 8e ruling 17): the zonal target is pulled to within maxGapM of the attacker (0: no cap).
+  return capGap(laneMarkTarget(anchor, ballFlat, attacker.pos, m.weight, m.laneShare, m.widthSlackM), attacker.pos, m.maxGapM)
 }
+
+/**
+ * P5 ruling 18 (marking.landingRule 1), for defender `defId` paired with `attacker`:
+ * - reaction: during a high pass or clearance won by `attacker`, the contact point when it is within landingReactM of the defender;
+ * - landing marking: while the opponents' keeper (hands or feet), or a CB or FB in his own third, has the ball, the CB nearest
+ *   the opponents' most advanced outfielder (landingTarget) marks that man goal-side at landingGoalSideM, weight 1.
+ * null otherwise (the defender's normal spot). Only defenders marksFor pairs get here.
+ */
+const landingSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, attacker: PlayerState): Vec2 | null => {
+  const m = w.p.marking
+  const pos = w.possession
+  if (pos.kind === "in_flight") {
+    const f = pos.flight
+    const pe = f.pending
+    if (f.side === defSide || f.winnerId !== attacker.id || f.outcome === "blocked") return null
+    if ((pe.type !== "pass" && pe.type !== "clearance") || pe.attrs.height !== "high" || pe.x_end === null || pe.y_end === null) return null
+    const contact = { x: pe.x_end, y: pe.y_end }
+    return dist(w.player(defId).pos, contact) <= m.landingReactM ? contact : null
+  }
+  const lt = landingPair(w, defSide)
+  if (!lt || lt.defId !== defId) return null
+  return markTarget(anchor, w.player(lt.attackerId).pos, defSide, w.period, m.landingGoalSideM, 1)
+}
+
+/**
+ * P5 ruling 18: the landing pair (landingTarget) for `defSide` while the opponents' keeper (hands or feet), or a CB or FB
+ * of theirs in his own third, has the ball; null otherwise. marksFor also uses it to give the landing CB his mark when
+ * assignMarks left him unpaired (controller ruling on preflight F25 row 11).
+ */
+const landingPair = (w: Work, defSide: Side): { defId: string; attackerId: string } | null => {
+  const pos = w.possession
+  if (pos.kind !== "owned") return null
+  const owner = w.player(pos.playerId)
+  if (owner.side === defSide) return null
+  const deep = owner.role === "GK" || ((owner.role === "CB" || owner.role === "FB") && attackX(owner.side, owner.pos.x, w.period) < -OWN_THIRD_U)
+  if (!deep) return null
+  return landingTarget(w.active(defSide), w.active(other(defSide)), defSide, w.period)
+}
+
+/** The own third ends at team-frame u -17.5 (the analysis zones). */
+const OWN_THIRD_U = 17.5
 
 // ================================================================ end of P4 marking seam
 
@@ -2408,6 +2458,9 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   const out = new Map<string, Vec2>()
   for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
     out.set(id, markSpot(w, defSide, id, anchors.get(id)!, a, ballFlat))
+  // P5 (plan 8e ruling 18; controller ruling on F25 row 11): the landing CB marks his man even if assignMarks left him unpaired.
+  const lp = w.p.marking.landingRule === 1 ? landingPair(w, defSide) : null
+  if (lp && anchors.has(lp.defId)) out.set(lp.defId, markSpot(w, defSide, lp.defId, anchors.get(lp.defId)!, w.player(lp.attackerId), ballFlat))
   return out
 }
 
