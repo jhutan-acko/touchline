@@ -556,7 +556,12 @@ export const restartShot = (_input: DecisionInput, _p: Params, _goalDist: number
 // ================================================================ P5 goal-kick seam (plan 8e Task 7 owns this block)
 
 /** G3: the logit shift of action `a` at a goal kick or keeper free kick (keeperRestarts.longShift on long passes). rule 0: 0. */
-export const restartKindShift = (_input: DecisionInput, _a: Action, _p: Params): number => 0
+export const restartKindShift = (input: DecisionInput, a: Action, p: Params): number => {
+  const k = p.keeperRestarts
+  if (k.rule !== 1 || (a !== "long_pass" && a !== "switch")) return 0
+  const keeperKick = input.restart === "goal_kick" || (input.restart === "free_kick" && input.owner.role === "GK")
+  return keeperKick ? k.longShift : 0
+}
 
 // ================================================================ end of P5 goal-kick seam
 

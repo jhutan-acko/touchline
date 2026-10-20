@@ -893,7 +893,7 @@ export const DEFAULT_PARAMS: Params = {
     minS: 3, lateGrowth: 0.8, walkMps: [1, 1.5], settleS: [2.5, 3.5], settleAttS: [6, 7], settleDefS: [13, 19], takerPauseS: [0.5, 1]
   },
   // P5 G3 keeper restarts (plan 8e rulings 12, 13; rule 0: the old behaviour).
-  keeperRestarts: { rule: 0, fkU: -17.5, fkShare: 1, longShift: 0, longM: 32, longErrorScale: 1 },
+  keeperRestarts: { rule: 0, fkU: -17.5, fkShare: 0.5, longShift: 2.5, longM: 32, longErrorScale: 2 },
   // P5 S9 direct free kicks (plan 8e ruling 14; rule 0: the old behaviour).
   directFk: { rule: 0, shotShift: 0, xgLogit: 0, maxDistanceM: 35 },
   // P5 A6 role moves (plan 8e rulings 15, 16; runRule 0 and rotateRule 0: the old behaviour).
