@@ -807,7 +807,8 @@ export const DEFAULT_PARAMS: Params = {
   // P6 SH2 headers (spec item SH2; rule 0: the old behaviour). zMin and zMax are kinematics.controlHeightM and headerHeightM.
   header: { rule: 0, zMin: 1, zMax: 2.4, b0: -0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
   // P6 SH3 keeper-position saves (spec item SH3; rule 0: the old behaviour). Priors (ruling 10); offLineRefM is the real median at shots.
-  saveGeo: { rule: 0, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.6, reactionS: 0.2, bFlightS: 2.5, flightCapS: 1 },
+  // bFlightS and bOffBisector from Task 5 Step 3 (grid 1.5/2.5/3.5 x -0.3/-0.6/-1.0): the pair that moves the save rate least.
+  saveGeo: { rule: 0, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.3, reactionS: 0.2, bFlightS: 3.5, flightCapS: 1 },
   // P6 SH4 execution fatigue (spec item SH4; rule 0: the old behaviour). k 0.25, ref 0, power 1 equal rule 0 numerically.
   execFatigue: { rule: 0, k: 0.25, ref: 0, power: 1 },
   // P6 shot logit and xG refit (spec "P6: shot model"; rule 0: the old behaviour). xg starts as shot.xg; bXg, pivot, bRisk as decide's term.
