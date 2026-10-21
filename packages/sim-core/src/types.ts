@@ -2,6 +2,7 @@ import type { Period, Side, Vec2, Vec3 } from "./geometry.js"
 import type { Params, PosGroup, ShapeRow } from "./params.js"
 import type { RngState } from "./rng.js"
 import type { Script, ScriptEntry } from "./script.js"
+import type { SetPieceKind } from "./setpiece.js"
 
 export type Role = "GK" | "CB" | "FB" | "DM" | "CM" | "AM" | "W" | "ST"
 export type FormationName = "4-3-3" | "4-4-2" | "4-2-3-1" | "3-5-2"
@@ -80,12 +81,14 @@ export interface MatchConfig {
 export type Intent =
   | { readonly kind: "shape" }
   | { readonly kind: "press"; readonly targetId: string }
-  | { readonly kind: "run_in_behind"; readonly target: Vec2 }
+  | { readonly kind: "run_in_behind"; readonly target: Vec2; readonly overlap?: true }
   | { readonly kind: "chase"; readonly target: Vec2 }
   | { readonly kind: "carry"; readonly dir: Vec2; readonly speed: number }
   | { readonly kind: "hold" }
   /** A4 recovery run (realism v2 P4): back to his out-of-possession shape spot after a loss. */
   | { readonly kind: "recover"; readonly target: Vec2 }
+  /** A6 rotation (realism v2 P5): a held spot (winger inside, full-back inversion, CM drop), jogged to. */
+  | { readonly kind: "rotate"; readonly target: Vec2; readonly since: number }
 
 export interface PlayerState {
   readonly id: string
@@ -295,7 +298,7 @@ export interface Frame {
   readonly possession_side: Side | null
 }
 
-export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift", "boot", "release", "foul", "aerial", "counter", "press", "contact"] as const
+export const CONCERNS = ["decision", "execution", "duel", "referee", "movement", "restart", "script", "bench", "keeper", "caution", "drift", "boot", "release", "foul", "aerial", "counter", "press", "contact", "setpiece", "dead", "roles"] as const
 export type Concern = (typeof CONCERNS)[number]
 
 /** One team's substitutions: planned windows (match minutes) still to come, changes made, windows used, bench players used. */
@@ -405,6 +408,48 @@ export interface MatchState {
   readonly transition?: TransitionState
   /** A5 team-press state (realism v2 P4); absent while press.rule is 0. */
   readonly press?: PressState
+  /** P5 plan for the restart being set up (realism v2 P5); absent while every P5 rule that plans one is 0, or in open play. */
+  readonly restartPlan?: RestartPlan
+  /** P5: the set piece just taken (realism v2 P5, the attacking set-piece seam); absent while setAttack.rule is 0 or none is live. */
+  readonly setPiece?: SetPieceLive
+}
+
+/**
+ * P5 (plan 8e): what the P5 seams decided at a restart's start, read until the kick. Every field but `kind` belongs to
+ * one seam: dead-ball (readyTick, walkMps, arrivedTick, arrivedId, pauseTicks), keeper-restart (keeperTaker), attacking set-piece
+ * (restKeep, restSpot), defending set-piece (wall, jitter, outlet). Ids that have left the pitch since are skipped.
+ */
+export interface RestartPlan {
+  readonly kind: SetPieceKind
+  /** S8: per player, the tick he should be settled by. */
+  readonly readyTick?: Readonly<Record<string, number>>
+  /** S8: per player, his walking speed (m/s). */
+  readonly walkMps?: Readonly<Record<string, number>>
+  /** S8: the tick the taker first stood within 1 m of the spot, and who he was (a new taker restarts the pause). */
+  readonly arrivedTick?: number
+  readonly arrivedId?: string
+  /** S8: how long the taker pauses on the spot before the kick (ticks). */
+  readonly pauseTicks?: number
+  /** S4: the players kept back in rest defence, and their spots. */
+  readonly restKeep?: ReadonlyArray<string>
+  readonly restSpot?: Readonly<Record<string, Vec2>>
+  /** G3: the keeper takes this free kick. */
+  readonly keeperTaker?: boolean
+  /** S3: the wall's members, and each one's jitter toward the ball (m). */
+  readonly wall?: ReadonlyArray<string>
+  readonly jitter?: Readonly<Record<string, number>>
+  /** S2: the striker left up as an outlet at a wide free kick. */
+  readonly outlet?: string
+}
+
+/** P5 (plan 8e): a set piece just taken: its kind, the taking side, the kick's tick and the taker (the run window). */
+export interface SetPieceLive {
+  readonly kind: SetPieceKind
+  readonly side: Side
+  readonly tick: number
+  readonly takerId: string
+  /** S4: the rest-defence players (copied from the plan at the kick), whom the run after the kick leaves back. */
+  readonly restKeep?: ReadonlyArray<string>
 }
 
 /** A4 (P4): the side that lost the ball, when and where, and who counter-presses. */
@@ -413,6 +458,8 @@ export interface TransitionState {
   readonly tick: number
   readonly at: Vec2
   readonly joiners: ReadonlyArray<string>
+  /** P5 pause (plan 8e ruling 20): each losing outfielder's speed at the loss (m/s); absent while transition.pauseRule is 0. */
+  readonly speeds?: Readonly<Record<string, number>>
 }
 
 /** A5 (P4): the last completed reception (back-to-goal trigger) and the second-presser draw for the current first press. */

@@ -203,3 +203,42 @@ export const stepsOut = (cbAnchor: Vec2, attacker: PlayerState, defSide: Side, p
   const upfieldM = (attacker.pos.x - cbAnchor.x) * d
   return dropMps > m.dropMps && upfieldM <= m.cbStepM
 }
+
+/**
+ * P5 zonal cap (plan 8e ruling 17): `spot` pulled along the line toward `attacker` until it is within maxGapM of him.
+ * A spot already that close, or maxGapM <= 0 (no cap), is returned unchanged.
+ */
+export const capGap = (spot: Vec2, attacker: Vec2, maxGapM: number): Vec2 => {
+  if (maxGapM <= 0) return spot
+  const r = dist(spot, attacker)
+  if (r <= maxGapM) return spot
+  return add(attacker, scale(sub(spot, attacker), maxGapM / r))
+}
+
+/**
+ * P5 landing-spot marking (plan 8e ruling 18): the attackers' most advanced outfielder (nearest the goal `defSide` defends)
+ * and the CB of `defs` nearest him; ties by id. null when there is no such outfielder or no CB. Sent-off players are skipped.
+ */
+export const landingTarget = (
+  defs: ReadonlyArray<PlayerState>,
+  attackers: ReadonlyArray<PlayerState>,
+  defSide: Side,
+  period: Period
+): { defId: string; attackerId: string } | null => {
+  // The attackers attack the goal defSide defends: toward -dirOf(defSide) x.
+  const d = dirOf(defSide, period)
+  const byId = (a: PlayerState, b: PlayerState) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  const outfield = attackers.filter((a) => a.side !== defSide && a.role !== "GK" && !a.sentOff)
+  if (outfield.length === 0) return null
+  const att = outfield.reduce((best, a) => {
+    const c = a.pos.x * d - best.pos.x * d
+    return c < 0 || (c === 0 && byId(a, best) < 0) ? a : best
+  })
+  const cbs = defs.filter((x) => x.side === defSide && x.role === "CB" && !x.sentOff)
+  if (cbs.length === 0) return null
+  const cb = cbs.reduce((best, x) => {
+    const c = dist(x.pos, att.pos) - dist(best.pos, att.pos)
+    return c < 0 || (c === 0 && byId(x, best) < 0) ? x : best
+  })
+  return { defId: cb.id, attackerId: att.id }
+}

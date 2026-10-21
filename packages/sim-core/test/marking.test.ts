@@ -20,7 +20,7 @@ const near = (a: Vec2, b: Vec2) => {
 // Both arms pin the marking numbers and every other P4 rule to 0, so that retuning the params file or switching other rules on cannot move these tests.
 const pin = (p: Params, rule: number): Params => ({
   ...p,
-  marking: { ...p.marking, rule, weight: 0.75, laneShare: 0.4, cbStepM: 10, dropMps: 1 },
+  marking: { ...p.marking, rule, weight: 0.75, laneShare: 0.4, cbStepM: 10, dropMps: 1, maxGapM: 0 },
   tackle: { ...p.tackle, rule: 0 }, fouls: { ...p.fouls, rule: 0 }, aerial: { ...p.aerial, rule: 0 },
   transition: { ...p.transition, rule: 0 }, press: { ...p.press, rule: 0 },
   firstTick: { ...p.firstTick, scopeRule: 0 }, release: { ...p.release, rejudge: 0 }

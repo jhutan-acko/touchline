@@ -13,8 +13,11 @@ import type { DomainEvent, MatchState, PlayerState } from "../src/types.js"
 const base: Params = {
   ...P,
   tackle: { ...P.tackle, rule: 0 }, aerial: { ...P.aerial, rule: 0 }, transition: { ...P.transition, rule: 0 },
-  press: { ...P.press, rule: 0 }, marking: { ...P.marking, rule: 0 },
-  firstTick: { ...P.firstTick, scopeRule: 0 }, release: { ...P.release, rejudge: 0 }
+  press: { ...P.press, rule: 0 }, marking: { ...P.marking, rule: 0, landingRule: 0 },
+  firstTick: { ...P.firstTick, scopeRule: 0 }, release: { ...P.release, rejudge: 0, freeRule: 0 },
+  // Every P5 rule pinned 0 too (P5 Task 14 switched them on).
+  setAttack: { ...P.setAttack, rule: 0 }, setDefend: { ...P.setDefend, rule: 0 }, setShapes: { ...P.setShapes, rule: 0 }, deadBall: { ...P.deadBall, rule: 0 },
+  keeperRestarts: { ...P.keeperRestarts, rule: 0 }, directFk: { ...P.directFk, rule: 0 }, roleMoves: { ...P.roleMoves, runRule: 0, rotateRule: 0 }
 }
 const off: Params = { ...base, fouls: { ...base.fouls, rule: 0 } }
 const on: Params = { ...base, fouls: { ...base.fouls, rule: 1 } }

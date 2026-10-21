@@ -11,7 +11,8 @@ import { CONCERNS, type MatchState, type PlayerState, type Possession, type Tran
 
 // Explicit on and off (F4): Task 10 flips the defaults. Everything else as the defaults.
 const off: Params = { ...P, transition: { ...P.transition, rule: 0 } }
-const on: Params = { ...P, transition: { ...P.transition, rule: 1 } }
+// P4's pause (pauseRule 0): P5's pause and its ramp (plan 8e ruling 20) are transition-p5.test's.
+const on: Params = { ...P, transition: { ...P.transition, rule: 1, pauseRule: 0 } }
 /** Every losing outfielder within 30 m joins (forced joins, for fixtures that need joiners). */
 const allJoin: Params = { ...on, transition: { ...on.transition, joinP: [1, 1, 1, 1, 1] } }
 const T = on.transition
@@ -378,7 +379,8 @@ describe("A4 transitions in a match", () => {
       ...P,
       transition: {
         rule: 0, windowS: 10, joinM: [10, 20, 30, 40, 50], joinP: [1, 1, 1, 1, 1], speed: 1, pauseS: 10, pauseShare: 0.1, pauseRadiusM: 1,
-        recoverFromS: 0, recoverPeakS: [0.5, 1], recoverToS: 20, recoverRatePerS: 50, recoverBehindFactor: 1, recoverUpfieldM: 5, recoverS: [5, 6], recoverSpeedShare: 0.2
+        recoverFromS: 0, recoverPeakS: [0.5, 1], recoverToS: 20, recoverRatePerS: 50, recoverBehindFactor: 1, recoverUpfieldM: 5, recoverS: [5, 6], recoverSpeedShare: 0.2,
+        pauseRule: 0, pauseDip: 0.2, pauseEndS: 3
       }
     }
     const hash = (p: Params): { h: string; losses: number } => {

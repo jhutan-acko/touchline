@@ -9,7 +9,8 @@ const players = kickoffPlayersFor(makeConfig(1))
 const at = (p: PlayerState, x: number, y: number): PlayerState => ({ ...p, pos: { x, y }, vel: { x: 0, y: 0 } })
 const home = players.filter((p) => p.side === "home")
 const away = players.filter((p) => p.side === "away")
-const on: Params = { ...P, choice: { ...P.choice, rule: 1, kindShift: { ...P.choice.kindShift, switch: 0, long_pass: 0, lofted_through: 0 }, ivCentre: 0, temperature: 1 } }
+// keeperRestarts pinned off: its G3 long shift at goal kicks would break the equal kind shifts (P5 Task 14).
+const on: Params = { ...P, choice: { ...P.choice, rule: 1, kindShift: { ...P.choice.kindShift, switch: 0, long_pass: 0, lofted_through: 0 }, ivCentre: 0, temperature: 1 }, keeperRestarts: { ...P.keeperRestarts, rule: 0 } }
 const input = (o: Partial<DecisionInput>): DecisionInput => ({ period: "first_half", owner: home[5]!, teammates: home, opponents: away, style: STYLES.possession, scoreDiff: 0, minute: 30, restart: null, scriptBias: {}, ...o })
 
 describe("D1: features as fitted (same fixture as test_passing.py)", () => {

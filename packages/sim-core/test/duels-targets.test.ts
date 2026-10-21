@@ -125,7 +125,7 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
     expect(tackles().length).toBeGreaterThanOrEqual(50)
     expect(ms().flatMap((m) => m.reach5).length).toBeGreaterThanOrEqual(50)
   }, 600_000)
-  // NOT MET (Task 10, calibrated params): 0.568 of 88 attempts (54 with the tackler alone within 3 m, 34 supported).
+  // NOT MET (P5 Task 14, calibrated params): 0.609 of 87 attempts (P4 Task 10: 0.568 of 88); 68 with the tackler alone within 3 m, 18 supported.
   // The tuner moved tackle_rate to its 0.1 minimum, so fewer tackles (deep report: see Results: P4).
   it.fails("NOT MET: defenders win about 48 % of tackle attempts (T2)", () => {
     const v = win(tackles())
@@ -135,7 +135,9 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
   // Non-vacuity floor (F11): at least 10 attempts in each arm (Task 10: 13 front against 75 behind on these seeds).
   // Fragile (P4 final review): front − behind and supported − alone rest on few attempts and flip sign when read before
   // the step's movement; an unrelated engine change can flip them. The mechanism guard is tackle.test.ts.
-  it("front approaches win more than those from behind (T2)", () => {
+  // NOT MET (P5 Task 14, calibrated params): front 0.500 of 14 against behind 0.630 of 73, −0.130 (it was +0.055 on 13 / 75
+  // in P4; the fragility noted above).
+  it.fails("NOT MET: front approaches win more than those from behind (T2)", () => {
     const front = tackles().filter((r) => r.front)
     const behind = tackles().filter((r) => !r.front)
     expect(Math.min(front.length, behind.length)).toBeGreaterThanOrEqual(10)
@@ -149,27 +151,27 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
     expect(Math.min(alone.length, supported.length)).toBeGreaterThanOrEqual(10)
     expect(win(supported) - win(alone)).toBeGreaterThanOrEqual(0.05)
   }, 600_000)
-  // NOT MET (Task 10): 11.75 per match (tackle_rate at its 0.1 minimum; foul_per_tackle at its 0.6 maximum).
+  // NOT MET (P5 Task 14): 11.75 per match (P4 Task 10: 11.75; tackle_rate at its 0.1 minimum, foul_per_tackle 0.48).
   it.fails("NOT MET: about 15 defender fouls per match (T3)", () => {
     const v = perMatch("defFouls")
     expect(v).toBeGreaterThanOrEqual(12)
     expect(v).toBeLessThanOrEqual(18)
   }, 600_000)
-  // NOT MET (Task 10): 18.75 per match (attacker and aerial fouls short; see Results: P4).
+  // NOT MET (P5 Task 14): 17.75 per match (P4 Task 10: 18.75) (attacker and aerial fouls short; see Results: P4).
   it.fails("NOT MET: about 23 fouls per match in all (T3, T4)", () => {
     const v = perMatch("fouls")
     expect(v).toBeGreaterThanOrEqual(19)
     expect(v).toBeLessThanOrEqual(27)
   }, 600_000)
-  // NOT MET (Task 10): 35.5 per match. Only the intended receiver anticipates a high ball and defenders do not mark
-  // landing spots (carried to P5).
+  // NOT MET (P5 Task 14): 37.75 per match (P4 Task 10: 35.5). P5's landing-spot marking and set-piece shapes added little;
+  // P6 SH2 (headers) owns the rest.
   it.fails("NOT MET: about 47 aerial duels per match (T4)", () => {
     const v = perMatch("aerials")
     expect(v).toBeGreaterThanOrEqual(40)
     expect(v).toBeLessThanOrEqual(54)
   }, 600_000)
-  // NOT MET (Task 10): 1.954 per loss over 480 losses.
-  it.fails("NOT MET: about 2.3 losing players reach the ball within 3 s (A4)", () => {
+  // MET from P5 Task 14 (calibrated params): 2.069 per loss over 519 losses (P4 Task 10: 1.954 over 480, NOT MET).
+  it("about 2.3 losing players reach the ball within 3 s (A4)", () => {
     const r = ms().flatMap((m) => m.reach5)
     const v = r.reduce((a, b) => a + b, 0) / r.length
     expect(v).toBeGreaterThanOrEqual(2.0)

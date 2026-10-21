@@ -45,8 +45,14 @@ const shiftRows = (p: Params, row: ShapeRow, v: number): Params => ({
 })
 
 export const KNOBS: ReadonlyArray<Knob> = [
-  { name: "decision_scale", what: "time on the ball before each decision (passes per match)", init: 1, min: 0.6, max: 2.5, step: 0.25,
-    apply: (p, v) => ({ ...p, timing: { ...p.timing, decisionMinS: p.timing.decisionMinS * v, decisionMaxS: p.timing.decisionMaxS * v } }) },
+  // P5 ruling 22 (Question 5): also scales the free release base release.freeS, in a narrowed 0.8-1.2, so the tuner keeps a
+  // passes lever without pushing the release median far from 1.40 s.
+  { name: "decision_scale", what: "time on the ball before each decision (passes per match, release median)", init: 1, min: 0.8, max: 1.2, step: 0.1,
+    apply: (p, v) => ({
+      ...p,
+      timing: { ...p.timing, decisionMinS: p.timing.decisionMinS * v, decisionMaxS: p.timing.decisionMaxS * v },
+      release: { ...p.release, freeS: [p.release.freeS[0] * v, p.release.freeS[1] * v] }
+    }) },
   { name: "shot_bias", what: "logit shift for shooting (shots per match)", init: 0, min: -2, max: 1.5, step: 0.4, apply: (p, v) => shiftLogits(p, ["shot"], v) },
   { name: "long_shift", what: "pass-choice shift for long passes and lofted through balls (long-pass share)", init: 0, min: -2, max: 2, step: 0.5,
     apply: (p, v) => shiftKinds(p, ["long_pass", "lofted_through"], v) },
@@ -79,8 +85,13 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, actions: { ...p.actions, logits: { ...p.actions.logits, box: { ...p.actions.logits.box, carry: p.actions.logits.box.carry + v, take_on: p.actions.logits.box.take_on + v } } } }) },
   { name: "loose_share", what: "share of won tackles that knock the ball loose (throw-ins)", init: 0.4, min: 0.1, max: 0.9, step: 0.1,
     apply: (p, v) => ({ ...p, defending: { ...p.defending, tackleLooseShare: v } }) },
-  { name: "restart_scale", what: "restart delays (ball-in-play share)", init: 1, min: 0.6, max: 2.5, step: 0.2,
-    apply: (p, v) => ({ ...p, timing: { ...p.timing, restartDelayS: Object.fromEntries(Object.entries(p.timing.restartDelayS).map(([k, s]) => [k, s * v])) as Params["timing"]["restartDelayS"] } }) },
+  // P5 ruling 27: also scales the S8 delay medians (deadBall.medianS), in a narrowed 0.8-1.25 around the real medians.
+  { name: "restart_scale", what: "restart delays (ball-in-play share, dead time by restart)", init: 1, min: 0.8, max: 1.25, step: 0.1,
+    apply: (p, v) => ({
+      ...p,
+      timing: { ...p.timing, restartDelayS: Object.fromEntries(Object.entries(p.timing.restartDelayS).map(([k, s]) => [k, s * v])) as Params["timing"]["restartDelayS"] },
+      deadBall: { ...p.deadBall, medianS: Object.fromEntries(Object.entries(p.deadBall.medianS).map(([k, s]) => [k, s * v])) as Params["deadBall"]["medianS"] }
+    }) },
   { name: "shape_width", what: "team width, mostly in possession (throw-ins, pass length)", init: 1, min: 0.8, max: 1.6, step: 0.1,
     apply: (p, v) => ({ ...p, shape: { ...p.shape, width: v } }) },
   { name: "shape_depth", what: "distance between lines (pass length, long passes)", init: 1, min: 0.8, max: 1.6, step: 0.1,
@@ -134,9 +145,34 @@ export const KNOBS: ReadonlyArray<Knob> = [
   { name: "recovery_rate", what: "scale on the recovery-sprint hazard after a loss (recovery share at 5-6 s, distance)", init: 1, min: 0.5, max: 1.5, step: 0.25,
     apply: (p, v) => ({ ...p, transition: { ...p.transition, recoverRatePerS: p.transition.recoverRatePerS * v } }) },
   { name: "press_rate", what: "scale on the team-press hazard (press episodes, tackles, fouls, ball pressure)", init: 1, min: 0.75, max: 1.25, step: 0.125,
-    apply: (p, v) => ({ ...p, press: { ...p.press, rateScale: p.press.rateScale * v } }) }
-  // No lane_share knob: zonal marking (marking.rule) ships off (user ruling, P4 Task 10), so laneShare is inert;
-  // marking_weight stays as the lever for ball pressure.
+    apply: (p, v) => ({ ...p, press: { ...p.press, rateScale: p.press.rateScale * v } }) },
+  // P5 (plan 8e ruling 27): no knob on role tables, walls, zonal spots or delay shapes. Ranges around each task's value.
+  { name: "fk_shot", what: "logit shift for shooting at central attacking free kicks (direct free-kick shot share)", init: DEFAULT_PARAMS.directFk.shotShift, min: DEFAULT_PARAMS.directFk.shotShift - 1, max: DEFAULT_PARAMS.directFk.shotShift + 1, step: 0.5,
+    apply: (p, v) => ({ ...p, directFk: { ...p.directFk, shotShift: v } }) },
+  { name: "gk_long", what: "logit shift for long passes and switches at goal kicks and keeper free kicks (long goal-kick share)", init: DEFAULT_PARAMS.keeperRestarts.longShift, min: DEFAULT_PARAMS.keeperRestarts.longShift - 1, max: DEFAULT_PARAMS.keeperRestarts.longShift + 1, step: 0.5,
+    apply: (p, v) => ({ ...p, keeperRestarts: { ...p.keeperRestarts, longShift: v } }) },
+  { name: "gk_long_error", what: "scale on the kick error of long goal kicks and keeper free kicks (long goal-kick completion)", init: 1, min: 0.75, max: 1.25, step: 0.125,
+    apply: (p, v) => ({ ...p, keeperRestarts: { ...p.keeperRestarts, longErrorScale: p.keeperRestarts.longErrorScale * v } }) },
+  { name: "role_rate", what: "scale on every A6 role-move rate: run start weights, overlaps, wingers inside, full-back inversions, CM drops (role-move counts)", init: 1, min: 0.75, max: 1.25, step: 0.125,
+    apply: (p, v) => {
+      const r = p.roleMoves
+      return {
+        ...p,
+        roleMoves: {
+          ...r,
+          run: { ...r.run, roleWeight: Object.fromEntries(Object.entries(r.run.roleWeight).map(([k, w]) => [k, w * v])) as typeof r.run.roleWeight },
+          overlap: { ...r.overlap, ratePerS: r.overlap.ratePerS * v },
+          inside: { ...r.inside, ratePerS: r.inside.ratePerS * v },
+          invert: { ...r.invert, ratePerS: r.invert.ratePerS * v },
+          cmDrop: { ...r.cmDrop, ratePerS: r.cmDrop.ratePerS * v }
+        }
+      }
+    } },
+  { name: "max_gap", what: "zonal cap: the farthest a zonal marker stands from his man, m (free space, tight marking, ball pressure)", init: DEFAULT_PARAMS.marking.maxGapM, min: DEFAULT_PARAMS.marking.maxGapM - 1.5, max: DEFAULT_PARAMS.marking.maxGapM + 1.5, step: 0.5,
+    apply: (p, v) => ({ ...p, marking: { ...p.marking, maxGapM: v } }) },
+  // Re-added in P5: zonal marking (marking.rule) is on, so laneShare is live again.
+  { name: "lane_share", what: "share of the way from the ball to the man where a zonal marker stands (free space, ball pressure)", init: DEFAULT_PARAMS.marking.laneShare, min: 0.3, max: 0.5, step: 0.05,
+    apply: (p, v) => ({ ...p, marking: { ...p.marking, laneShare: v } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

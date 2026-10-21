@@ -143,11 +143,10 @@ describe("realism v2 P3 params", () => {
 
 describe("realism v2 P4 params", () => {
   const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
-  it("ship switched on (Task 10) except zonal marking, with the spec's join table, tackle terms and foul factors, a 6 s release cap, and four new RNG streams", () => {
+  it("ship switched on (Task 10; zonal marking from P5 Task 14), with the spec's join table, tackle terms and foul factors, a 6 s release cap, and four new RNG streams", () => {
     const P = DEFAULT_PARAMS
     for (const r of [P.tackle.rule, P.fouls.rule, P.aerial.rule, P.transition.rule, P.press.rule, P.firstTick.scopeRule, P.release.rejudge]) expect(r).toBe(1)
-    // Zonal marking (A5) is built but ships off, carried to P5 (user ruling after the Task 10 gate: free space 9.6 m against 6.0).
-    expect(P.marking.rule).toBe(0)
+    // Zonal marking (A5) shipped off in P4 (free space 9.6 m against 6.0) and is switched on by P5 Task 14 (asserted below).
     expect(P.release.capS).toBe(6)
     expect(P.transition.joinP).toEqual([0.8, 0.3, 0.23, 0.13, 0.07])
     expect([P.tackle.frontLogit, P.tackle.behindLogit, P.tackle.supportLogit, P.tackle.boxLogit]).toEqual([0.35, -0.35, 0.4, 0.3])
@@ -189,5 +188,40 @@ describe("realism v2 P6 params", () => {
     expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: -0.1 } })).toThrow(ParamsError)
     expect(() => paramsFromJson({ provenance: cc, execFatigue: { power: 0 } })).toThrow(/execFatigue\.power/)
     expect(paramsFromJson({ provenance: cc, execFatigue: { ref: 0.5, power: 2 } }).execFatigue.ref).toBe(0.5)
+  })
+})
+
+describe("realism v2 P5 params", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("ship switched on (Task 14) with zonal marking, the real role tables, delay medians and three new RNG streams", () => {
+    const P = DEFAULT_PARAMS
+    for (const r of [P.setAttack.rule, P.setDefend.rule, P.setShapes.rule, P.deadBall.rule, P.keeperRestarts.rule, P.directFk.rule,
+      P.roleMoves.runRule, P.roleMoves.rotateRule, P.marking.landingRule, P.transition.pauseRule, P.release.freeRule, P.marking.rule, P.press.rule]) expect(r).toBe(1)
+    expect(P.marking.maxGapM).toBe(5)
+    expect(P.setDefend.wallGapM).toBe(1.5)
+    expect(P.setAttack.corner.CB).toEqual([42, 4])
+    expect(P.deadBall.medianS).toEqual({ throw_in: 13.5, goal_kick: 22, corner: 33, free_kick_att: 42, free_kick: 28, kickoff: 70 })
+    expect(P.setAttack.restKeep).toEqual({ corner: 1.4, fk_wide: 2.7, fk_central: 2.3, throw_att: 4.1 })
+    for (const c of ["setpiece", "dead", "roles"]) expect(CONCERNS).toContain(c)
+  })
+  it("reject a P5 switch other than 0 or 1, a wall share above 1, a reversed range, and accept negative table u", () => {
+    expect(() => paramsFromJson({ provenance: cc, deadBall: { rule: 2 } })).toThrow(/deadBall\.rule must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, roleMoves: { rotateRule: 0.5 } })).toThrow(/roleMoves\.rotateRule must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, setDefend: { wallWideShare: 1.3 } })).toThrow(/between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, deadBall: { walkMps: [1.5, 1] } })).toThrow(/deadBall\.walkMps/)
+    expect(paramsFromJson({ provenance: cc, setShapes: { goalKick: { def: { ST: [-24, 9] } } } }).setShapes.goalKick.def.ST).toEqual([-24, 9])
+    // The whole zone list (mergeInto keeps array lengths), zone 0 changed.
+    const [z, ...rest] = DEFAULT_PARAMS.cross.zones
+    expect(() => paramsFromJson({ provenance: cc, cross: { zones: [{ ...z!, u: -5 }, ...rest] } })).toThrow(/cross\.zones\.u must not be negative/)   // the narrowed SIGNED regex
+    expect(paramsFromJson({ provenance: cc, cross: { zones: [{ ...z!, s: -3 }, ...rest] } }).cross.zones[0]!.s).toBe(-3)
+  })
+  it("reject a fractional wall or throw-in count, a throw mark weight above 1, and a delay median or spread that is not positive", () => {
+    expect(() => paramsFromJson({ provenance: cc, setDefend: { wallCentral: [3, 3.5] } })).toThrow(/setDefend\.wallCentral\[1\] must be a whole number/)
+    expect(() => paramsFromJson({ provenance: cc, setDefend: { wallWide: [0.5, 2] } })).toThrow(/setDefend\.wallWide\[0\] must be a whole number/)
+    expect(() => paramsFromJson({ provenance: cc, setShapes: { throwShort: 2.5 } })).toThrow(/setShapes\.throwShort must be a whole number/)
+    expect(() => paramsFromJson({ provenance: cc, setShapes: { throwMarkWeight: 1.2 } })).toThrow(/setShapes\.throwMarkWeight must be between 0 and 1/)
+    expect(() => paramsFromJson({ provenance: cc, deadBall: { medianS: { corner: 0 } } })).toThrow(/deadBall\.medianS\.corner must be positive/)
+    expect(() => paramsFromJson({ provenance: cc, deadBall: { sigma: { kickoff: 0 } } })).toThrow(/deadBall\.sigma\.kickoff must be positive/)
+    expect(paramsFromJson({ provenance: cc, setDefend: { wallCentral: [2, 5] }, setShapes: { throwShort: 2 } }).setDefend.wallCentral).toEqual([2, 5])
   })
 })

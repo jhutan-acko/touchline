@@ -93,14 +93,18 @@ describe("P3 real-data targets on the calibrated parameters (4 matches)", () => 
     expect(v).toBeGreaterThanOrEqual(12)
     expect(v).toBeLessThanOrEqual(18)
   }, 600_000)
-  it("about 1.6 punts per team-match (G5; 1.0-2.2)", () => {
+  // NOT MET (P5 Task 14, M10 ruling 23): 0.50 per team-match on these 4 matches, 0.60 on the 64-match deep report (bound
+  // 1.0-2.2). P5's goal-kick and keeper free-kick restarts (G3) take distributions off the keeper's hands.
+  it.fails("NOT MET: about 1.6 punts per team-match (G5; 1.0-2.2)", () => {
     const v = sum("punts") / (2 * SEEDS.length)
     expect(v).toBeGreaterThanOrEqual(1.0)
     expect(v).toBeLessThanOrEqual(2.2)
   }, 600_000)
   // Task 7 ruling: the real punt share of hands distributions (1.6 punts against 3.4 throws per team-match), within
   // 0.08 of 0.32 as the brief's mechanism band was (distribution.test checks the mechanism, sigmoid(puntLogit)).
-  it("about a third of the keeper's hands distributions are punts (G5; real 0.32, 0.24-0.40)", () => {
+  // NOT MET (P5 Task 14, M10 ruling 23): 0.182 on these 4 matches, 0.16 on the 64-match deep report (0.60 punts against
+  // 3.20 throws per team-match).
+  it.fails("NOT MET: about a third of the keeper's hands distributions are punts (G5; real 0.32, 0.24-0.40)", () => {
     const v = sum("punts") / (sum("punts") + sum("throws"))
     expect(v).toBeGreaterThanOrEqual(0.24)
     expect(v).toBeLessThanOrEqual(0.4)

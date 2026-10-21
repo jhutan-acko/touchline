@@ -55,6 +55,8 @@ import {
   type Possession,
   type PressState,
   type RestartKind,
+  type RestartPlan,
+  type SetPieceLive,
   type PlayerSetup,
   type Role,
   type StepResult,
@@ -67,6 +69,7 @@ import { advanceRows, blendFor, commitSide, holdBall, initAnchorState, lagBall, 
 import { advanceDrift, driftFor } from "./drift.js"
 import type { PosGroup, ShapeRow } from "./params.js"
 import { FORMATIONS } from "./shape.js"
+import { setPieceKind, type SetPieceKind } from "./setpiece.js"
 // ---- P3 imports, boot-block seam (plan 8c Task 3; plan 8d Task 9 inserts below this line)
 import { bootBlocker } from "./deflect.js"
 
@@ -80,7 +83,7 @@ import { bearingOf, supportCount, tackleLogit } from "./duel.js"
 import { angleFactor, zoneFactor } from "./fouls.js"
 
 // ---- P4 imports, transition seam (plan 8d Task 6 inserts below this line)
-import { joinChance, pauseTarget, recoverRate, windowTicks } from "./transition.js"
+import { joinChance, pauseCap, pauseEndCap, pauseTarget, recoverRate, windowTicks } from "./transition.js"
 
 // ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
 import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "./press.js"
@@ -97,6 +100,32 @@ import { coneCount, contactDecision } from "./contact.js"
 import { xgOf } from "./decide.js"
 import { actionZone } from "./geometry.js"
 import { headerEligible, headerHow, headShare } from "./header.js"
+
+// ---- P5 imports, attacking set-piece seam (plan 8e Task 3 inserts below this line)
+import { attackRoleSpot, attackTable, holdSpot, restKeepers, restKind, restSpots } from "./setpiece-attack.js"
+
+// ---- P5 imports, defending set-piece seam (plan 8e Task 4 inserts below this line)
+import { boxLayout, inSetPieceBox, wallPoint, wallSize, wallSpots } from "./setpiece-defend.js"
+import { roleSpot, ySignOf } from "./setpiece.js"
+
+// ---- P5 imports, restart-shape seam (plan 8e Task 5 inserts below this line)
+// (roleSpot and ySignOf from ./setpiece.js are imported under the Task 4 marker above.)
+import { kickoffLegal, outsideBox, throwShortIds } from "./setpiece-shapes.js"
+
+// ---- P5 imports, dead-ball seam (plan 8e Task 6 inserts below this line)
+import { restartDelayS, settleS, walkCap } from "./deadball.js"
+import { deadKey } from "./setpiece.js"
+
+// ---- P5 imports, keeper-restart seam (plan 8e Task 7 inserts below this line)
+
+// ---- P5 imports, role-run seam (plan 8e Task 9 inserts below this line)
+import { breakTarget, holdLineTarget, overlapEligible, overlapTarget } from "./runs.js"
+
+// ---- P5 imports, rotation seam (plan 8e Task 10 inserts below this line)
+import { dropTarget, insideTarget, invertTarget } from "./rotate.js"
+
+// ---- P5 imports, marking seam (plan 8e Task 11 inserts below this line)
+import { capGap, landingTarget } from "./offball.js"
 
 const HALF_TIME_MS = 15 * 60 * 1000
 /** Seconds in 90 minutes, the match length that per-match rates such as cautionPerMatch are spread over. */
@@ -231,6 +260,10 @@ class Work {
   transition: TransitionState | undefined
   /** A5 team-press state (P4); absent while press.rule is 0. */
   press: PressState | undefined
+  /** P5 plan for the restart being set up; absent while no P5 seam plans one, or in open play. */
+  restartPlan: RestartPlan | undefined
+  /** P5 set piece just taken (attacking set-piece seam); absent while none is live. */
+  setPiece: SetPieceLive | undefined
 
   constructor(s: MatchState) {
     this.cfg = s.config
@@ -267,6 +300,8 @@ class Work {
     this.supportGate = s.supportGate
     this.transition = s.transition
     this.press = s.press
+    this.restartPlan = s.restartPlan
+    this.setPiece = s.setPiece
   }
 
   get p() {
@@ -377,12 +412,21 @@ class Work {
       ...(this.load ? { load: { ...this.load } } : {}),
       ...(this.supportGate ? { supportGate: this.supportGate } : {}),
       ...(this.transition ? { transition: this.transition } : {}),
-      ...(this.press ? { press: this.press } : {})
+      ...(this.press ? { press: this.press } : {}),
+      ...(this.restartPlan ? { restartPlan: this.restartPlan } : {}),
+      ...(this.setPiece ? { setPiece: this.setPiece } : {})
     }
   }
 }
 
 // ---------------------------------------------------------------- restarts
+
+/** A restart to set up: its kind, the taking side and the spot. */
+type RestartAt = { readonly restart: RestartKind; readonly side: Side; readonly at: Vec2 }
+/** The restart phase (a restart being set up). */
+type RestartPhase = Extract<Phase, { kind: "restart" }>
+/** A seam's part of a restart's plan: any field but `kind`, which startRestart sets. */
+type PlanPart = Partial<Omit<RestartPlan, "kind">>
 
 const restartFromOut = (lastSide: Side | null, at: Vec3, period: Period): { restart: RestartKind; side: Side; at: Vec2 } => {
   const last = lastSide ?? "home"
@@ -396,15 +440,24 @@ const restartFromOut = (lastSide: Side | null, at: Vec3, period: Period): { rest
   return { restart: "goal_kick", side: defending, at: { x: end * (PITCH.halfL - PITCH.sixDepth), y: 0 } }
 }
 
-const startRestart = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): void => {
-  const delay = w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)
-  w.phase = { kind: "restart", restart: r.restart, side: r.side, at: r.at, resumeTick: w.tick + Math.round(delay / w.dt) }
+const startRestart = (w: Work, r: RestartAt): void => {
+  const resumeTick = w.tick + restartDelayTicks(w, r)
+  w.phase = { kind: "restart", restart: r.restart, side: r.side, at: r.at, resumeTick }
   w.possession = { kind: "dead" }
   w.ball = { pos: { x: r.at.x, y: r.at.y, z: 0 }, vel: { x: 0, y: 0, z: 0 } }
   w.pressedBy = []
   // A restart is not a loss (P4 A4): it ends any transition.
   w.transition = undefined
   if (w.period === "second_half") for (const side of ["home", "away"] as const) subWindow(w, side)
+  // P5 (plan 8e): the restart's plan, after any substitution, so it names the players on the pitch. Each seam sees the
+  // fields before it (takerFor already knows the keeper choice); a plan holding nothing but its kind is dropped.
+  const kind = setPieceKind(r.restart, r.at, r.side, w.period)
+  w.restartPlan = { kind }
+  w.restartPlan = { ...w.restartPlan, ...planDead(w, r, kind, resumeTick) }
+  w.restartPlan = { ...w.restartPlan, ...planKeeper(w, r, kind) }
+  w.restartPlan = { ...w.restartPlan, ...planAttack(w, r, kind) }
+  w.restartPlan = { ...w.restartPlan, ...planDefend(w, r, kind) }
+  if (Object.values(w.restartPlan).filter((v) => v !== undefined).length === 1) w.restartPlan = undefined
 }
 
 // ---------------------------------------------------------------- substitutions
@@ -493,10 +546,313 @@ const orderedSubs = (w: Work, side: Side): void => {
   w.subs[side] = { ...st, made: st.made + made, used, windows: st.windows + (made > 0 && !w.halfTimeBreak ? 1 : 0) }
 }
 
-const takerFor = (w: Work, r: { restart: RestartKind; side: Side; at: Vec2 }): PlayerState => {
+// ================================================================ P5 attacking set-piece seam (plan 8e Task 3 owns this block)
+
+/**
+ * S4: the attacking side's part of a restart's plan: at corners, attacking free kicks and attacking-third throw-ins, the
+ * rest-defence keepers (restKeepers over the side sorted deepest first, the taker as takerFor sees him now) and their
+ * spots (setpiece stream); any other kind: nothing, no draw. Under rule 1 every restart also ends the last set piece's
+ * run (w.setPiece). rule 0: nothing, no draw, no write. @internal
+ */
+export const planAttack = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
+  const s = w.p.setAttack
+  if (s.rule <= 0) return {}
+  // The ball is dead: any run from the last set piece is over.
+  w.setPiece = undefined
+  const rk = restKind(kind)
+  if (rk === null) return {}
+  const rng = w.rng.setpiece
+  // Deepest first (u in the side's frame, where each player stands now; stable, so slot order breaks ties), so
+  // restKeepers keeps the deepest FB or CM first.
+  const byDepth = w.active(r.side).sort((a, b) => attackX(r.side, a.pos.x, w.period) - attackX(r.side, b.pos.x, w.period))
+  const restKeep = restKeepers(byDepth, takerFor(w, r).id, s.restKeep[rk], rng)
+  return { restKeep, restSpot: restSpots(restKeep, r.side, w.period, s, rng) }
+}
+
+/** S1: `pl`'s table spot at a set piece of `kind` taken by his side, or null when the kind has no table. */
+const tableSpotOf = (w: Work, pl: PlayerState, kind: SetPieceKind): Vec2 | null => {
+  const table = attackTable(kind, w.p.setAttack)
+  if (!table) return null
+  const team = teamOf(w.cfg, pl.side)
+  return attackRoleSpot(table, pl.role, kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), pl.side, w.period)
+}
+
+/**
+ * S1/S4: a restarting-side player's spot while the restart is set up: a rest keeper his rest spot; at a corner or an
+ * attacking free kick, the keeper his table spot and everyone else his table spot held holdBackM short (F31); null
+ * otherwise (falls through to shapeSpot). rule 0: null. @internal
+ */
+export const attackSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => {
+  const s = w.p.setAttack
+  const plan = w.restartPlan
+  if (s.rule <= 0 || !plan || pl.side !== ph.side) return null
+  const rest = plan.restSpot?.[pl.id]
+  if (rest) return rest
+  const spot = tableSpotOf(w, pl, plan.kind)
+  if (!spot) return null
+  return pl.role === "GK" ? spot : holdSpot(spot, pl.side, w.period, s.holdBackM)
+}
+
+/**
+ * S1: the restart has just been taken by `taker` (handleRestart): at a set piece with a table, notes it live (with its
+ * rest keepers, before the plan is cleared, F2) for the run at the kick; any other restart ends a live one. rule 0:
+ * nothing. @internal
+ */
+export const noteSetPiece = (w: Work, ph: RestartPhase, taker: PlayerState): void => {
+  if (w.p.setAttack.rule <= 0) return
+  const kind = w.restartPlan?.kind ?? setPieceKind(ph.restart, ph.at, ph.side, w.period)
+  const restKeep = w.restartPlan?.restKeep
+  w.setPiece = attackTable(kind, w.p.setAttack)
+    ? { kind, side: ph.side, tick: w.tick, takerId: taker.id, ...(restKeep ? { restKeep } : {}) }
+    : undefined
+}
+
+/**
+ * S1: an attacker's run to his table spot just after the kick, at runSpeedShare x vmax, for runWindowS. Not for the
+ * taker, the ball's owner, the flight's winner, the keeper, the rest keepers or the other side. The run ends after
+ * runWindowS or while the other side has the ball. A pure query: w.setPiece stays as the record of the last set piece
+ * (inert after its window) until the next restart's planAttack or noteSetPiece replaces it. rule 0: null. @internal
+ */
+export const setPieceRun = (w: Work, pl: PlayerState, vmax: number): MoveTarget | null => {
+  const sp = w.setPiece
+  const s = w.p.setAttack
+  if (s.rule <= 0 || !sp) return null
+  const pos = w.possession
+  const lost =
+    (pos.kind === "owned" && w.players.find((x) => x.id === pos.playerId)?.side !== sp.side) || (pos.kind === "in_flight" && pos.flight.side !== sp.side)
+  if (w.tick - sp.tick >= Math.round(s.runWindowS / w.dt) || lost) return null
+  if (pl.side !== sp.side || pl.role === "GK" || pl.id === sp.takerId || sp.restKeep?.includes(pl.id)) return null
+  if (pos.kind === "owned" && pos.playerId === pl.id) return null
+  if (pos.kind === "in_flight" && pos.flight.winnerId === pl.id) return null
+  const spot = tableSpotOf(w, pl, sp.kind)
+  return spot ? { target: clampToPitch(spot, 0.5), speedCap: s.runSpeedShare * vmax } : null
+}
+
+// ================================================================ end of P5 attacking set-piece seam
+
+// ================================================================ P5 defending set-piece seam (plan 8e Task 4 owns this block)
+
+/**
+ * S2/S3: the defending side's part of a restart's plan (setpiece stream). At a central or wide attacking free kick: the
+ * wall's size (wallSize), its members (the defending outfielders other than CBs nearest the wall point, ordered across
+ * the line), each member's jitter U(-jitterM, 0), and at a wide one the outlet (the most advanced ST outside the wall,
+ * with chance outletShare). Corners draw nothing. rule 0: nothing, no draw. @internal
+ */
+export const planDefend = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
+  const s = w.p.setDefend
+  if (s.rule <= 0 || (kind !== "fk_central" && kind !== "fk_wide")) return {}
+  const rng = w.rng.setpiece
+  const defSide = other(r.side)
+  const point = wallPoint(r.at, defSide, w.period, s)
+  const pool = w.active(defSide).filter((pl) => pl.role !== "GK" && pl.role !== "CB")
+  const n = Math.min(wallSize(kind, s, rng), pool.length)
+  const dir = norm(sub(point, r.at))
+  const across = (p: Vec2): number => dir.x * (p.y - r.at.y) - dir.y * (p.x - r.at.x)
+  const wall = [...pool]
+    .sort((a, b) => dist(a.pos, point) - dist(b.pos, point) || (a.id < b.id ? -1 : 1))
+    .slice(0, n)
+    .sort((a, b) => across(a.pos) - across(b.pos))
+    .map((pl) => pl.id)
+  const jitter = Object.fromEntries(wall.map((id) => [id, rng.range(-s.jitterM, 0)]))
+  const up = kind === "fk_wide" && rng.chance(s.outletShare)
+  const outlet = up
+    ? w
+        .active(defSide)
+        .filter((pl) => pl.role === "ST" && !wall.includes(pl.id))
+        .sort((a, b) => attackX(defSide, b.pos.x, w.period) - attackX(defSide, a.pos.x, w.period) || (a.id < b.id ? -1 : 1))[0]?.id
+    : undefined
+  return { ...(wall.length > 0 ? { wall, jitter } : {}), ...(outlet !== undefined ? { outlet } : {}) }
+}
+
+/**
+ * S2/S3: a defending player's spot while a corner or an attacking free kick is set up; null falls through to shapeSpot
+ * (and the old target with its 9.15 m push). Wall members stand on the wall (members who have left are skipped, so the
+ * wall closes up); the outlet keeps his old target; at corners the keeper takes the table's spot on his line. The other
+ * outfielders follow boxLayout: corners and wide free kicks fill the box (markers, zonal spots, table spots, one at the
+ * edge), central ones mark only. Attackers count at their position when in the box, else at their attacking set-piece
+ * spot when that is. rule 0: null. @internal
+ */
+export const defendSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => {
+  const s = w.p.setDefend
+  if (s.rule <= 0) return null
+  const kind = setPieceKind(ph.restart, ph.at, ph.side, w.period)
+  if (kind !== "corner" && kind !== "fk_wide" && kind !== "fk_central") return null
+  if (pl.role === "GK") return kind === "corner" ? roleSpot(s.corner, "GK", 0, ph.side, w.period) : null
+  const plan = w.restartPlan
+  if (pl.id === plan?.outlet) return null
+  const team = w.active(pl.side)
+  const wall = (plan?.wall ?? []).filter((id) => team.some((x) => x.id === id))
+  const wi = wall.indexOf(pl.id)
+  if (wi >= 0) return wallSpots(ph.at, pl.side, w.period, wall.length, wall.map((id) => plan?.jitter?.[id] ?? 0), s)[wi]!
+  const formation = teamOf(w.cfg, pl.side)
+  const defs = team
+    .filter((x) => x.role !== "GK" && !wall.includes(x.id) && x.id !== plan?.outlet)
+    .map((x) => ({ id: x.id, role: x.role, ySign: ySignOf(kickoffAnchor(formation.formation, x.slot, x.side, w.period, formation.style)) }))
+  const takerId = takerFor(w, ph).id
+  const attackers = w.active(ph.side).flatMap((a) => {
+    if (a.role === "GK" || a.id === takerId) return []
+    const at = inSetPieceBox(a.pos, ph.side, w.period) ? a.pos : attackSpot(w, a, ph)
+    return at && inSetPieceBox(at, ph.side, w.period) ? [{ ...a, pos: at }] : []
+  })
+  return boxLayout(defs, attackers, ph.at, pl.side, w.period, s, kind !== "fk_central").get(pl.id) ?? null
+}
+
+// ================================================================ end of P5 defending set-piece seam
+
+// ================================================================ P5 restart-shape seam (plan 8e Task 5 owns this block)
+
+/** S5-S7: a player's goal-kick, throw-in or kickoff spot (either side); null keeps the old target. rule 0: null. @internal */
+export const shapeSpot = (w: Work, pl: PlayerState, ph: RestartPhase): Vec2 | null => {
+  const sh = w.p.setShapes
+  if (sh.rule <= 0) return null
+  if (ph.restart === "goal_kick" || ph.restart === "kickoff") {
+    // Role tables are in the restarting side's frame for both sides; the sign is the pitch side of his slot (ruling 4).
+    const tables = ph.restart === "goal_kick" ? sh.goalKick : sh.kickoff
+    const mine = pl.side === ph.side
+    const slot = FORMATIONS[teamOf(w.cfg, pl.side).formation][pl.slot]!
+    const spot = roleSpot(mine ? tables.att : tables.def, pl.role, ySignOf({ x: 0, y: slot.y * dirOf(pl.side, w.period) }), ph.side, w.period)
+    if (ph.restart === "kickoff") return kickoffLegal(spot, pl.side, w.period, mine)
+    return mine ? spot : outsideBox(spot, ph.side, w.period)
+  }
+  if (ph.restart !== "throw_in") return null
+  const plan = throwPlan(w, ph)
+  return (pl.side === ph.side ? plan.support : plan.marks).get(pl.id) ?? null
+}
+
+/** S6: one tick's short supporters and their markers (spots by player id). */
+interface ThrowPlan { readonly tick: number; readonly at: Vec2; readonly support: ReadonlyMap<string, Vec2>; readonly marks: ReadonlyMap<string, Vec2> }
+const throwPlans = new WeakMap<Work, ThrowPlan>()
+
+/**
+ * S6: the taker's `throwShort` nearest outfield teammates come short to the ring, and the defending side marks them
+ * goal-side. Teammates are ranked, and opponents counted, by the restart anchor (not the live position), so the
+ * trio, their spots and the pairs stay the same while players move; stateless. Computed once per tick for all 22 players.
+ */
+const throwPlan = (w: Work, ph: RestartPhase): ThrowPlan => {
+  const hit = throwPlans.get(w)
+  if (hit && hit.tick === w.tick && hit.at.x === ph.at.x && hit.at.y === ph.at.y) return hit
+  const sh = w.p.setShapes
+  const taker = takerFor(w, ph)
+  const mates = w.active(ph.side).map((m) => ({ ...m, pos: restartTarget(w, m, ph.at, true) }))
+  const ids = throwShortIds(mates, taker.id, ph.at, sh.throwShort)
+  // The opponents count at their restart anchors too, so a marker walking toward his man cannot move the man's spot.
+  const opps = w.active(other(ph.side)).map((d) => ({ ...d, pos: restartTarget(w, d, ph.at, false) }))
+  const support = new Map<string, Vec2>()
+  for (const id of ids) support.set(id, supportSpot(ph.at, mates.find((m) => m.id === id)!.pos, ph.side, w.period, opps, sh.throwShortM, true))
+  const marks = new Map<string, Vec2>()
+  if (support.size > 0) {
+    const defSide = other(ph.side)
+    const defenders = opps.filter((d) => d.role !== "GK").map((d) => ({ id: d.id, anchor: d.pos }))
+    const supporters = ids.map((id) => ({ ...w.player(id), pos: support.get(id)! }))
+    for (const [defId, att] of assignMarks(defenders, supporters, THROW_MARK_RADIUS_M))
+      marks.set(defId, markTarget(defenders.find((d) => d.id === defId)!.anchor, att.pos, defSide, w.period, 1, sh.throwMarkWeight))
+  }
+  const plan = { tick: w.tick, at: ph.at, support, marks }
+  throwPlans.set(w, plan)
+  return plan
+}
+
+/** S6: a defender marks a short supporter only within this distance of his own spot (ruling 10). */
+const THROW_MARK_RADIUS_M = 15
+
+// ================================================================ end of P5 restart-shape seam
+
+// ================================================================ P5 dead-ball seam (plan 8e Task 6 owns this block)
+
+/**
+ * S8: ticks from a restart's start to its resume tick. rule 0: timing.restartDelayS x U(0.7, 1.3) (restart stream). rule 1:
+ * a lognormal delay at the real median of the restart's key at this minute (dead stream); a penalty keeps the old draw.
+ * @internal
+ */
+export const restartDelayTicks = (w: Work, r: RestartAt): number => {
+  const key = w.p.deadBall.rule === 1 ? deadKey(setPieceKind(r.restart, r.at, r.side, w.period)) : null
+  if (key === null) return Math.round((w.p.timing.restartDelayS[r.restart] * w.rng.restart.range(0.7, 1.3)) / w.dt)
+  return Math.round(restartDelayS(key, w.minute(), w.p.deadBall, w.rng.dead) / w.dt)
+}
+
+/**
+ * S8: the dead-ball part of a restart's plan. rule 1: each player on the pitch, in order, draws his walking speed and his
+ * settle time before `resumeTick` (his deadline); then the taker's pause (dead stream). rule 0: nothing, no draw. @internal
+ */
+export const planDead = (w: Work, r: RestartAt, kind: SetPieceKind, resumeTick: number): PlanPart => {
+  const d = w.p.deadBall
+  if (d.rule !== 1) return {}
+  const rng = w.rng.dead
+  const walkMps: Record<string, number> = {}
+  const readyTick: Record<string, number> = {}
+  for (const pl of w.active()) {
+    walkMps[pl.id] = rng.range(d.walkMps[0], d.walkMps[1])
+    readyTick[pl.id] = resumeTick - Math.round(settleS(kind, pl.side === r.side, d, rng) / w.dt)
+  }
+  const pauseTicks = Math.round(rng.range(d.takerPauseS[0], d.takerPauseS[1]) / w.dt)
+  return { walkMps, readyTick, pauseTicks }
+}
+
+/**
+ * S8: a player's movement while the ball is dead, over the restart dispatcher's `mt`: his walking pace, raised to arrive
+ * by his deadline (walkCap; 0.8 x vmax within a tick of it). rule 0, no plan (the period kickoffs) or a player the plan
+ * does not name (on since): `mt` itself. @internal
+ */
+export const deadMove = (w: Work, pl: PlayerState, mt: MoveTarget): MoveTarget => {
+  const plan = w.restartPlan
+  if (w.p.deadBall.rule !== 1 || plan === undefined) return mt
+  const walk = plan.walkMps?.[pl.id]
+  const ready = plan.readyTick?.[pl.id]
+  if (walk === undefined || ready === undefined) return mt
+  const secondsLeft = (ready - w.tick) * w.dt
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  return { ...mt, speedCap: walkCap(dist(pl.pos, mt.target), secondsLeft <= w.dt ? 0 : secondsLeft, walk, vmax) }
+}
+
+/**
+ * S8: the taker who has arrived on the spot (the plan's arrivedId) stays the taker while he is on the pitch, so a teammate
+ * crossing the spot neither takes over nor restarts the pause. null (takerFor picks as before) under rule 0, before anyone
+ * has arrived, or once he has been sent off or substituted. @internal
+ */
+export const arrivedTaker = (w: Work, r: RestartAt): PlayerState | null => {
+  const id = w.p.deadBall.rule === 1 ? w.restartPlan?.arrivedId : undefined
+  if (id === undefined) return null
+  return w.active(r.side).find((x) => x.id === id) ?? null
+}
+
+/**
+ * S8: whether the taker is ready to take the restart. rule 0, or no pause planned (the period kickoffs): within 1 m of the
+ * spot. rule 1: he has stood within 1 m for the plan's pauseTicks, counted from when this taker first stood there (a new
+ * taker, or one who stepped away, starts again). Only asked from the resume tick on.
+ *
+ * Side effect (rule 1 with a pause planned): it records the pause in w.restartPlan, writing arrivedTick and arrivedId
+ * when the taker first stands on the spot and clearing both when he leaves it. @internal
+ */
+export const takerReady = (w: Work, ph: RestartPhase, taker: PlayerState): boolean => {
+  const near = dist(taker.pos, ph.at) <= 1.0
+  const plan = w.restartPlan
+  if (w.p.deadBall.rule !== 1 || plan?.pauseTicks === undefined) return near
+  const { arrivedTick, arrivedId, ...rest } = plan
+  if (!near) {
+    if (arrivedTick !== undefined) w.restartPlan = rest
+    return false
+  }
+  if (arrivedTick === undefined || arrivedId !== taker.id) {
+    w.restartPlan = { ...rest, arrivedTick: w.tick, arrivedId: taker.id }
+    return plan.pauseTicks <= 0
+  }
+  return w.tick - arrivedTick >= plan.pauseTicks
+}
+
+// ================================================================ end of P5 dead-ball seam
+
+const takerFor = (w: Work, r: RestartAt): PlayerState => {
   const team = w.active(r.side)
   if (r.restart === "goal_kick") return team.find((x) => x.role === "GK") ?? team[0]!
   if (r.restart === "kickoff") return team.find((x) => x.role === "ST") ?? team[team.length - 1]!
+  // G3 (P5): the keeper takes the free kick when the restart's plan says so (keeperTakes makes no draw).
+  if (r.restart === "free_kick" && keeperTakes(w, r)) {
+    const gk = team.find((x) => x.role === "GK")
+    if (gk) return gk
+  }
+  // S8 (P5 dead-ball seam): the taker on the spot keeps the kick while he is on the pitch.
+  const arrived = arrivedTaker(w, r)
+  if (arrived) return arrived
   // With every outfielder sent off (only under a scripted red-card storm) the keeper takes it.
   return team.filter((x) => x.role !== "GK").sort((a, b) => dist(a.pos, r.at) - dist(b.pos, r.at))[0] ?? team[0]!
 }
@@ -506,10 +862,12 @@ const handleRestart = (w: Work): void => {
   if (ph.kind !== "restart") return
   if (w.tick < ph.resumeTick) return
   const taker = takerFor(w, ph)
-  // The taker walks to the ball (see moveTarget); the restart waits until they are there.
-  if (dist(taker.pos, ph.at) > 1.0) return
+  // The taker walks to the ball (see moveTarget); the restart waits until they are ready (P5 dead-ball seam).
+  if (!takerReady(w, ph, taker)) return
   w.setPlayer({ ...taker, vel: { x: 0, y: 0 }, intentUntil: w.tick, intent: { kind: "hold" } })
   w.emit(w.pending("set_piece", taker, ph.at, { kind: ph.restart }))
+  noteSetPiece(w, ph, taker)
+  w.restartPlan = undefined
   w.possession = { kind: "owned", playerId: taker.id, since: w.tick, restart: ph.restart }
   w.lastTouch = { playerId: taker.id, side: taker.side }
   w.phase = { kind: "open_play" }
@@ -787,13 +1145,44 @@ const keeperMethod = (w: Work, d: Decision): string =>
 
 /** How a pass is struck: throw-ins and keeper throws by hand (throws more accurately), punts with more error. */
 const kickStyle = (w: Work, d: Decision, restart: RestartKind | null): { technique: "throw" | "foot"; hands: boolean; errorScale: number } => {
-  if (restart === "throw_in") return { technique: "throw", hands: true, errorScale: 1 }
-  if (d.candidate?.method === "throw") return { technique: "throw", hands: true, errorScale: w.p.distribution.throwErrorScale }
-  if (d.candidate?.method === "punt") return { technique: "foot", hands: false, errorScale: w.p.distribution.puntErrorScale }
-  return { technique: "foot", hands: false, errorScale: 1 }
+  // G3 (P5): a long goal kick or keeper free kick is struck with keeperRestarts.longErrorScale (keeper-restart seam).
+  const long = longKickScale(w, d, restart)
+  if (restart === "throw_in") return { technique: "throw", hands: true, errorScale: 1 * long }
+  if (d.candidate?.method === "throw") return { technique: "throw", hands: true, errorScale: w.p.distribution.throwErrorScale * long }
+  if (d.candidate?.method === "punt") return { technique: "foot", hands: false, errorScale: w.p.distribution.puntErrorScale * long }
+  return { technique: "foot", hands: false, errorScale: 1 * long }
 }
 
 // ================================================================ end of P3 keeper-distribution seam
+
+// ================================================================ P5 keeper-restart seam (plan 8e Task 7 owns this block)
+
+/** G3: the keeper-restart part of a restart's plan (whether the keeper takes an own-third free kick; dead stream). rule 0: nothing, no draw. @internal */
+export const planKeeper = (w: Work, r: RestartAt, kind: SetPieceKind): PlanPart => {
+  const k = w.p.keeperRestarts
+  if (k.rule !== 1 || r.restart !== "free_kick" || kind === "penalty") return {}
+  // Own third only (u < fkU in the taking side's frame); one draw per restart, read by keeperTakes until the kick.
+  if (attackX(r.side, r.at.x, w.period) >= k.fkU) return {}
+  return { keeperTaker: w.rng.dead.chance(k.fkShare) }
+}
+
+/** G3: whether the keeper takes this free kick (reads the plan's keeperTaker; no draw). rule 0: never. @internal */
+export const keeperTakes = (w: Work, r: RestartAt): boolean =>
+  w.p.keeperRestarts.rule === 1 && r.restart === "free_kick" && w.restartPlan?.keeperTaker === true
+
+/** G3: the error multiplier of a kick (kickStyle): longErrorScale for a long goal kick or keeper free kick. rule 0: 1. @internal */
+export const longKickScale = (w: Work, d: Decision, restart: RestartKind | null): number => {
+  const k = w.p.keeperRestarts
+  if (k.rule !== 1 || d.candidate === null) return 1
+  if (restart !== "goal_kick" && restart !== "free_kick") return 1
+  const poss = w.possession
+  if (poss.kind !== "owned") return 1
+  const kicker = w.player(poss.playerId)
+  if (restart === "free_kick" && kicker.role !== "GK") return 1
+  return dist(kicker.pos, d.candidate.target) >= k.longM ? k.longErrorScale : 1
+}
+
+// ================================================================ end of P5 keeper-restart seam
 
 // ================================================================ P4 aerial seam (plan 8d Task 5 owns this block)
 
@@ -1466,8 +1855,8 @@ const keeperAtReleaseSpot = (w: Work, pl: PlayerState): boolean =>
 
 // ================================================================ P2 positioning
 
-/** True while a restart taken by the team's own keeper (a goal kick) is being set up: the build-up row applies, as in his hands (Ruling 7). */
-const keeperRestart = (w: Work): boolean => {
+/** True while a restart taken by the team's own keeper (a goal kick) is being set up: the build-up row applies, as in his hands (Ruling 7). @internal */
+export const keeperRestart = (w: Work): boolean => {
   const ph = w.phase
   return ph.kind === "restart" && ph.restart !== "kickoff" && takerFor(w, ph).role === "GK"
 }
@@ -1667,7 +2056,9 @@ export const noteLoss = (w: Work, loser: Side, at: Vec2): void => {
     const p = joinChance(dist(pl.pos, at), t)
     if (p > 0 && w.rng.counter.chance(p)) joiners.push(pl.id)
   }
-  w.transition = { loser, tick: w.tick, at, joiners }
+  // P5 (ruling 20): under pauseRule 1, each losing outfielder's speed at the loss, for his pause cap.
+  const speeds = t.pauseRule > 0 ? Object.fromEntries(w.active(loser).filter((pl) => pl.role !== "GK").map((pl) => [pl.id, len(pl.vel)])) : undefined
+  w.transition = { loser, tick: w.tick, at, joiners, ...(speeds ? { speeds } : {}) }
   const winner = w.active(other(loser)).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0]
   if (!winner) return
   const pos = w.possession
@@ -1731,7 +2122,19 @@ export const transitionMove = (w: Work, pl: PlayerState, base: MoveTarget, possS
       return { target: interceptPoint(cur.pos, Math.min(t.speed, vmax), ballFlat, { x: w.ball.vel.x, y: w.ball.vel.y }), speedCap: t.speed }
     return base
   }
-  if (!joiner && sinceTicks < windowTicks(t.pauseS, w.dt) && dist(cur.pos, ballFlat) > t.pauseRadiusM) return pauseTarget(cur.pos, cur.vel, vmax, t)
+  const pauseTicks = windowTicks(t.pauseS, w.dt)
+  const far = !joiner && dist(cur.pos, ballFlat) > t.pauseRadiusM
+  if (far && sinceTicks < pauseTicks) {
+    const held = pauseTarget(cur.pos, cur.vel, vmax, t)
+    if (t.pauseRule <= 0) return held
+    // P5 (ruling 20): hold course, capped at min(base cap, pauseDip x his speed at the loss).
+    return { target: held.target, speedCap: Math.min(base.speedCap, pauseCap(tr.speeds?.[pl.id] ?? len(cur.vel), t)) }
+  }
+  // P5 (ruling 20): over pauseEndS after the pause, base's target with the cap ramping from the pause cap to base's.
+  if (t.pauseRule > 0 && far && sinceTicks - pauseTicks < windowTicks(t.pauseEndS, w.dt)) {
+    const pc = Math.min(base.speedCap, pauseCap(tr.speeds?.[pl.id] ?? len(cur.vel), t))
+    return { target: base.target, speedCap: pauseEndCap((sinceTicks - pauseTicks) * w.dt, pc, base.speedCap, t) }
+  }
   // A recovery run: not while counter-pressing or on a live press, and only while the ball is still lost.
   if (cur.intent.kind === "press" && w.tick < cur.intentUntil) return base
   const uRel = attackX(pl.side, cur.pos.x, w.period) - attackX(pl.side, ballFlat.x, w.period)
@@ -1857,13 +2260,213 @@ export const noteReception = (w: Work, receiver: PlayerState, f: Flight): void =
 export const markSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, attacker: PlayerState, ballFlat: Vec2): Vec2 => {
   const m = w.p.marking
   const goalSide = (weight: number) => markTarget(anchor, attacker.pos, defSide, w.period, m.goalSideM, weight, m.widthSlackM)
+  // P5 (plan 8e ruling 18): landing-spot marking and the reaction to a high ball, under either marking.rule.
+  if (m.landingRule === 1) {
+    const ls = landingSpot(w, defSide, defId, anchor, attacker)
+    if (ls) return ls
+  }
   if (m.rule !== 1) return goalSide(m.weight)
   // Ruling 16: a CB follows a dropping ST or AM tightly (the old goal-side spot at weight 1) while he is within cbStepM of the anchor.
   if (w.player(defId).role === "CB" && (attacker.role === "ST" || attacker.role === "AM") && stepsOut(anchor, attacker, defSide, w.period, m)) return goalSide(1)
-  return laneMarkTarget(anchor, ballFlat, attacker.pos, m.weight, m.laneShare, m.widthSlackM)
+  // P5 (plan 8e ruling 17): the zonal target is pulled to within maxGapM of the attacker (0: no cap).
+  return capGap(laneMarkTarget(anchor, ballFlat, attacker.pos, m.weight, m.laneShare, m.widthSlackM), attacker.pos, m.maxGapM)
 }
 
+/**
+ * P5 ruling 18 (marking.landingRule 1), for defender `defId` paired with `attacker`:
+ * - reaction: during a high pass or clearance won by `attacker`, the contact point when it is within landingReactM of the defender;
+ * - landing marking: while the opponents' keeper (hands or feet), or a CB or FB in his own third, has the ball, the CB nearest
+ *   the opponents' most advanced outfielder (landingTarget) marks that man goal-side at landingGoalSideM, weight 1.
+ * null otherwise (the defender's normal spot). Only defenders marksFor pairs get here.
+ */
+const landingSpot = (w: Work, defSide: Side, defId: string, anchor: Vec2, attacker: PlayerState): Vec2 | null => {
+  const m = w.p.marking
+  const pos = w.possession
+  if (pos.kind === "in_flight") {
+    const f = pos.flight
+    const pe = f.pending
+    if (f.side === defSide || f.winnerId !== attacker.id || f.outcome === "blocked") return null
+    if ((pe.type !== "pass" && pe.type !== "clearance") || pe.attrs.height !== "high" || pe.x_end === null || pe.y_end === null) return null
+    const contact = { x: pe.x_end, y: pe.y_end }
+    return dist(w.player(defId).pos, contact) <= m.landingReactM ? contact : null
+  }
+  const lt = landingPair(w, defSide)
+  if (!lt || lt.defId !== defId) return null
+  return markTarget(anchor, w.player(lt.attackerId).pos, defSide, w.period, m.landingGoalSideM, 1)
+}
+
+/**
+ * P5 ruling 18: the landing pair (landingTarget) for `defSide` while the opponents' keeper (hands or feet), or a CB or FB
+ * of theirs in his own third, has the ball; null otherwise. marksFor also uses it to give the landing CB his mark when
+ * assignMarks left him unpaired (controller ruling on preflight F25 row 11).
+ */
+const landingPair = (w: Work, defSide: Side): { defId: string; attackerId: string } | null => {
+  const pos = w.possession
+  if (pos.kind !== "owned") return null
+  const owner = w.player(pos.playerId)
+  if (owner.side === defSide) return null
+  const deep = owner.role === "GK" || ((owner.role === "CB" || owner.role === "FB") && attackX(owner.side, owner.pos.x, w.period) < -OWN_THIRD_U)
+  if (!deep) return null
+  return landingTarget(w.active(defSide), w.active(other(defSide)), defSide, w.period)
+}
+
+/** The own third ends at team-frame u -17.5 (the analysis zones). */
+const OWN_THIRD_U = 17.5
+
 // ================================================================ end of P4 marking seam
+
+// ================================================================ P5 role-run seam (plan 8e Task 9 owns this block)
+
+/**
+ * A6: an in-possession teammate's run in behind (or overlap) while `owner` has the ball (movement stream); null when he
+ * makes none. rule 0: the old run in behind (ST, W and AM at runs.runInBehindRatePerS, carrier beyond u -20).
+ * @internal
+ */
+export const runMove = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarget | null => {
+  if (w.p.roleMoves.runRule === 1) return roleRun(w, pl, owner)
+  if (pl.role !== "ST" && pl.role !== "W" && pl.role !== "AM") return null
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
+  if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS * triggerFactor(w, pl), w.dt))) {
+    const lastDef = lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
+    const target = clampToPitch({ x: dirOf(pl.side, w.period) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
+    w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
+    w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
+    return { target, speedCap: vmax }
+  }
+  return null
+}
+
+/** Roles that make runs in behind, each at run.roleWeight x runs.runInBehindRatePerS (ruling 15). */
+const RUN_ROLES: ReadonlySet<string> = new Set(["ST", "W", "AM", "FB"])
+/** Carriers whose forward movement triggers runs (ruling 15). */
+const RUN_CARRIERS: ReadonlySet<string> = new Set(["CM", "DM", "AM"])
+
+/**
+ * A6 rule 1 (plan 8e ruling 15; roles stream). A run's intent target is its break point behind the line (breakTarget,
+ * which through balls lead toward); until a pass is travelling to him the runner holds holdM short of the last defender
+ * (holdLineTarget), and once one is he breaks to the target at full speed. Both are re-aimed each tick. An overlap keeps
+ * its target at up to overlap.speed. An FB overlaps his same-side W or CM at overlap.ratePerS; ST, W, AM and FB run at
+ * runInBehindRatePerS x roleWeight while a CM, DM or AM carrier beyond u -20 moves forward with spaceBehindM behind the
+ * line, in the wide lane with chance wideShare.
+ */
+const roleRun = (w: Work, pl: PlayerState, owner: PlayerState): MoveTarget | null => {
+  const rm = w.p.roleMoves
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  const overlapCap = Math.min(vmax, rm.overlap.speed)
+  const lastDef = () => lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
+  if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) {
+    if (pl.intent.overlap) return { target: pl.intent.target, speedCap: overlapCap }
+    const line = lastDef()
+    const target = breakTarget(line, pl.intent.target.y, pl.side, w.period)
+    if (target.x !== pl.intent.target.x || target.y !== pl.intent.target.y) w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target } })
+    if (passTravellingTo(w, pl.id)) return { target, speedCap: vmax }
+    return { target: holdLineTarget(line, target.y, false, pl.side, w.period, rm.run), speedCap: vmax }
+  }
+  // A live rotation (rotation seam, run after this one) is never overwritten by a new run or overlap.
+  if (pl.intent.kind === "rotate" && w.tick < pl.intentUntil) return null
+  if (overlapEligible(pl, owner, w.period, rm.overlap) && w.rng.roles.chance(hazard(rm.overlap.ratePerS * triggerFactor(w, pl), w.dt))) {
+    const target = overlapTarget(owner.pos, pl.side, w.period, rm.overlap)
+    const until = w.tick + Math.round(w.rng.roles.range(rm.overlap.durS[0], rm.overlap.durS[1]) / w.dt)
+    w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target, overlap: true }, intentUntil: until })
+    w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "overlap", ball_carrier_id: owner.id }, target))
+    return { target, speedCap: overlapCap }
+  }
+  if (!RUN_ROLES.has(pl.role) || !RUN_CARRIERS.has(owner.role)) return null
+  const dir = dirOf(pl.side, w.period)
+  if (attackX(pl.side, owner.pos.x, w.period) <= -20 || owner.vel.x * dir <= 0.5) return null
+  const line = lastDef()
+  if (line >= PITCH.halfL - rm.run.spaceBehindM) return null
+  const weight = rm.run.roleWeight[pl.role as "ST" | "W" | "AM" | "FB"]
+  if (!w.rng.roles.chance(hazard(w.p.runs.runInBehindRatePerS * weight * triggerFactor(w, pl), w.dt))) return null
+  const wide = w.rng.roles.chance(rm.run.wideShare)
+  const hold = holdLineTarget(line, pl.pos.y, wide, pl.side, w.period, rm.run)
+  const target = breakTarget(line, hold.y, pl.side, w.period)
+  w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.roles.range(2, 3) / w.dt) })
+  w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
+  return { target: hold, speedCap: vmax }
+}
+
+/**
+ * Is a pass travelling to `id` (he wins it, or it was meant for him)? Note: moveTarget calls the role-run seam only while
+ * his side owns the ball, so in play a released pass reaches him through the chase intent (to where it lands) instead.
+ */
+const passTravellingTo = (w: Work, id: string): boolean => {
+  const pos = w.possession
+  return pos.kind === "in_flight" && pos.flight.kind === "pass" && (pos.flight.winnerId === id || pos.flight.pending.attrs.intended_receiver_id === id)
+}
+
+// ================================================================ end of P5 role-run seam
+
+// ================================================================ P5 rotation seam (plan 8e Task 10 owns this block)
+
+/** A6: an in-possession teammate's rotation (winger inside, full-back inversion, CM drop) over his shape `base`; null when none. rule 0: null. @internal */
+export const rotateMove = (w: Work, pl: PlayerState, owner: PlayerState, base: () => MoveTarget): MoveTarget | null => {
+  const rm = w.p.roleMoves
+  if (rm.rotateRule <= 0 || pl.role === "GK") return null
+  const vmax = vmaxFor(pl, pl.energy, w.p)
+  const speedCap = Math.min(rm.jogMps, vmax)
+  const rot = pl.intent.kind === "rotate" && w.tick < pl.intentUntil ? pl.intent : null
+  const mates = w.active(pl.side)
+  // The same-side winger (the nearest winger on his flank, FB only), and whether he is rotating inside now.
+  const flank = pl.pos.y < 0 ? -1 : 1
+  let winger: PlayerState | undefined
+  if (pl.role === "FB")
+    for (const x of mates)
+      if (x.role === "W" && (x.pos.y < 0 ? -1 : 1) === flank && (winger === undefined || Math.abs(x.pos.y - pl.pos.y) < Math.abs(winger.pos.y - pl.pos.y))) winger = x
+  const wingerInside = winger !== undefined && winger.intent.kind === "rotate" && w.tick < winger.intentUntil
+  const tr = w.transition
+  if (rot) {
+    // A rotation ends when the ball changes hands after it began (the loss, and a regain, are both recorded after `since`),
+    // and a full-back's when his winger comes inside.
+    if ((tr !== undefined && tr.tick > rot.since) || wingerInside) {
+      w.setPlayer({ ...pl, intentUntil: w.tick })
+      return null
+    }
+    return { target: rot.target, speedCap }
+  }
+  // None while his side is the recorded loser of the last turnover.
+  if (tr !== undefined && tr.loser === pl.side) return null
+  // One rotation at a time, and none over another intent still running.
+  if (w.tick < pl.intentUntil && pl.intent.kind !== "rotate") return null
+  const ballU = attackX(pl.side, w.ball.pos.x, w.period)
+  const start = (kind: "inside" | "invert" | "cm_drop", target: Vec2, durS: readonly [number, number]): MoveTarget => {
+    const to = clampToPitch(target, 1)
+    w.setPlayer({ ...pl, intent: { kind: "rotate", target: to, since: w.tick }, intentUntil: w.tick + Math.max(1, Math.round(w.rng.roles.range(durS[0], durS[1]) / w.dt)) })
+    w.emit(w.pending("off_ball_run", pl, pl.pos, { kind, ball_carrier_id: owner.id }, to))
+    return { target: to, speedCap }
+  }
+  if (pl.role === "W") {
+    const c = rm.inside
+    if (ballU <= 17.5 || Math.abs(pl.pos.y) <= c.halfSpaceY[1]) return null
+    if (!w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
+    const shape = base().target
+    return start("inside", insideTarget(shape, shape.y < 0 || (shape.y === 0 && pl.pos.y < 0) ? -1 : 1, w.rng.roles.range(c.halfSpaceY[0], c.halfSpaceY[1])), c.durS)
+  }
+  if (pl.role === "FB") {
+    const c = rm.invert
+    // His winger is wide (or has the ball) and is not coming inside: the pair is gated both ways.
+    if (winger === undefined || wingerInside) return null
+    const wide = Math.abs(winger.pos.y) > 20 || winger.id === owner.id
+    if (!wide || ballU <= -17.5 || !w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
+    const lastOwnU = Math.min(...mates.filter((x) => x.role !== "GK").map((x) => attackX(pl.side, x.pos.x, w.period)))
+    return start("invert", invertTarget(base().target, winger.pos.y, w.rng.roles.range(c.inM[0], c.inM[1]), lastOwnU, pl.side, w.period, c.aboveLastM), c.durS)
+  }
+  if (pl.role === "CM" || pl.role === "DM") {
+    const c = rm.cmDrop
+    // Within winS of his side winning the ball (needs transition.rule 1), with the ball in his own third; the deepest of the others drops.
+    if (w.p.transition.rule <= 0 || tr === undefined || tr.loser === pl.side || w.tick - tr.tick >= windowTicks(c.winS, w.dt) || ballU >= -17.5) return null
+    const deepest = mates
+      .filter((x) => (x.role === "CM" || x.role === "DM") && x.id !== owner.id)
+      .sort((a, b) => dirOf(pl.side, w.period) * (a.pos.x - b.pos.x) || (a.id < b.id ? -1 : 1))[0]
+    const cbs = mates.filter((x) => x.role === "CB").map((x) => x.pos)
+    if (deepest?.id !== pl.id || cbs.length === 0 || !w.rng.roles.chance(hazard(c.ratePerS, w.dt))) return null
+    return start("cm_drop", dropTarget(cbs, w.ball.pos.y, pl.side, w.period), c.durS)
+  }
+  return null
+}
+
+// ================================================================ end of P5 rotation seam
 
 const moveTarget = (
   w: Work,
@@ -1881,14 +2484,18 @@ const moveTarget = (
   }
   const ph = w.phase
   if (ph.kind === "restart") {
-    if (takerFor(w, ph).id === pl.id) return { target: ph.at, speedCap: vmax * 0.8 }
+    if (takerFor(w, ph).id === pl.id) return deadMove(w, pl, { target: ph.at, speedCap: vmax * 0.8 })
+    // P5 restart-phase precedence (plan 8e ruling 5): the restarting side's set-piece spot, else the other side's, else
+    // the restart shape, else the old target and 9.15 m push; the dead-ball seam then sets the pace.
+    const spot = pl.side === ph.side ? (attackSpot(w, pl, ph) ?? shapeSpot(w, pl, ph)) : (defendSpot(w, pl, ph) ?? shapeSpot(w, pl, ph))
+    if (spot) return deadMove(w, pl, { target: clampToPitch(spot, 0.5), speedCap: vmax * 0.6 })
     const a = restartTarget(w, pl, ph.at, ph.side === pl.side)
-    if (ph.restart === "kickoff") return { target: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), speedCap: vmax * 0.6 }
+    if (ph.restart === "kickoff") return deadMove(w, pl, { target: kickoffAnchor(team.formation, pl.slot, pl.side, w.period, team.style), speedCap: vmax * 0.6 })
     if (pl.side !== ph.side && dist(a, ph.at) < 9.15 && pl.role !== "GK") {
       const away = add(ph.at, scale(norm(sub(a, ph.at)), 9.5))
-      return { target: clampToPitch(away), speedCap: vmax * 0.6 }
+      return deadMove(w, pl, { target: clampToPitch(away), speedCap: vmax * 0.6 })
     }
-    return { target: a, speedCap: vmax * 0.6 }
+    return deadMove(w, pl, { target: a, speedCap: vmax * 0.6 })
   }
   const pos = w.possession
   if (pos.kind === "owned" && pos.playerId === pl.id) {
@@ -1917,6 +2524,9 @@ const moveTarget = (
     if (chasers.some((c) => c.id === pl.id) && pl.role !== "GK")
       return { target: interceptPoint(pl.pos, vmax, ballFlat, { x: w.ball.vel.x, y: w.ball.vel.y }), speedCap: vmax }
   }
+  // S1 (P5): an attacker's run just after a set piece (attacking set-piece seam).
+  const spr = setPieceRun(w, pl, vmax)
+  if (spr) return spr
   if (pl.role === "GK") {
     // Close down a ball carrier who gets near goal: stand between them and the goal centre, 2.5 m off the ball.
     if (pos.kind === "owned" && possSide !== pl.side) {
@@ -1939,16 +2549,13 @@ const moveTarget = (
   }
   const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
   if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax) }
-  if (pos.kind === "owned" && possSide === pl.side && (pl.role === "ST" || pl.role === "W" || pl.role === "AM")) {
-    if (pl.intent.kind === "run_in_behind" && w.tick < pl.intentUntil) return { target: pl.intent.target, speedCap: vmax }
+  // A6 (P5): runs in behind and overlaps (role-run seam), then rotations (rotation seam).
+  if (pos.kind === "owned" && possSide === pl.side) {
     const owner = w.player(pos.playerId)
-    if (attackX(pl.side, owner.pos.x, w.period) > -20 && w.rng.movement.chance(hazard(w.p.runs.runInBehindRatePerS * triggerFactor(w, pl), w.dt))) {
-      const lastDef = lastDefenderAttackX(pl.side, w.period, w.active(other(pl.side)))
-      const target = clampToPitch({ x: dirOf(pl.side, w.period) * Math.min(lastDef + 6, PITCH.halfL - 6), y: pl.pos.y * 0.8 }, 2)
-      w.setPlayer({ ...pl, intent: { kind: "run_in_behind", target }, intentUntil: w.tick + Math.round(w.rng.movement.range(2, 3) / w.dt) })
-      w.emit(w.pending("off_ball_run", pl, pl.pos, { kind: "in_behind", ball_carrier_id: owner.id }, target))
-      return { target, speedCap: vmax }
-    }
+    const rm = runMove(w, pl, owner)
+    if (rm) return rm
+    const ro = rotateMove(w, pl, owner, shape)
+    if (ro) return ro
   }
   const sp = w.p.support
   // Rule 1 (P3 Task 10d): supporters come short only while the carrier is pressed, onto a ring distM out; everyone else
@@ -1967,7 +2574,7 @@ const moveTarget = (
     const owner = w.player(pos.playerId)
     const supporters = w
       .active(pl.side)
-      .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+      .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil) && !(x.intent.kind === "rotate" && w.tick < x.intentUntil))
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
       .slice(0, sp.count)
     if (supporters.some((x) => x.id === pl.id))
@@ -1988,6 +2595,9 @@ const marksFor = (w: Work, defSide: Side, ballFlat: Vec2): Map<string, Vec2> => 
   const out = new Map<string, Vec2>()
   for (const [id, a] of assignMarks(defenders, attackers, w.p.marking.radiusM))
     out.set(id, markSpot(w, defSide, id, anchors.get(id)!, a, ballFlat))
+  // P5 (plan 8e ruling 18; controller ruling on F25 row 11): the landing CB marks his man even if assignMarks left him unpaired.
+  const lp = w.p.marking.landingRule === 1 ? landingPair(w, defSide) : null
+  if (lp && anchors.has(lp.defId)) out.set(lp.defId, markSpot(w, defSide, lp.defId, anchors.get(lp.defId)!, w.player(lp.attackerId), ballFlat))
   return out
 }
 
@@ -2015,7 +2625,7 @@ const supportTick = (w: Work): SupportTick | null => {
     n > 0
       ? w
           .active(owner.side)
-          .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil))
+          .filter((x) => x.id !== owner.id && x.role !== "GK" && !(x.intent.kind === "run_in_behind" && w.tick < x.intentUntil) && !(x.intent.kind === "rotate" && w.tick < x.intentUntil))
           .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
           .slice(0, n)
           .map((x) => x.id)
@@ -2111,6 +2721,9 @@ const endPeriod = (w: Work): StepResult => {
   // A carry under way ends at the whistle.
   if (w.possession.kind === "owned") finishCarry(w, w.player(w.possession.playerId))
   w.carry = null
+  // P5 (plan 8e): a restart pending at the whistle leaves no plan or live set piece behind (the kickoffs have none).
+  w.restartPlan = undefined
+  w.setPiece = undefined
   w.emit(w.pending("period_end", null, null, { period: w.period }))
   if (w.period === "second_half") {
     w.emit(w.pending("match_end", null, null, { home: w.score.home, away: w.score.away }))
