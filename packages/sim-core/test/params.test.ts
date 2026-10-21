@@ -167,8 +167,9 @@ describe("realism v2 P6 params", () => {
   it("ship switched on (Task 8), with the spec's header band, first-time finishes at set pieces and the contact stream", () => {
     const P = DEFAULT_PARAMS
     for (const r of [P.firstTime.rule, P.header.rule, P.saveGeo.rule, P.execFatigue.rule, P.shotModel.rule]) expect(r).toBe(1)
-    // User Q1 (a): corners and free-kick deliveries too.
-    expect(P.firstTime.setPieces).toBe(1)
+    // User Q1 (a) put corners and free-kick deliveries on; the pre-merge fix (2026-10-21) switched them off again, for
+    // first-time finishes and headers together (corner shots within 10 s 53.1 per 100 against P5's 36.7).
+    expect(P.firstTime.setPieces).toBe(0)
     expect([P.firstTime.maxGoalM, P.header.zMin, P.header.zMax]).toEqual([25, 1, 2.4])
     // The keys only: Task 7 commits the refit values.
     expect(Object.keys(P.shotModel.xg).sort()).toEqual(Object.keys(P.shot.xg).sort())

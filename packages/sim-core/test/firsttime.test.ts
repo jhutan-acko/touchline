@@ -127,8 +127,10 @@ describe("SH1: eligibility, choice and execution (pure)", () => {
     expect(firstTimeEligible(24, 0.5, "throw_in", false, on)).toBe(false)
     expect(firstTimeEligible(24, 0.5, "goal_kick", false, on)).toBe(false)
     expect(firstTimeEligible(24, 0.5, "kickoff", false, on)).toBe(false)
-    expect(firstTimeEligible(24, 0.5, "corner", false, on)).toBe(true)
-    expect(firstTimeEligible(24, 0.5, "free_kick", false, on)).toBe(true)
+    // The shipped file has setPieces 0 (pre-merge fix 1); the switch-on case is pinned here.
+    const setPieces = onWith({ setPieces: 1 })
+    expect(firstTimeEligible(24, 0.5, "corner", false, setPieces)).toBe(true)
+    expect(firstTimeEligible(24, 0.5, "free_kick", false, setPieces)).toBe(true)
     const noSetPieces = onWith({ setPieces: 0 })
     expect(firstTimeEligible(24, 0.5, "corner", false, noSetPieces)).toBe(false)
     expect(firstTimeEligible(24, 0.5, "free_kick", false, noSetPieces)).toBe(false)

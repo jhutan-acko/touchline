@@ -1613,6 +1613,10 @@ export const contactPlan = (w: Work, f: Flight): { receiver: PlayerState; plan: 
   if (receiver.side !== f.side || receiver.id === f.fromId || receiver.role === "GK") return null
   if (w.override?.playerId === receiver.id) return null
   const restart = f.pending.attrs.restart ?? null
+  // firstTime.setPieces is one switch for both contact rules at restarts: it lets corner and free-kick deliveries reach
+  // the first-time seam (SH1) and the header seam (SH2) alike. The user switched it off (2026-10-21, pre-merge fix 1:
+  // corner shots within 10 s were 53.1 per 100 against P5's 36.7), so set-piece first-time finishes and set-piece
+  // headers are off together; open-play contacts are unchanged.
   if (restart !== null && !((restart === "corner" || restart === "free_kick") && p.firstTime.setPieces === 1)) return null
   return { receiver, plan: headerPlan(w, f, receiver) ?? firstTimePlan(w, f, receiver) }
 }

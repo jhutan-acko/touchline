@@ -1343,7 +1343,7 @@
  },
  "firstTime": {
   "rule": 1,
-  "setPieces": 1,
+  "setPieces": 0,
   "maxGoalM": 25,
   "b0": 0,
   "bXg": 6,

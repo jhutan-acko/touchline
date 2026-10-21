@@ -9,7 +9,7 @@ import { headerEligible, headerHow, headShare } from "../src/header.js"
 import { DEFAULT_PARAMS as P, paramsFromJson, type Params } from "../src/params.js"
 import { Rng, seedRng } from "../src/rng.js"
 import { planShot } from "../src/shot.js"
-import { executeContact, headerPlan, initMatch, isFinished, step, workAt } from "../src/step.js"
+import { contactPlan, executeContact, headerPlan, initMatch, isFinished, step, workAt } from "../src/step.js"
 import type { DomainEvent, Flight, MatchState, PlayerState } from "../src/types.js"
 import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
 
@@ -249,6 +249,24 @@ describe("SH2: the header seam (step)", () => {
     w3.ball = { ...w3.ball, pos: { ...w3.ball.pos, z: 1.6 } }
     expect(headerPlan(w3, f!, w3.player(STRIKER))?.kind).toBe("shot")
     expect(w3.rng.contact.state).not.toEqual(s3.rng.contact)
+  })
+
+  it("firstTime.setPieces gates set-piece headers too: a corner delivery is controlled at 0 and headed at 1", () => {
+    // Pre-merge fix 1 (2026-10-21): one switch covers both contact rules at restarts (contactPlan's gate).
+    const corner = (p: Params): { plan: ContactPlan | null; drew: boolean } => {
+      const s = crossArriving(p, { x: 44, y: 1 }, 1.6)
+      const f0 = s.possession.kind === "in_flight" ? s.possession.flight : null
+      const f: Flight = { ...f0!, pending: { ...f0!.pending, attrs: { ...f0!.pending.attrs, restart: "corner" } } }
+      const w = workAt(s)
+      w.ball = { ...w.ball, pos: { ...w.ball.pos, z: 1.6 } }
+      const plan = contactPlan(w, f)?.plan ?? null
+      return { plan, drew: JSON.stringify(w.rng.contact.state) !== JSON.stringify(s.rng.contact) }
+    }
+    const shut = corner(onWith({ b0: 20 }, { firstTime: { ...on.firstTime, setPieces: 0 } }))
+    expect(shut).toEqual({ plan: null, drew: false })
+    const open = corner(onWith({ b0: 20 }, { firstTime: { ...on.firstTime, setPieces: 1 } }))
+    expect(open.plan?.kind).toBe("shot")
+    expect(open.drew).toBe(true)
   })
 })
 
