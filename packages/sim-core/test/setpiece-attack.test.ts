@@ -11,6 +11,11 @@ import type { Flight, MatchState, PendingEvent, PlayerState, RestartKind } from 
 // Explicit on and off (plan 8e "Test fixtures"): Task 14 flips the defaults. Everything else as the defaults.
 const off: Params = { ...P, setAttack: { ...P.setAttack, rule: 0 } }
 const on: Params = { ...P, setAttack: { ...P.setAttack, rule: 1 } }
+/** Every P6 rule pinned 0 (P6 Task 8 switched them on): the engine this file's counts were written on (F4). */
+const p6Off = (p: Params): Params => ({
+  ...p, firstTime: { ...p.firstTime, rule: 0 }, header: { ...p.header, rule: 0 }, saveGeo: { ...p.saveGeo, rule: 0 },
+  execFatigue: { ...p.execFatigue, rule: 0 }, shotModel: { ...p.shotModel, rule: 0 }
+})
 
 /** A restart being set up (its resume tick far off): `side` takes `restart` at `at` in `period`, at tick 500. */
 const pending = (p: Params, restart: RestartKind, at: Vec2, period: Period = "first_half", dt = 0.1, seed = 7): MatchState => {
@@ -292,7 +297,8 @@ describe("S1/S4 attacking set pieces: setpiece-attack.ts", () => {
       }
       return out
     }
-    const arm = (p: Params) => [7, 9, 11].flatMap((seed) => boxCounts(p, seed))
+    // P6 pinned off (Task 8): with P6 on, seeds 7, 9 and 11 gave on - off 1.90 (the measured engine is P5's).
+    const arm = (p: Params) => [7, 9, 11].flatMap((seed) => boxCounts(p6Off(p), seed))
     const mean = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length
     const a = arm(on)
     const b = arm(off)

@@ -66,8 +66,9 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, choice: { ...p.choice, ivCentre: v } }) },
   { name: "aim_noise", what: "shot aiming error (on-target share)", init: 1, min: 0.6, max: 2.2, step: 0.2,
     apply: (p, v) => ({ ...p, shot: { ...p.shot, aimNoise: v } }) },
-  { name: "xg_b0", what: "xG intercept (goals per shot)", init: DEFAULT_PARAMS.shot.xg.b0, min: -2.5, max: 0, step: 0.25,
-    apply: (p, v) => ({ ...p, shot: { ...p.shot, xg: { ...p.shot.xg, b0: v } } }) },
+  // P6 ruling 14: the refit xG (shotModel.xg, read under shotModel.rule 1) within the DFL fit +- 0.5.
+  { name: "xg_b0", what: "xG intercept (shot selection, recorded xG)", init: DEFAULT_PARAMS.shotModel.xg.b0, min: DEFAULT_PARAMS.shotModel.xg.b0 - 0.5, max: DEFAULT_PARAMS.shotModel.xg.b0 + 0.5, step: 0.25,
+    apply: (p, v) => ({ ...p, shotModel: { ...p.shotModel, xg: { ...p.shotModel.xg, b0: v } } }) },
   { name: "exec_scale", what: "kick execution error (completion)", init: 1, min: 0.5, max: 3, step: 0.3,
     apply: (p, v) => ({ ...p, execution: { ...p.execution, dirSigma: p.execution.dirSigma * v, distSigma: p.execution.distSigma * v } }) },
   { name: "reach_margin", what: "share of straight-line reach when judging who reaches a ball (completion, interceptions)", init: 0.75, min: 0.5, max: 0.95, step: 0.05,
@@ -172,7 +173,10 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, marking: { ...p.marking, maxGapM: v } }) },
   // Re-added in P5: zonal marking (marking.rule) is on, so laneShare is live again.
   { name: "lane_share", what: "share of the way from the ball to the man where a zonal marker stands (free space, ball pressure)", init: DEFAULT_PARAMS.marking.laneShare, min: 0.3, max: 0.5, step: 0.05,
-    apply: (p, v) => ({ ...p, marking: { ...p.marking, laneShare: v } }) }
+    apply: (p, v) => ({ ...p, marking: { ...p.marking, laneShare: v } }) },
+  // P6 (plan 8f ruling 14): the open-play shot term's slope on xG. No knob on firstTime, header, saveGeo or execFatigue.
+  { name: "shot_xg_slope", what: "slope of the open-play shot logit on xG (shots per match, shot quality)", init: DEFAULT_PARAMS.shotModel.bXg, min: 1.5, max: 4.5, step: 0.5,
+    apply: (p, v) => ({ ...p, shotModel: { ...p.shotModel, bXg: v } }) }
 ]
 
 export type KnobValues = Readonly<Record<string, number>>

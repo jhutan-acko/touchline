@@ -10,8 +10,13 @@ import type { DomainEvent, MatchState, PlayerState } from "../src/types.js"
 
 // Explicit switches (F4): every other P4 rule is pinned to 0, so Task 10's switch-on cannot move these cases; off and on
 // differ only in fouls.rule.
+/** Every P6 rule pinned 0 (P6 Task 8 switched them on): the engine this file's counts were written on (F4). */
+const p6Off = (p: Params): Params => ({
+  ...p, firstTime: { ...p.firstTime, rule: 0 }, header: { ...p.header, rule: 0 }, saveGeo: { ...p.saveGeo, rule: 0 },
+  execFatigue: { ...p.execFatigue, rule: 0 }, shotModel: { ...p.shotModel, rule: 0 }
+})
 const base: Params = {
-  ...P,
+  ...p6Off(P),
   tackle: { ...P.tackle, rule: 0 }, aerial: { ...P.aerial, rule: 0 }, transition: { ...P.transition, rule: 0 },
   press: { ...P.press, rule: 0 }, marking: { ...P.marking, rule: 0, landingRule: 0 },
   firstTick: { ...P.firstTick, scopeRule: 0 }, release: { ...P.release, rejudge: 0, freeRule: 0 },

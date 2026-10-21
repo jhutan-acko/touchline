@@ -11,8 +11,13 @@ const RM = P.roleMoves
 // test needs the hazard to fire.
 // Every other P5 rule pinned 0 (P5 Task 14 switched them on): the engine these counts were written on, rotations alone (with
 // runs on, the off arm has overlap events; with the set-piece and dead-ball rules on, seed 7 has 17 inside moves for one team).
+/** Every P6 rule pinned 0 (P6 Task 8 switched them on): the engine this file's counts were written on (F4). */
+const p6Off = (p: Params): Params => ({
+  ...p, firstTime: { ...p.firstTime, rule: 0 }, header: { ...p.header, rule: 0 }, saveGeo: { ...p.saveGeo, rule: 0 },
+  execFatigue: { ...p.execFatigue, rule: 0 }, shotModel: { ...p.shotModel, rule: 0 }
+})
 const P5_OFF: Params = {
-  ...P,
+  ...p6Off(P),
   setAttack: { ...P.setAttack, rule: 0 }, setDefend: { ...P.setDefend, rule: 0 }, setShapes: { ...P.setShapes, rule: 0 }, deadBall: { ...P.deadBall, rule: 0 },
   keeperRestarts: { ...P.keeperRestarts, rule: 0 }, directFk: { ...P.directFk, rule: 0 },
   marking: { ...P.marking, rule: 0, landingRule: 0 }, release: { ...P.release, freeRule: 0 }

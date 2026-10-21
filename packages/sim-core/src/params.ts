@@ -956,20 +956,20 @@ export const DEFAULT_PARAMS: Params = {
     cmDrop: { ratePerS: 0.3, winS: 5, durS: [1.5, 3] },
     jogMps: 3.5
   },
-  // ---- realism v2 P6 (plan 8f)
+  // ---- realism v2 P6 (plan 8f): every rule switched on in Task 8 (rule 0 keeps the old behaviour).
   // P6 SH1 first-time finishes (spec item SH1; rule 0: the old behaviour). bArrival is a prior, not fitted (ruling 4).
-  firstTime: { rule: 0, setPieces: 1, maxGoalM: 25, b0: 0, bXg: 6, bArrival: -0.5, layOffLogit: -1.5, layOffMaxM: 12, arrivalAimK: 0.3, speedAimK: 0.2, speedRefMps: 12 },
+  firstTime: { rule: 1, setPieces: 1, maxGoalM: 25, b0: 0, bXg: 6, bArrival: -0.5, layOffLogit: -1.5, layOffMaxM: 12, arrivalAimK: 0.3, speedAimK: 0.2, speedRefMps: 12 },
   // P6 SH2 headers (spec item SH2; rule 0: the old behaviour). zMin and zMax are kinematics.controlHeightM and headerHeightM.
   // b0 0.5: the top of Task 4 Step 3's grid (-1.5, -0.5, 0.5), nearest the real share on the refit xG scale (phase B).
-  header: { rule: 0, zMin: 1, zMax: 2.4, b0: 0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
+  header: { rule: 1, zMin: 1, zMax: 2.4, b0: 0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
   // P6 SH3 keeper-position saves (spec item SH3; rule 0: the old behaviour). Priors (ruling 10); offLineRefM is the real median at shots.
   // bFlightS and bOffBisector from Task 5 Step 3 (grid 1.5/2.5/3.5 x -0.3/-0.6/-1.0): the pair that moves the save rate least.
-  saveGeo: { rule: 0, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.3, reactionS: 0.2, bFlightS: 3.5, flightCapS: 1 },
+  saveGeo: { rule: 1, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.3, reactionS: 0.2, bFlightS: 3.5, flightCapS: 1 },
   // P6 SH4 execution fatigue (spec item SH4; rule 0: the old behaviour). k 0.25, ref 0, power 1 equal rule 0 numerically.
-  execFatigue: { rule: 0, k: 0.25, ref: 0, power: 1 },
+  execFatigue: { rule: 1, k: 0.25, ref: 0, power: 1 },
   // P6 shot logit and xG refit (spec "P6: shot model"; rule 0: the old behaviour). xg: Task 2's fractional-logit fit to DFL model xG
   // (159 IDSSE shots, fitted mean 0.0916 = DFL). bXg 3, pivot 0.1 from Task 7 Step 3 (grid 2/3/4 x 0.05/0.1): open-play shots and loose setups nearest real.
-  shotModel: { rule: 0, xg: { b0: -3.004, bDist: -0.0392, bAngle: 4.059, bHeader: -1.617, bDefenders: -0.342 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
+  shotModel: { rule: 1, xg: { b0: -3.004, bDist: -0.0392, bAngle: 4.059, bHeader: -1.617, bDefenders: -0.342 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   // Script nudges re-set in P4 Task 10 (scripts only, never the bounds): pressSurge 4 -> 20, since press.rateScale

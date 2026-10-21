@@ -164,9 +164,11 @@ describe("realism v2 P4 params", () => {
 
 describe("realism v2 P6 params", () => {
   const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
-  it("ship switched off, with the spec's header band and the contact stream", () => {
+  it("ship switched on (Task 8), with the spec's header band, first-time finishes at set pieces and the contact stream", () => {
     const P = DEFAULT_PARAMS
-    for (const r of [P.firstTime.rule, P.header.rule, P.saveGeo.rule, P.execFatigue.rule, P.shotModel.rule]) expect(r).toBe(0)
+    for (const r of [P.firstTime.rule, P.header.rule, P.saveGeo.rule, P.execFatigue.rule, P.shotModel.rule]) expect(r).toBe(1)
+    // User Q1 (a): corners and free-kick deliveries too.
+    expect(P.firstTime.setPieces).toBe(1)
     expect([P.firstTime.maxGoalM, P.header.zMin, P.header.zMax]).toEqual([25, 1, 2.4])
     // The keys only: Task 7 commits the refit values.
     expect(Object.keys(P.shotModel.xg).sort()).toEqual(Object.keys(P.shot.xg).sort())
