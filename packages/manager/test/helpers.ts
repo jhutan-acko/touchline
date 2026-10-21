@@ -12,7 +12,7 @@ export const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const json = (p: string) => JSON.parse(readFileSync(join(root, p), "utf8"))
 export const league = json("data/league/league.json") as League
 export const params = paramsFromJson(json("data/params/touchline-params.json"))
-export const models = modelsFromJson(json("data/params/stats-models.json"))
+export const models = modelsFromJson(json("data/params/stats-models.json"), params)
 export const xt = xtGridFromJson(json("data/params/xt-grid.json"))
 export const club = (id: string) => league.clubs.find((c) => c.id === id)!
 

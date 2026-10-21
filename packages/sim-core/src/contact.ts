@@ -2,7 +2,7 @@
  * Realism v2 P6 (plan 8f): what a receiver does with the ball at contact, shared by the first-time (SH1) and header
  * (SH2) seams in step.ts and the contact executor. Pure: no RNG, no state.
  */
-import { toOption, type Candidate, type Decision } from "./decide.js"
+import { shotLineCount, toOption, type Candidate, type Decision } from "./decide.js"
 import { goalOf, type Period, type Side, type Vec2, type Vec3 } from "./geometry.js"
 import type { ShotMods } from "./shot.js"
 import type { OptionRecord, PlayerState } from "./types.js"
@@ -43,17 +43,8 @@ export const arrivalCos = (ballVel: Vec3, at: Vec2, goal: Vec2): number => {
  * Outfield opponents in the cone from `pos` to the goal centre `side` attacks: within 1.5 m of the segment, strictly
  * between its ends. The same predicate as decide's inline count (the defendersInCone of xgOf), for xG at contact.
  */
-export const coneCount = (side: Side, period: Period, pos: Vec2, opponents: ReadonlyArray<PlayerState>): number => {
-  const g = goalOf(side, period)
-  const vx = g.x - pos.x
-  const vy = g.y - pos.y
-  const l2 = vx * vx + vy * vy
-  return opponents.filter((o) => {
-    const t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((o.pos.x - pos.x) * vx + (o.pos.y - pos.y) * vy) / l2))
-    const d = Math.hypot(pos.x + t * vx - o.pos.x, pos.y + t * vy - o.pos.y)
-    return d < 1.5 && t > 0 && t < 1 && o.role !== "GK"
-  }).length
-}
+export const coneCount = (side: Side, period: Period, pos: Vec2, opponents: ReadonlyArray<PlayerState>): number =>
+  shotLineCount(pos, goalOf(side, period), opponents.filter((o) => o.role !== "GK").map((o) => o.pos))
 
 const r3 = (v: number): number => Math.round(v * 1000) / 1000
 

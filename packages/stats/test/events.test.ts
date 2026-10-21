@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { BIG_CHANCE_XG, DIFFICULT_PASS_XP, StatsEngine } from "../src/engine.js"
-import { passFeatures, predict, shotFeatures } from "../src/models.js"
+import { passFeatures, predict, predictXg, shotFeatures } from "../src/models.js"
 import { event, frame, INFO, models } from "./helpers.js"
 
 const M = models()
@@ -58,7 +58,8 @@ describe("pass and shot metrics", () => {
     const close = event("shot", 2, { team_id: "home-fc", player_id: "h3", x: 46, y: 1, frame_id_end: 6, outcome: "saved", attrs: { body_part: "right_foot", technique: "normal" } })
     eng.ingest({ kind: "event", event: close })
     eng.ingest({ kind: "frame", frame: frame(6) })
-    const xg = predict(M.xg, shotFeatures({ x: 46, y: 1 }, 1, false, frame(2).away))
+    // The simulator's xG, on the frame before the strike (the one the shooter decided on), the keeper left out.
+    const xg = predictXg(M.xg, shotFeatures({ x: 46, y: 1 }, 1, false, frame(1).away.filter((p) => p.id !== "a1")))
     expect(xg).toBeGreaterThan(BIG_CHANCE_XG)
     expect(eng.value("shot.xg", "h3")).toBeCloseTo(xg, 12)
     expect(eng.value("shot.speed", "home-fc")).toBeCloseTo(90, 6)

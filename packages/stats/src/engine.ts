@@ -351,7 +351,11 @@ export class StatsEngine {
   }
 
   private onShot(e: DomainEvent, tick: number, team: TeamInfo): void {
-    const xg = shotXg(e, this.frames.get(e.frame_id), team.side, this.models)
+    // The frame the shooter decided on: the one before the shot's tick after control (the decision precedes the moves),
+    // the shot's own for a first-time shot or header (struck at contact, after the moves).
+    const [first, second] = e.attrs.first_time === true ? [e.frame_id, e.frame_id - 1] : [e.frame_id - 1, e.frame_id]
+    const f = this.frames.get(first) ?? this.frames.get(second)
+    const xg = shotXg(e, f, team.side, this.models, this.gkIds)
     if (xg === null) return
     // Peak ball speed in the 0.3 s after the strike (frames up to the shot's resolution).
     const speed = this.ballSpeedMax(e.frame_id, Math.min(e.frame_id + this.ticks(0.3), tick))

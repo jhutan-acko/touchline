@@ -1,13 +1,18 @@
-"""Fit the stats engine's pass-difficulty (xPass) and expected-goals (xG) models on real IDSSE matches.
+"""Fit the stats engine's pass-difficulty (xPass) model on real IDSSE matches; define its xG features.
 
 Usage:
   uv run --project python/analytics python -m touchline_analytics.idsse --tracking J03WMX J03WN1 J03WOH J03WOY J03WPY J03WQQ J03WR9
   uv run --project python/analytics python -m touchline_analytics.stats_models            # write data/params/stats-models.json
-  uv run --project python/analytics python -m touchline_analytics.stats_models RUN_DIR    # features of a synthetic run (parity test)
+  uv run --project python/analytics python -m touchline_analytics.stats_models RUN_DIR [LEAGUE]  # features of a synthetic run (parity test)
 
-Both models are logistic regressions on features measured from an event's location and the tracking frame at
-that moment. The feature definitions here and in packages/stats/src/models.ts are the same; a parity test
-runs both on one synthetic match. Only coefficients and fit summaries are written, no real event or tracking rows.
+xPass is a logistic regression on features measured from a pass's location and the tracking frame at that moment.
+xG (P6 pre-merge fix 3, 2026-10-21) is the simulator's own model, so the stats engine, the analyst agent, the manager
+and the advisor show the xG the simulator records on each shot: the coefficients are shotModel.xg in
+data/params/touchline-params.json (the fractional-logit refit to DFL model xG, shots.fit_xg), and the features are the
+simulator's (distance in metres, goal-mouth angle, header, outfield defenders in the shot line). stats-models.json keeps
+only the xG feature names and the penalty rate. The feature definitions here and in packages/stats/src/models.ts are
+the same; a parity test runs both on one synthetic match. Only coefficients and fit summaries are written, no real
+event or tracking rows.
 """
 
 from __future__ import annotations
@@ -26,11 +31,14 @@ MAX_COUNT = 3
 GOAL_HALF_WIDTH = 3.66
 HALF_LENGTH = 52.5
 XPASS_FEATURES = ["length_10m", "forward_10m", "lane_defenders", "pressure"]
-XG_FEATURES = ["distance_10m", "angle_rad", "header", "cone_defenders"]
+XG_FEATURES = ["distance_m", "angle_rad", "header", "line_defenders"]
 PENALTY_XG = 0.76
-# L2 penalties: xPass has thousands of passes; xG has ~170 shots, where a strong penalty flattens close-range chances.
+# The shot line (sim-core shotLineCount): outfield opponents within this distance of the line to the goal centre.
+SHOT_LINE_M = 1.5
+XG_SOURCE = ("the simulator's: shotModel.xg in data/params/touchline-params.json under shotModel.rule 1 (the fractional logit "
+             "on DFL model xG, touchline_analytics.shots.fit_xg), read through sim-core xgCoefs")
+# L2 penalty: xPass has thousands of passes.
 XPASS_L2 = 1.0
-XG_L2 = 0.1
 
 Point = tuple[float, float]
 
@@ -76,29 +84,37 @@ def goal_angle(at: Point, attack: int) -> float:
     return 2 * math.pi - d if d > math.pi else d
 
 
-def _in_triangle(p: Point, a: Point, b: Point, c: Point) -> bool:
-    def side(p1: Point, p2: Point, p3: Point) -> float:
-        return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
-
-    d1, d2, d3 = side(p, a, b), side(p, b, c), side(p, c, a)
-    return not ((d1 < 0 or d2 < 0 or d3 < 0) and (d1 > 0 or d2 > 0 or d3 > 0))
-
-
-def cone_defenders(at: Point, attack: int, opponents: list[Point]) -> int:
-    """Opponents inside the triangle from the shooter to both posts, the goalkeeper excepted (the opponent nearest the goal centre), at most 3."""
+def keeper_index(attack: int, opponents: list[Point]) -> int:
+    """The opponent taken for the keeper when roles are unknown: the one nearest the centre of the goal attacked (-1: none)."""
     gx = attack * HALF_LENGTH
     if not opponents:
-        return 0
-    keeper = min(range(len(opponents)), key=lambda i: math.hypot(opponents[i][0] - gx, opponents[i][1]))
-    posts = ((gx, GOAL_HALF_WIDTH), (gx, -GOAL_HALF_WIDTH))
-    n = sum(1 for i, o in enumerate(opponents) if i != keeper and _in_triangle(o, at, posts[0], posts[1]))
-    return min(n, MAX_COUNT)
+        return -1
+    return min(range(len(opponents)), key=lambda i: math.hypot(opponents[i][0] - gx, opponents[i][1]))
 
 
-def shot_features(at: Point, attack: int, header: bool, opponents: list[Point]) -> list[float]:
-    """distance to the goal centre / 10 m, goal-mouth angle, header (0/1), defenders in the shot cone."""
+def line_defenders(at: Point, attack: int, outfield: list[Point]) -> int:
+    """Outfield opponents within 1.5 m of the line from `at` to the goal centre, strictly between its ends; uncapped."""
+    n = 0
+    for o in outfield:
+        d, t = segment_distance(at, (attack * HALF_LENGTH, 0.0), o)
+        if d < SHOT_LINE_M and 0 < t < 1:
+            n += 1
+    return n
+
+
+def shot_features(at: Point, attack: int, header: bool, outfield: list[Point]) -> list[float]:
+    """The simulator's xG features: distance to the goal centre (m), goal-mouth angle, header (0/1), outfield
+    opponents in the shot line (`outfield`: keepers already left out)."""
     d = math.hypot(attack * HALF_LENGTH - at[0], at[1])
-    return [d / 10, goal_angle(at, attack), 1.0 if header else 0.0, float(cone_defenders(at, attack, opponents))]
+    return [d, goal_angle(at, attack), 1.0 if header else 0.0, float(line_defenders(at, attack, outfield))]
+
+
+def sim_xg_model(params: dict) -> dict:
+    """The simulator's xG as a logistic model on XG_FEATURES, from a parameter file's contents (sim-core xgCoefs:
+    shotModel.xg under shotModel.rule 1, else shot.xg)."""
+    c = params["shotModel"]["xg"] if params.get("shotModel", {}).get("rule") == 1 else params["shot"]["xg"]
+    return {"features": XG_FEATURES, "intercept": c["b0"],
+            "coefficients": dict(zip(XG_FEATURES, (c["bDist"], c["bAngle"], c["bHeader"], c["bDefenders"])))}
 
 
 def sigmoid(z: float) -> float:
@@ -186,8 +202,8 @@ def _attack_dirs(first_frames: dict[int, dict[str, list[Point]]]) -> dict[tuple[
     return out
 
 
-def idsse_samples(root: Path, match_id: str) -> tuple[list[tuple[list[float], int]], list[tuple[list[float], int]]]:
-    """xPass and xG samples (features, outcome) from one IDSSE match; penalties are left out of the xG fit."""
+def idsse_samples(root: Path, match_id: str) -> list[tuple[list[float], int]]:
+    """xPass samples (features, outcome) from one IDSSE match."""
     from kloppy import sportec
 
     f = filenames(match_id)
@@ -215,90 +231,91 @@ def idsse_samples(root: Path, match_id: str) -> tuple[list[tuple[list[float], in
         return frames[period][i]
 
     passes: list[tuple[list[float], int]] = []
-    shots: list[tuple[list[float], int]] = []
     events = [e for e in ev.events if e.coordinates is not None and e.coordinates.x is not None]
     for k, e in enumerate(events):
-        name = e.event_type.name
-        if name not in ("PASS", "SHOT") or e.period.id not in frames:
+        if e.event_type.name != "PASS" or e.period.id not in frames:
             continue
         team = e.team.team_id
         teams = teams_at(frame_at(e.period.id, e.timestamp.total_seconds()))
         opp = [p for tid, pts in teams.items() if tid != team for p in pts]
         at = (e.coordinates.x, e.coordinates.y)
         a = attack[(e.period.id, team)]
-        if name == "PASS":
-            ok = e.result is not None and e.result.name == "COMPLETE"
-            rc = getattr(e, "receiver_coordinates", None)
-            if rc is not None and rc.x is not None:
-                end = (rc.x, rc.y)
-            else:
-                # Where the ball was next played: the next event with a location in the same period.
-                nxt = next((n for n in events[k + 1 :] if n.period.id == e.period.id), None)
-                if nxt is None:
-                    continue
-                end = (nxt.coordinates.x, nxt.coordinates.y)
-            passes.append((pass_features(at, end, a, opp), 1 if ok else 0))
+        ok = e.result is not None and e.result.name == "COMPLETE"
+        rc = getattr(e, "receiver_coordinates", None)
+        if rc is not None and rc.x is not None:
+            end = (rc.x, rc.y)
         else:
-            quals = [q.value.name for q in e.qualifiers or [] if type(q).__name__ in ("SetPieceQualifier", "BodyPartQualifier")]
-            if "PENALTY" in quals:
+            # Where the ball was next played: the next event with a location in the same period.
+            nxt = next((n for n in events[k + 1 :] if n.period.id == e.period.id), None)
+            if nxt is None:
                 continue
-            goal = e.result is not None and e.result.name == "GOAL"
-            shots.append((shot_features(at, a, "HEAD" in quals, opp), 1 if goal else 0))
-    return passes, shots
+            end = (nxt.coordinates.x, nxt.coordinates.y)
+        passes.append((pass_features(at, end, a, opp), 1 if ok else 0))
+    return passes
 
 
 def build(root: Path) -> dict:
-    px, py, pg, sx, sy, sg = [], [], [], [], [], []
+    px, py, pg = [], [], []
     for mid in MATCHES:
-        passes, shots = idsse_samples(root, mid)
-        print(f"{mid}: {len(passes)} passes, {len(shots)} shots", flush=True)
+        passes = idsse_samples(root, mid)
+        print(f"{mid}: {len(passes)} passes", flush=True)
         px += [x for x, _ in passes]
         py += [y for _, y in passes]
         pg += [mid] * len(passes)
-        sx += [x for x, _ in shots]
-        sy += [y for _, y in shots]
-        sg += [mid] * len(shots)
     return {
         "_provenance": {
             **PROVENANCE,
             "matches": list(MATCHES),
             "fitted_at": dt.date.today().isoformat(),
-            "method": "logistic regression (Newton, L2 penalty on coefficients); features from event locations and the nearest 5 Hz tracking frame",
+            "method": "xPass: logistic regression (Newton, L2 penalty on coefficients); features from event locations and the nearest 5 Hz tracking frame. xG: the simulator's model (xg.coefficients)",
             "note": "Coefficients and fit summaries only; no real event or tracking rows.",
         },
-        "version": "stats-models-1",
+        "version": "stats-models-2",
         "xpass": {"features": XPASS_FEATURES, **_summary(px, py, pg, XPASS_FEATURES, XPASS_L2)},
-        "xg": {"features": XG_FEATURES, "penalty": PENALTY_XG, **_summary(sx, sy, sg, XG_FEATURES, XG_L2)},
+        "xg": {"features": XG_FEATURES, "penalty": PENALTY_XG, "coefficients": XG_SOURCE},
     }
 
 
-def run_features(run_dir: Path) -> list[dict]:
-    """Features of every pass and non-penalty shot in a synthetic run folder (domain.jsonl and CDF tracking.jsonl)."""
+def run_features(run_dir: Path, roles: dict[str, str] | None = None) -> list[dict]:
+    """Features of every pass and non-penalty shot in a synthetic run folder (domain.jsonl and CDF tracking.jsonl).
+    A shot's are measured as the simulator's xG sees it: in the frame before its tick after control, in its own frame
+    for a first-time shot or header (struck at contact), with the keepers (`roles` "GK"; without roles, the opponent
+    nearest the goal attacked) left out."""
     meta = json.loads((run_dir / "meta.json").read_text())
     home_id = meta["teams"]["home"]["id"]
     wanted: dict[tuple[str, int], list[dict]] = {}
     with (run_dir / "domain.jsonl").open() as fh:
         for line in fh:
             e = json.loads(line)
-            if e["type"] == "pass" and e["x_end"] is not None or e["type"] == "shot" and e["attrs"].get("technique") != "penalty":
+            if e["type"] == "pass" and e["x_end"] is not None:
                 wanted.setdefault((e["period"], e["period_frame_id"]), []).append(e)
+            elif e["type"] == "shot" and e["attrs"].get("technique") != "penalty":
+                at_frame = e["period_frame_id"] if e["attrs"].get("first_time") is True else e["period_frame_id"] - 1
+                wanted.setdefault((e["period"], at_frame), []).append(e)
     first: dict[str, dict[str, list[Point]]] = {}
     out = []
     with (run_dir / "tracking.jsonl").open() as fh:
         for line in fh:
             f = json.loads(line)
+            ids = {side: [p["id"] for p in f["teams"][side]["players"]] for side in ("home", "away")}
             teams = {side: [(p["x"], p["y"]) for p in f["teams"][side]["players"]] for side in ("home", "away")}
             first.setdefault(f["period"], teams)
             for e in wanted.get((f["period"], f["frame_id"]), []):
                 side = "home" if e["team_id"] == home_id else "away"
                 fp = first[f["period"]][side]
                 attack = -1 if sum(p[0] for p in fp) / len(fp) > 0 else 1
-                opp = teams["away" if side == "home" else "home"]
+                opp_side = "away" if side == "home" else "home"
+                opp = teams[opp_side]
                 at = (e["x"], e["y"])
                 if e["type"] == "pass":
                     x = pass_features(at, (e["x_end"], e["y_end"]), attack, opp)
                 else:
-                    x = shot_features(at, attack, e["attrs"].get("body_part") == "head", opp)
+                    if roles:
+                        outfield = [p for p, pid in zip(opp, ids[opp_side]) if roles.get(pid) != "GK"]
+                    else:
+                        k = keeper_index(attack, opp)
+                        outfield = [p for i, p in enumerate(opp) if i != k]
+                    x = shot_features(at, attack, e["attrs"].get("body_part") == "head", outfield)
                 out.append({"id": e["id"], "features": x})
     return out
 
@@ -307,10 +324,12 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1:
-        print(json.dumps(run_features(Path(sys.argv[1]))))
+        roles = None
+        if len(sys.argv) > 2:
+            roles = {p["id"]: p["role"] for c in json.loads(Path(sys.argv[2]).read_text())["clubs"] for p in c["squad"]}
+        print(json.dumps(run_features(Path(sys.argv[1]), roles)))
     else:
         result = build(Path("data/raw/idsse"))
         out = Path("data/params/stats-models.json")
         out.write_text(json.dumps(result, indent=1) + "\n")
-        print(f"wrote {out}: xpass held-out log loss {result['xpass']['held_out_log_loss']} (base {result['xpass']['base_rate_log_loss']}), "
-              f"xg {result['xg']['held_out_log_loss']} (base {result['xg']['base_rate_log_loss']})")
+        print(f"wrote {out}: xpass held-out log loss {result['xpass']['held_out_log_loss']} (base {result['xpass']['base_rate_log_loss']})")

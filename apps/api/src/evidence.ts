@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import { loadRun } from "@touchline/mcp-stats"
 import { EvidenceNotFound, MatchNotFound, type Evidence, type EvidenceClaim, type PassVerdict, type RecapView, type Series, type WhatIfClip } from "@touchline/rpc"
 import { decodeMomentTrace, decodeRecap, type Claim, type MomentTrace, type Recap, type Segment } from "@touchline/schema"
+import { paramsFromJson } from "@touchline/sim-core"
 import { METRICS, modelsFromJson, StatsError, xtGridFromJson, type Roster, type StatsQuery } from "@touchline/stats"
 import { betterEventId, TEXT, wordsOf } from "./betterpass.js"
 import { pickCues } from "./cues.js"
@@ -57,7 +58,7 @@ export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>, whatIf:
     Effect.promise(() => {
       let q = queries.get(m.info.match_id)
       if (!q) {
-        q = Effect.runPromise(loadRun(m.dir, modelsFromJson(params("stats-models.json")), { roster, xt: xtGridFromJson(params("xt-grid.json")) }))
+        q = Effect.runPromise(loadRun(m.dir, modelsFromJson(params("stats-models.json"), paramsFromJson(params("touchline-params.json"))), { roster, xt: xtGridFromJson(params("xt-grid.json")) }))
         queries.set(m.info.match_id, q)
       }
       return q

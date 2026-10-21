@@ -20,7 +20,7 @@ import { createStatsServer } from "../src/server.js"
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const pkg = join(root, "packages/mcp-stats")
 const xt = xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
-const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
+const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")), DEFAULT_PARAMS)
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const dir = mkdtempSync(join(tmpdir(), "touchline-mcp-"))
 const cfg = { matchId: "mcp", seed: 4246, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[4]!, away: league.clubs[5]!, params: DEFAULT_PARAMS, dt: 0.1 }

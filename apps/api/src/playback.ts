@@ -8,6 +8,7 @@ import { join } from "node:path"
 import { Duration, Effect, Stream, SubscriptionRef } from "effect"
 import type { PitchFrame } from "@touchline/rpc"
 import type { Cue, Signal } from "@touchline/schema"
+import { paramsFromJson } from "@touchline/sim-core"
 import { modelsFromJson, readRun, StatsEngine, xtGridFromJson, type ReplayError, type Roster, type StatsInput, type TrackFrame } from "@touchline/stats"
 import type { LibraryMatch } from "./library.js"
 
@@ -57,7 +58,7 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
   Stream.unwrap(
     Effect.gen(function* () {
       const run = yield* readRun(m.dir, league())
-      const engine = new StatsEngine(run.info, modelsFromJson(params("stats-models.json")), xtGridFromJson(params("xt-grid.json")))
+      const engine = new StatsEngine(run.info, modelsFromJson(params("stats-models.json"), paramsFromJson(params("touchline-params.json"))), xtGridFromJson(params("xt-grid.json")))
       const groups = cueGroups(m.cues)
       const every = Math.max(1, Math.round(1 / run.info.dt)) // a scoreboard each second of match time
       const { home, away } = run.info

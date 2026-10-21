@@ -8,7 +8,9 @@ Expected threat (Singh, 2019; the method of socceraction's MIT-licensed xthreat 
 the chance a shot from there scores, plus the chance of moving the ball on times the value of where moves from it
 end up, solved by iteration. IDSSE has no carries, so moves are passes (a failed pass moves the ball nowhere of
 value). Goals are too few (16 non-penalty goals in seven matches) to estimate scoring per cell, so a shot's chance
-of scoring is the fitted xG model (data/params/stats-models.json) at the cell centre. Only the grid is written.
+of scoring is the xG model at the cell centre: since P6's pre-merge fix 3 the simulator's (shotModel.xg in
+data/params/touchline-params.json, stats_models.sim_xg_model). The committed grid (xt-1, fitted 2026-10-06) predates
+that and was fitted with stats-models-1's goal logistic; a refit moves it to the simulator's xG. Only the grid is written.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import json
 from pathlib import Path
 
 from .idsse import MATCHES, PROVENANCE, filenames
-from .stats_models import _attack_dirs, predict, shot_features
+from .stats_models import _attack_dirs, predict, shot_features, sim_xg_model
 
 COLS = 12
 ROWS = 8
@@ -41,7 +43,8 @@ def cell_centre(i: int) -> tuple[float, float]:
 
 
 def goal_probs(xg: dict) -> list[float]:
-    """Chance that a shot from each cell centre scores, from the fitted xG model (a foot shot, no defenders in the way)."""
+    """Chance that a shot from each cell centre scores, from an xG model on stats_models.XG_FEATURES (a foot shot, no
+    defenders in the way)."""
     coefs = [xg["coefficients"][f] for f in xg["features"]]
     return [predict(xg["intercept"], coefs, shot_features(cell_centre(i), 1, False, [])) for i in range(COLS * ROWS)]
 
@@ -105,7 +108,7 @@ def idsse_actions(root: Path, match_id: str) -> tuple[list[int], list[tuple[int,
     return shots, moves
 
 
-def build(root: Path, models: Path) -> dict:
+def build(root: Path, params: Path) -> dict:
     shots: list[int] = []
     moves: list[tuple[int, int | None]] = []
     for mid in MATCHES:
@@ -113,13 +116,13 @@ def build(root: Path, models: Path) -> dict:
         print(f"{mid}: {len(s)} shots, {len(m)} passes", flush=True)
         shots += s
         moves += m
-    grid = fit_grid(shots, moves, goal_probs(json.loads(models.read_text())["xg"]))
+    grid = fit_grid(shots, moves, goal_probs(sim_xg_model(json.loads(params.read_text()))))
     return {
         "_provenance": {
             **PROVENANCE,
             "matches": list(MATCHES),
             "fitted_at": dt.date.today().isoformat(),
-            "method": "expected threat (Singh 2019) by value iteration over passes and shots; scoring chance from the fitted xG model at each cell centre",
+            "method": "expected threat (Singh 2019) by value iteration over passes and shots; scoring chance from the simulator's xG model at each cell centre",
             "note": "The grid only; no real event rows.",
         },
         "version": "xt-1",
@@ -133,7 +136,7 @@ def build(root: Path, models: Path) -> dict:
 
 
 if __name__ == "__main__":
-    result = build(Path("data/raw/idsse"), Path("data/params/stats-models.json"))
+    result = build(Path("data/raw/idsse"), Path("data/params/touchline-params.json"))
     out = Path("data/params/xt-grid.json")
     out.write_text(json.dumps(result, indent=1) + "\n")
     v = result["values"]

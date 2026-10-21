@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect, Stream } from "effect"
 import { CliError, cliOptions, exitOnUserError } from "@touchline/sim"
+import { paramsFromJson } from "@touchline/sim-core"
 import { StatsEngine } from "./engine.js"
 import { modelsFromJson } from "./models.js"
 import { xtGridFromJson } from "./xt.js"
@@ -21,7 +22,8 @@ const o = cliOptions("touchline-stats: replay a run folder through the stats eng
 exitOnUserError(() => {
   if (o.run === "") throw new CliError("--run is required (a folder written by pnpm sim, e.g. out/m-1)")
 })
-const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
+// The stats engine's xG is the simulator's, on the committed parameters (P6 pre-merge fix 3).
+const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")), paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8"))))
 const xt = xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
 const leaguePath = join(root, "data/league/league.json")
 const roster = existsSync(leaguePath) ? (JSON.parse(readFileSync(leaguePath, "utf8")) as Roster) : undefined

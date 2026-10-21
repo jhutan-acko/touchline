@@ -70,5 +70,6 @@ const managers: Partial<Record<"home" | "away", Manager>> = exitOnUserError(() =
 })
 
 const out = here(o.out || join(root, "out", matchId))
-const stats = { models: modelsFromJson(json("data/params/stats-models.json")), xt: xtGridFromJson(json("data/params/xt-grid.json")) }
+// The stats engine's xG is the simulator's, on the parameters these matches run with (P6 pre-merge fix 3).
+const stats = { models: modelsFromJson(json("data/params/stats-models.json"), params), xt: xtGridFromJson(json("data/params/xt-grid.json")) }
 Effect.runPromise(writeManaged(cfg, managers, out, stats)).then((m) => console.log(`${out}: ${JSON.stringify({ ...m.stats, managers: m.managers })}`))
