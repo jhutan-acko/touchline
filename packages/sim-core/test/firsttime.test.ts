@@ -386,11 +386,12 @@ describe("SH1 in matches", () => {
       expect(firstTime / n).toBeGreaterThanOrEqual(0.1)
       expect(firstTime / n).toBeLessThanOrEqual(0.6)
     }, 900_000)
-    // NOT MET at the shipped values (phase B, b0 0, SH1 alone): seeds 7 and 9 give 0.183 (dt 0.1) and 0.156 (dt 0.04).
-    // It was met only at the test pin b0 6 (0.35, 0.36). Over 16 held-out matches (frame-based, open play): 0.206 with
-    // SH1 alone, 0.250 with SH2 on, 0.275 at b0 2 with SH2 on: eligible contacts are the ceiling. The shot count and the
-    // 0.6 ceiling are asserted in the case above. The real 0.33-0.49 open-play target is Task 8's.
-    it.fails(`NOT MET: about two in five shots are first time (dt ${dt})`, () => {
+    // Was NOT MET at the shipped values on the P4 engine (phase B, b0 0, SH1 alone): seeds 7 and 9 gave 0.183 (dt 0.1)
+    // and 0.156 (dt 0.04). It was met only at the test pin b0 6 (0.35, 0.36). Over 16 held-out matches (frame-based,
+    // open play): 0.206 with SH1 alone, 0.250 with SH2 on, 0.275 at b0 2 with SH2 on: eligible contacts are the ceiling.
+    // On the P5-on engine (merge of main 796e111) the 0.2 clause is met: 13 / 64 (0.203, dt 0.1), 16 / 68 (0.235, dt 0.04),
+    // so the former it.fails is an it (bound unchanged). The real 0.33-0.49 open-play target is Task 8's.
+    it(`about two in five shots are first time, at least 0.2 (dt ${dt})`, () => {
       const { n, firstTime } = shares(dt)
       expect(firstTime / n).toBeGreaterThanOrEqual(0.2)
     }, 900_000)
