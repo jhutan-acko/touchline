@@ -466,7 +466,7 @@
   "gateHoldS": 1
  },
  "marking": {
-  "weight": 0.25,
+  "weight": 1,
   "radiusM": 15,
   "goalSideM": 1.5,
   "widthSlackM": 4,
@@ -1501,7 +1501,7 @@
    "team_drift": 0.25,
    "player_drift": 1,
    "relax_cap": 0.55,
-   "marking_weight": 0.25,
+   "marking_weight": 1,
    "support_dist": 16,
    "support_space": 20,
    "support_space_att": 13,

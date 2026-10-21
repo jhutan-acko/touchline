@@ -815,7 +815,10 @@ export const DEFAULT_PARAMS: Params = {
   // 7.1-8.9 m there against 10.5-13.0 m in the defensive third, fit-report section 3), hence spaceAttM < spaceM.
   support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
   marking: {
-    weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
+    // weight 1: P5's calibrated value. The pre-merge fix (2026-10-21) narrowed the marking_weight knob to 0.75-1 (the P6
+    // tuner had moved it to 0.25: nearest defender at the shot 3.47 m against 2.04 real), and the knob's identity value
+    // must sit inside its range, so the default moved from 0.5 to 1.
+    weight: 1, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
     // P4 A5 zonal marking (spec item A5). Shipped off in P4 (free space 9.6 m against 6.0 real, gate loss 47.79); switched on
     // in P5 Task 14 with the P5 zonal cap (maxGapM).
     rule: 1, laneShare: 0.4, cbStepM: 10, dropMps: 1,

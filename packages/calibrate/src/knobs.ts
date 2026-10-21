@@ -121,7 +121,9 @@ export const KNOBS: ReadonlyArray<Knob> = [
     apply: (p, v) => ({ ...p, positioning: { ...p.positioning, drift: { ...p.positioning.drift, playerUSdM: p.positioning.drift.playerUSdM * v, playerSSdM: Object.fromEntries(Object.entries(p.positioning.drift.playerSSdM).map(([g, x]) => [g, x * v])) as Params["positioning"]["drift"]["playerSSdM"] } } }) },
   { name: "relax_cap", what: "share of top speed for relaxed shape movement (speeds, high-speed running)", init: DEFAULT_PARAMS.movement.relaxCap, min: 0.4, max: 0.85, step: 0.05,
     apply: (p, v) => ({ ...p, movement: { ...p.movement, relaxCap: v } }) },
-  { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: DEFAULT_PARAMS.marking.weight, min: 0, max: 1, step: 0.25,
+  // Pre-merge fix 2 (user, 2026-10-21): 0.75-1, not 0-1. The P6 tuner moved it 1 -> 0.25, which pushed the nearest
+  // defender at the shot to 3.47 m (real 2.04) and turned clear lanes and losers within 5 m in 3 s NOT MET.
+  { name: "marking_weight", what: "how tightly defenders mark (free space, fouls, turnovers)", init: DEFAULT_PARAMS.marking.weight, min: 0.75, max: 1, step: 0.25,
     apply: (p, v) => ({ ...p, marking: { ...p.marking, weight: v } }) },
   { name: "support_dist", what: "distance supporters offer from the carrier (support, pass length)", init: DEFAULT_PARAMS.support.distM, min: 8, max: 18, step: 2,
     apply: (p, v) => ({ ...p, support: { ...p.support, distM: v } }) },
