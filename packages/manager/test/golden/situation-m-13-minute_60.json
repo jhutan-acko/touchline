@@ -70,12 +70,12 @@
    }
   ],
   "stats": {
-   "xg": 0.48,
-   "shots": 7,
-   "possession_pct": 49.5,
-   "pass_completion_pct": 64.2,
-   "ppda": 3.4,
-   "yellow_cards": 1,
+   "xg": 0.76,
+   "shots": 8,
+   "possession_pct": 45.1,
+   "pass_completion_pct": 69.3,
+   "ppda": 4.7,
+   "yellow_cards": 2,
    "red_cards": 0
   }
  },
@@ -135,12 +135,12 @@
    }
   ],
   "stats": {
-   "xg": 1.63,
-   "shots": 10,
-   "possession_pct": 50.5,
-   "pass_completion_pct": 66.2,
+   "xg": 0.45,
+   "shots": 8,
+   "possession_pct": 54.9,
+   "pass_completion_pct": 74.4,
    "ppda": 3.4,
-   "yellow_cards": 1,
+   "yellow_cards": 2,
    "red_cards": 0
   }
  },
@@ -151,37 +151,37 @@
     "name": "Menel Ashisse",
     "number": 1,
     "role": "GK",
-    "energy_pct": 90,
+    "energy_pct": 89,
     "minutes_played": 60.2,
     "yellow_card": false,
     "shots": 0,
     "xg": 0,
     "passes_completed": 18,
-    "tackles_won": 2
+    "tackles_won": 0
    },
    {
     "id": "p-iro-02",
     "name": "Meric Okarisse",
     "number": 2,
     "role": "FB",
-    "energy_pct": 71,
+    "energy_pct": 72,
     "minutes_played": 60.2,
     "yellow_card": false,
     "shots": 0,
     "xg": 0,
-    "passes_completed": 21,
-    "tackles_won": 2
+    "passes_completed": 23,
+    "tackles_won": 1
    },
    {
     "id": "p-iro-03",
     "name": "Rinel Tavoway",
     "number": 3,
     "role": "CB",
-    "energy_pct": 69,
+    "energy_pct": 70,
     "minutes_played": 60.2,
     "yellow_card": false,
-    "shots": 0,
-    "xg": 0,
+    "shots": 1,
+    "xg": 0.06,
     "passes_completed": 21,
     "tackles_won": 1
    },
@@ -193,36 +193,36 @@
     "energy_pct": 75,
     "minutes_played": 60.2,
     "yellow_card": false,
-    "shots": 0,
-    "xg": 0,
-    "passes_completed": 16,
-    "tackles_won": 0
+    "shots": 1,
+    "xg": 0.03,
+    "passes_completed": 18,
+    "tackles_won": 5
    },
    {
     "id": "p-iro-05",
     "name": "Riris Brekström",
     "number": 5,
     "role": "FB",
-    "energy_pct": 66,
+    "energy_pct": 68,
     "minutes_played": 60.2,
-    "yellow_card": false,
+    "yellow_card": true,
     "shots": 0,
     "xg": 0,
-    "passes_completed": 13,
-    "tackles_won": 1
+    "passes_completed": 23,
+    "tackles_won": 4
    },
    {
     "id": "p-iro-06",
     "name": "Juris Brekström",
     "number": 6,
     "role": "CM",
-    "energy_pct": 73,
+    "energy_pct": 74,
     "minutes_played": 60.2,
     "yellow_card": true,
-    "shots": 0,
-    "xg": 0,
-    "passes_completed": 28,
-    "tackles_won": 1
+    "shots": 1,
+    "xg": 0.08,
+    "passes_completed": 14,
+    "tackles_won": 2
    },
    {
     "id": "p-iro-07",
@@ -233,61 +233,61 @@
     "minutes_played": 60.2,
     "yellow_card": false,
     "shots": 1,
-    "xg": 0.02,
-    "passes_completed": 24,
-    "tackles_won": 8
+    "xg": 0.07,
+    "passes_completed": 22,
+    "tackles_won": 10
    },
    {
     "id": "p-iro-08",
     "name": "Fedan Lumberg",
     "number": 8,
     "role": "CM",
-    "energy_pct": 71,
+    "energy_pct": 72,
     "minutes_played": 60.2,
     "yellow_card": false,
-    "shots": 2,
-    "xg": 0.06,
-    "passes_completed": 13,
-    "tackles_won": 0
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 19,
+    "tackles_won": 4
    },
    {
     "id": "p-iro-09",
     "name": "Lotan Ostoway",
     "number": 9,
     "role": "W",
-    "energy_pct": 64,
+    "energy_pct": 65,
     "minutes_played": 60.2,
     "yellow_card": false,
-    "shots": 1,
-    "xg": 0.18,
-    "passes_completed": 15,
-    "tackles_won": 3
+    "shots": 0,
+    "xg": 0,
+    "passes_completed": 28,
+    "tackles_won": 6
    },
    {
     "id": "p-iro-10",
     "name": "Tamir Ashardt",
     "number": 10,
     "role": "ST",
-    "energy_pct": 74,
+    "energy_pct": 75,
     "minutes_played": 60.2,
     "yellow_card": false,
-    "shots": 1,
-    "xg": 0.03,
-    "passes_completed": 17,
-    "tackles_won": 0
+    "shots": 2,
+    "xg": 0.43,
+    "passes_completed": 19,
+    "tackles_won": 1
    },
    {
     "id": "p-iro-11",
     "name": "Menel Drenström",
     "number": 11,
     "role": "W",
-    "energy_pct": 71,
+    "energy_pct": 74,
     "minutes_played": 60.2,
     "yellow_card": false,
     "shots": 2,
-    "xg": 0.19,
-    "passes_completed": 20,
-    "tackles_won": 4
+    "xg": 0.08,
+    "passes_completed": 16,
+    "tackles_won": 0
    }
   ],
   "bench": [
@@ -364,14 +364,14 @@
  "recent": {
   "window_min": 10,
   "team": {
-   "xg": 0.02,
+   "xg": 0.05,
    "shots": 1,
-   "ball_regains": 35
+   "ball_regains": 25
   },
   "opponent": {
-   "xg": 0.07,
-   "shots": 2,
-   "ball_regains": 32
+   "xg": 0,
+   "shots": 0,
+   "ball_regains": 22
   }
  }
 }

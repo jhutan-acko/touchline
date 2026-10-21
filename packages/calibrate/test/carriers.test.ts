@@ -39,10 +39,11 @@ describe("frozen ball carriers", () => {
     expect(stillCarriers([half(still(60), { a: gap })]).outfield).toEqual({ count: 2, seconds: 5.7, longest: 3.3 })
   })
 
-  // Seed 4244: the first from 4243 on whose match has a still stretch (since the keeper-in-hands rule few do; re-picked for P2, again for Task 8b,
-  // again for P3 Task 10d support rule 1, which left 4248 with none, and for P4 Task 10, which left 4243 with none).
+  // Seed 4246: the first from 4243 on whose match has a still stretch (since the keeper-in-hands rule few do; re-picked for P2, again for Task 8b,
+  // again for P3 Task 10d support rule 1, which left 4248 with none, for P4 Task 10, which left 4243 with none, and for P6
+  // Task 8, which left 4244 and 4245 with none).
   it.skipIf(!hasUv)("agree with the Python definition on a simulated match", () => {
-    const cfg = { matchId: "carrier-parity", seed: 4244, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[1]!, away: league.clubs[2]!, params: DEFAULT_PARAMS, dt: 0.1 }
+    const cfg = { matchId: "carrier-parity", seed: 4246, kickoffTime: "2026-10-18T14:00:00.000Z", home: league.clubs[1]!, away: league.clubs[2]!, params: DEFAULT_PARAMS, dt: 0.1 }
     const halves = simCarrierHalves(runMatch(cfg).frames, rolesOf(cfg))
     expect(halves).toHaveLength(2)
     const file = join(mkdtempSync(join(tmpdir(), "touchline-carriers-")), "halves.json")
