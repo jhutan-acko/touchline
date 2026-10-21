@@ -1516,3 +1516,283 @@ The stats and manager goldens were regenerated: same fields; PPDA about 3.7 (G25
 - Regenerate every `out/` run folder in main.
 - Regenerate `realism-deep.md` (`pnpm realism:deep`).
 - Run `pnpm library` once the user OKs it (agent service and LLM).
+
+## Results: P5 (2026-10-20)
+
+**Switched on** in `DEFAULT_PARAMS` (and so in the calibrated file):
+- `setAttack.rule` (S1, S4), `setDefend.rule` (S2, S3), `setShapes.rule` (S5–S7), `deadBall.rule` (S8),
+  `keeperRestarts.rule` (G3), `directFk.rule` (S9).
+- `roleMoves.runRule` (A6 runs and overlaps) and `roleMoves.rotateRule` (A6 W inside, FB inversion, CM drop).
+- **`marking.rule` 1** (P4 A5 zonal marking, carried) with the P5 cap `marking.maxGapM` 5, and `marking.landingRule` 1.
+- `transition.pauseRule` 1 (pause at 0.855 of the speed at the loss, 0.5 s ramp), `release.freeRule` 1 (`freeS`).
+- `press.rule` already shipped 1 in P4 (ruling 21: nothing to switch).
+- **No switch was turned off.** The gate passed with everything on, so the fallback order (rotations, runs, zonal marking,
+  pause; user Q2) was not used.
+
+**Values the tasks set** (defaults; the calibrated file differs only where a knob moved, below):
+- **S1/S4 (Task 3):** the spec's corner and pooled free-kick tables, `fkWideShiftU` 3 (end of the grid), hold 2 m, run 2 s at
+  0.75 vmax, rest keepers 1.4 / 2.7 / 2.3 / 4.1 at u 20–25.
+- **S2/S3 (Task 4):** `manM` 12, `goalSideM` 1, zonal six-yard spots then the penalty spot, outlet 0.24, walls 3–4 central and
+  1–2 wide (0.76), 9.15 m, shade 1 m, jitter 0.5 m. **`wallGapM` 1.5** (Task 14, Task 4's option; ruling 9 said 0.6).
+- **S5–S7 (Task 5):** the real goal-kick and kickoff tables; throw-in support `throwShort` 1 at `throwShortM` 10, marked at 0.75.
+- **S8 (Task 6):** the real lognormal medians and IQR sigmas, `minS` 3, `lateGrowth` 0.8, walking 1–1.5 m/s, settle times,
+  taker pause 0.5–1 s.
+- **G3 (Task 7):** `fkShare` 0.5, `longShift` 2.5, `longErrorScale` 2.
+- **S9 (Task 8):** `shotShift` 4 (calibrated **4.5**), `xgLogit` 0.45, `maxDistanceM` 35.
+- **A6 (Tasks 9, 10):** run weights ST 0.45 / W 1.4 / AM 0.5 / FB 0.6, `overlap.ratePerS` 0.1, `inside` 0.5 for 4–6 s,
+  `invert` 0.1, `cmDrop` 0.3, `jogMps` 3.5.
+- **Marking (Task 11):** `maxGapM` 5, `laneShare` 0.4, landing 1 m goal-side, react within 10 m.
+- **Pause (Task 12):** `pauseDip` 0.855, `pauseEndS` 0.5. Recovery and press values unchanged (F23; nothing measured helped).
+- **Release (Task 13):** `freeS` [0.6, 1.9] (calibrated [0.48, 1.52] through `decision_scale` 0.8).
+- **Script nudge** (script only, bound unchanged): `script.momentumLogit` 1 → 1.25.
+
+**New knobs** (ruling 27): `fk_shot` 3–5, `gk_long` 1.5–3.5, `gk_long_error` × 0.75–1.25, `role_rate` × 0.75–1.25 (the four
+A6 `ratePerS` and the run start weights), `max_gap` 3.5–6.5, `lane_share` 0.3–0.5 (re-added: zonal marking is on).
+Changed: `restart_scale` also scales `deadBall.medianS`, range 0.8–1.25 (was 0.6–2.5); `decision_scale` also scales
+`release.freeS`, range 0.8–1.2 (was 0.6–2.5).
+
+**The gate** (user Q1 (a)): the realism gate now asserts |z| < 3 on every gated statistic, the seven spatial ones included,
+and prints their z. The 1-SD and 2-SD counts stay over the 19 scalars. A tightening only.
+
+**Sources:** C1, C2 and C4 from `docs/realism/realism-report.md` (16 matches); P5 targets, the P4 and P3 rows, C3, physical
+bands and territory from `docs/realism/realism-deep-report.md` (64 matches); Task 2's baseline is
+`docs/realism/p5-setpieces-baseline.md` (16 matches, P4 engine, P5 rules 0).
+
+### Deviations from the plan
+
+Planning rulings that changed the spec: 3 (one helper module, four behaviour modules), 5 (restart precedence), 6 (hold and
+run; `fkWideShiftU` 3), 7 (rest keepers by role order, deepest first), 8 (nine in the box, F19), 9 (wall on the 9.15 m arc,
+F21; gap 1.5 here), 10, 11 (lognormal delays with `lateGrowth`), 12 (G3 completion through `errorScale`, no `execute.ts`),
+13, 14 (S9 through `restartShot`), 15 (runs and overlaps share `run_in_behind`, with `overlap?: true` in `types.ts`), 16
+(`rotate` intent with `since`), 17 (cap on the final zonal target), 18 (landing marking; `marksFor` gains the landing CB,
+controller ruling), 20, 21 (press values only), 22.
+
+Measurement changes:
+1. **Dead-ball speed** (Task 6, Task 14): the Python `dead_speed_mps` row now counts moving outfielders only (0.5 m/s or more
+   per 5 Hz step; mean per step, mean per spell, median over restarts), the ruled definition the in-match test uses. The
+   all-outfielder reading was 0.93.
+2. **Corner test** (Task 3): on − off ≥ 2 with on ≥ 4 and seed 11 added (controller ratified).
+3. **Goal-kick in-match test** (Task 5): off − on ≥ 0.1, re-measured on the P4 engine (spec bound on < 0.4 unchanged).
+4. **identity.test** (post-merge): the distribution block runs 9000 ticks.
+5. **Task 14 test changes** (no bound widened):
+   - Mechanism tests of earlier rules pin P5 to the engine they were written on (P4's F4 precedent): `choice` (G3 off),
+     `direct-fk` (explicit rule 0), `release` (`freeRule` 0), `transition` (`pauseRule` 0), `setpiece-defend` (S1 off,
+     `wallGapM` 0.6, the shipped 1.5 pinned in `params.test`), `rotate` in matches (other P5 rules off), the two `offball`
+     support tests, `passing` completion and `fouls` in matches (P5 and zonal marking off).
+   - `match.test` intent vocabulary gains `rotate` (F13).
+   - New `setpieces-targets.test.ts` (below).
+
+### Calibration
+
+| Run | Start | Tuner loss | Held-out loss | Knobs that moved |
+|---|---|---|---|---|
+| 1 (from P4's knobs, every P5 rule on; 24 matches, 1 round, 88 evals) — **ships** | 25.56 | **19.15** | **23.77** | `decision_scale` 0.85 → **0.8 (min)**, `aim_noise` 1.15 → 0.95, `xg_b0` −1.25 → −1.5, `foul_per_tackle` 0.6 → 0.48, `clear_to_touch` 0.05 → **0 (min)**, `fk_shot` 4 → 4.5 |
+
+`restart_scale` (1.05), `shot_bias` (0.4), `cross_shift` (0.5), `marking_weight` (1, max) and the five other new knobs
+(`gk_long` 2.5, `gk_long_error` 1, `role_rate` 1, `max_gap` 5, `lane_share` 0.4) did not move.
+
+Before the tuner, on the gate seeds: loss 26.55, largest |z| completion −2.65.
+
+**Knobs on their bounds:**
+
+| Knob | Value (bound) | What it costs |
+|---|---|---|
+| `decision_scale` | 0.8 (min, narrowed range) | release median 1.20 s (band edge 1.2–1.6; 1.30 before the tuner) |
+| `clear_to_touch` | 0 (min) | wide clearances never kicked into touch; throw-ins 43.1 (MET) |
+| `tackle_rate` | 0.1 (min, since P4) | ground duels 122 against 155 |
+| `yellow_per_foul` | 0.1 (min, since P4) | yellows 3.50 against 5.0 (NOT MET), cards per foul 0.111 (MET by 0.001) |
+| `marking_weight` | 1 (max, since P4) | the ball-pressure lever is at its limit (z +0.56 now, with zonal marking) |
+| `support_space` | 20 (max, since P4) | support within 15 m 2.16 (MET) |
+| `attacker_foul`, `aerial_foul`, `counter_join` | 1.5 / 1.5 / 1.25 (max, since P4) | attacker fouls 1.1 against 3; 0–5 m join 0.919 |
+| `switch_shift` | 2 (max, since P3) | switches 0.127 against 0.061 |
+
+`foul_per_tackle` came off its 0.6 maximum (0.48), so the T3 saturation is smaller.
+
+**Pre/post-tuner** (16 matches each, seeds 2000–2015, full report):
+- **MET → NOT MET because of a knob:** yellows 4.06 → 3.38 and cards per foul 0.135 → 0.103 (`foul_per_tackle` 0.48: fewer
+  fouls); receivers tightly marked 0.115 → 0.122; supported tackles 0.591 → 0.538; goal-kick shots against 3.2 → 4.5;
+  C3 0.172 → 0.232 (16 matches). The set-piece rows moved by noise only.
+- **NOT MET → MET:** front tackles, free kicks within 30 m (1.62 → 1.12), ≥ 3 engaged, kickoff nearest opponent,
+  attacking free-kick dead time.
+- `fk_shot` 4.5 lifts the direct free-kick share 0.47 → 0.50, on the band's top edge (real 0.36).
+
+### Results
+
+- **Gate: MET.** Held-out loss **23.77**, maxDrift 0 against the refreshed baseline, physics **5** of 13 inside (P4 2:
+  speeds of keepers, defenders and forwards, `max_speed`, `hsr25`). **Every gated |z| < 3, spatial included:**
+
+  | Statistic | z |
+  |---|---|
+  | Completion | −2.64 |
+  | Free space | +1.98 |
+  | Defending length | −1.95 |
+  | In-play share | −1.93 |
+  | Distance | −1.65 |
+  | Peak speed | −1.52 |
+  | Line height | −1.16 |
+  | Width in possession | +0.75 |
+  | Ball pressure | +0.56 |
+  | Support within 15 m | +0.40 |
+  | Width out of possession | +0.24 |
+
+- **C1: NOT MET.** 14 of 19 within 1 SD (P4 15), 16 within 2 SD (P4 19). Beyond 2 SD: completion −2.58, in-play −2.24,
+  distance −2.13.
+- **C2: MET.** Free kicks +0.83, fouls −0.73, goals +0.43, shots on target +0.03.
+- **C3: NOT MET.** Team shot-share SD 0.209 on 64 matches (P4 0.175; needs ≤ 0.18).
+- **C4: MET.** Width in possession +0.75, out +0.24, defending length −2.07, line height −1.26, ball pressure +0.61, support
+  +0.43, free space +1.86.
+- **P5 targets** (64 matches; Task 2's baseline, 16 matches, P4 engine). **26 of 43 MET, against 12 in the baseline.**
+
+  | Measure | Real | Task 2 | P5 | Status |
+  |---|---|---|---|---|
+  | Corner: attackers in the box | 5.49 | 3.32 | 5.76 | **MET** |
+  | — in the six-yard box | 1.07 | 0.11 | 0.00 | NOT MET (deepest spot u 43, held to 41) |
+  | Corner: defenders in the box | 9.15 | 5.81 | 9.00 | **MET** |
+  | — within 2 m of an attacker | 0.54 | 0.10 | 0.67 | NOT MET (`manM` 12; 10 meets it but corner shots 51 per 100) |
+  | — left up | 0.02 | 0.09 | 0.00 | MET |
+  | Corner: attackers kept back | 1.43 | 2.02 | 1.38 | **MET** |
+  | Corner delivery completed | 0.43 | 0.65 | 0.68 | NOT MET |
+  | Wide FK: attackers in the box | 3.76 | 0.16 | 1.23 | NOT MET (by construction, below) |
+  | Central FK: attackers in the box | 3.09 | 0.34 | 0.00 | NOT MET (by construction) |
+  | Wide FK: kept back | 2.71 | 6.64 | 2.72 | **MET** |
+  | Central FK: kept back | 2.27 | 6.51 | 2.57 | **MET** |
+  | Attacking-third throw-ins: kept back | 4.10 | 6.36 | 7.40 | NOT MET |
+  | Central FK: wall present | 1.00 | 0.60 | 1.00 | **MET** |
+  | — players in the wall | 2.46 | 0.91 | 3.98 | NOT MET (F30, by construction) |
+  | Wide FK: wall present | 0.76 | 0.48 | 0.77 | **MET** |
+  | Nearest wall player (m) | 9.76 | 9.44 | 8.65 | MET (edge; 8.33 at gap 0.6) |
+  | Goal kicks: opponents beyond the box line | 0.18 | 0.08 | 0.00 | MET |
+  | — opponents in the kicker's defensive third | 2.64 | 2.99 | 1.71 | **NOT MET** (was MET) |
+  | — kicking CBs' u (m) | −31.4 | −29.2 | −30.7 | MET |
+  | Middle-third throw-ins: mates within 10 m | 0.94 | 0.97 | 1.08 | MET |
+  | Throw-in first contact (m) | 9.6 | 9.3 | 10.8 | MET |
+  | Kickoff nearest opponent (m) | 8.6 | 2.9 | 8.0 | NOT MET (on the 8.0 edge) |
+  | Goal kicks long (first contact > 32 m) | 0.48 | 0.34 | 0.18 | NOT MET (targets 32–34 m) |
+  | Long goal kicks completed | 0.49 | 0.71 | 0.63 | NOT MET |
+  | Goal kicks: opponents' shots in 10 s, per 100 | 0.9 | 2.5 | 4.4 | **NOT MET** (was MET) |
+  | Keeper free kicks per team-match | 3.00 | 0.00 | 2.98 | **MET** |
+  | Central FK shot directly | 0.36 | 0.06 | 0.50 | **MET** (top edge; `fk_shot` 4.5) |
+  | Corner shots in 10 s, per 100 | 32.1 | 29.8 | 36.7 | MET |
+  | Dead time: throw-ins / goal kicks / corners (s) | 13.5 / 22 / 33 | 18.8 / 31.2 / 38.3 | 14.2 / 22.7 / 35.6 | **MET** ×3 |
+  | Dead time: attacking FK / other FK / kickoff (s) | 42 / 28 / 70 | 25.0 / 25.9 / 47.9 | 43.6 / 28.4 / 70.0 | **MET** ×2, MET |
+  | Dead-ball speed, moving players (m/s) | 1.20 | (0.94 all players) | 1.34 | **MET** |
+  | FB overlaps | 13.9 | 21.1 | 30.9 | NOT MET (further off) |
+  | W comes inside | 61.9 | 19.7 | 22.5 | NOT MET |
+  | FB underlap / inversion | 36.4 | 36.8 | 39.0 | MET |
+  | Runs in behind | 34.6 | 56.2 | 17.0 | NOT MET (now under) |
+  | — wide-lane share | 0.64 | 0.61 | 0.46 | **NOT MET** (was MET) |
+  | — beyond-the-line share | 0.26 | 0.77 | 0.72 | NOT MET |
+  | CM drops | 44.7 | 53.8 | 51.6 | **MET** (edge) |
+
+  Offsides 10.7 per match (P4 10.1; ruling 25: recorded only, Question 6). In play first/last 15 minutes 0.60 / 0.44 (real
+  0.62 / 0.43).
+- **P4 carry-overs** (64 matches, P4 → P5):
+
+  | Measure | Real | P4 | P5 | Status |
+  |---|---|---|---|---|
+  | Aerial duels | 47 | 29.5 | 34.2 | NOT MET (P6 SH2) |
+  | Aerial fouls | 5 | 4.0 | 4.2 | MET |
+  | Penalties | 0.43 | 0.23 | 0.20 | NOT MET (user Q4 (a): no knob) |
+  | Free space (m) | 6.0 | 6.8 (16) | 7.0 | NOT MET, z +2.00, with zonal marking on |
+  | Ball pressure (m) | 5.1 | 6.4 | 5.5 | MET, z +0.70 (P4 +2.57) |
+  | Tight receivers | 0.09 | 0.121 | 0.115 | **MET** |
+  | Clear lanes per pass | 4.95 | 5.99 | 5.24 | **MET** (zonal marking) |
+  | Pause speed ratio | 0.87 | 0.977 | 0.855 | **MET** |
+  | Recovery at 3 s / 5–6 s | 0.10 / 0.15 | 0.203 / 0.239 | 0.159 / 0.210 | NOT MET (shape-return movement) |
+  | Recovery 0–1.4 s / 2 s / 10 s | 0.02 / 0.06 / 0.12 | 0.048 / 0.100 / 0.098 | 0.039 / 0.084 / 0.102 | NOT MET / **MET** / MET |
+  | Press episodes per 90 | 405 | 410 | 539 | **NOT MET** (was MET; zonal markers near the ball count as engaged) |
+  | Lifts, back to goal / own third | 2.08 / 1.97 | 0.84 / 1.25 | 0.91 / 1.12 | NOT MET |
+  | Release median (s) | 1.40 | 1.60 | 1.20 | MET (lower edge) |
+  | On the ball over 3 s | 0.16 | 0.164 | 0.124 | MET |
+  | Losers within 5 m in 3 s | 2.29 | 1.95 | 2.06 | **MET** |
+  | Tackle win | 0.48 | 0.535 | 0.544 | NOT MET |
+  | Ground duels | 154.7 | 111.8 | 122.3 | NOT MET |
+  | Fouls | 22.9 | 18.3 | 18.2 | NOT MET |
+  | Yellows / cards per foul | 5.0 / 0.14 | 3.30 / 0.101 | 3.50 / 0.111 | NOT MET / **MET** |
+  | Sent off | 0.29 | 0.30 | 0.25 | MET |
+
+- **Physical bands** (64 matches, P4 → P5, real): walking 2.00 → 2.64 (3.50); high-speed plus sprint 0.71 → 0.42 (0.69);
+  accelerations 297 → 269 (50); live m/min 150 → 159 (147); **dead-ball m/min 56 → 47 (65)**, players now walk while the
+  ball is dead; sprints 4.2 → 7.5 (8.4). Distance 9.90 km on 64 (16-match 9.72, z −2.13; P4 9.97).
+- **Territory** (64): SD 5.3 m (P4 4.8; real 1.9); centroid minus ball with the ball −1.3 (P4 −0.6; real +3.9), without it
+  −5.0 (P4 −6.4; real −9.5).
+- **Real-target tests:**
+  - `setpieces-targets.test.ts` (new; calibrated params, test teams, seeds 7, 9, 11 and 13): corner attackers 5.51 and
+    defenders 9.00 (43 corners), wall at 9 of 9 central free kicks, 0.00 goal-kick opponents beyond the box line (72), 3.13
+    keeper free kicks per team-match, throw-in median 15.2 s (165): MET. **NOT MET (`it.fails`):** goal kicks long 0.309 (68);
+    A6 intent starts per team-match overlaps 7.0, inside 53.75 (in band), runs 55.4, CM drops 14.9.
+  - `duels-targets.test.ts`: "losers reach within 3 s" now **MET** (2.069 over 519 losses; it leaves `it.fails`); "front
+    approaches win more" now **NOT MET** (front 0.500 of 14 against behind 0.630 of 73), the P4-noted fragility. Tackle
+    win 0.609, defender fouls 11.75, fouls 17.75, aerial duels 37.75 stay NOT MET.
+  - `wide.test` "deflected shots rarely end in own goals": **NOT MET** (4 over seeds 1–16, bound 3), see gaps.
+  - **M10 (ruling 23):** punts per team-match 0.60 and punt share 0.16 on 64 matches are outside their bounds (1.0–2.2,
+    0.24–0.40): both are now `it.fails` (4-match values 0.50 and 0.182). The positioning deep count passes (no 64-match row).
+- **Manager A/B** (rules against none, 40 seeds, for information): **+0.297 xG difference per match (95 % interval 0.052 to
+  0.560)**, the rule-based manager does better (P4: −0.276, no detectable difference).
+
+### Decisions on the items handed to Task 14
+
+- **Wall distance (Task 4):** `wallGapM` 1.5, a value; exempting wall members from separation would be a mechanism change
+  outside the table. Nearest wall player 8.65 m (MET, edge).
+- **Corner tight marking 0.67 and delivery completion 0.68:** recorded NOT MET. `manM` 10 meets tight but lifts corner shots
+  to 51 per 100 (Task 4); no lever for delivery completion in P5's values.
+- **Dead-speed row (Task 6):** aligned (above).
+- **Free-kick box counts (Task 3):** NOT MET by construction (every `fk` table u ≤ 37, held 2 m back); the hold is shared with
+  corners (dropping it would push the corner box over its band) and ruling 27 has no knob on tables. Kept.
+- **Throw-in kept-back count (Task 3):** NOT MET at 7.40; at attacking-third throw-ins only the rest keepers and the S6 trio
+  move.
+- **Goal-kick long share (Task 7):** NOT MET 0.18; the long options are the S5 FB and CM spots at 32–34 m. Targets were not
+  lengthened (that is a role-table or receiver-pick change), so `longShift` stays 2.5.
+- **S9 at full switch-on (Task 8):** the tuner moved `fk_shot` to 4.5; the share is 0.50, the band's top. P6's xG refit moves
+  it again.
+- **Runs in behind (Task 9):** NOT MET 17.0; it needs a mechanism change (a minimum start gap or a break on the carrier's
+  release), not done. Overlaps 30.9 (natural 21 already above the band). No re-aim.
+- **W inside (Task 10):** NOT MET 22.5; `jogMps` and the start width were not changed.
+- **Zonal marking (Task 11):** on at `maxGapM` 5; the gate passed (completion −2.64, free space +1.98).
+- **Recovery and press (Task 12):** no values applied (F23 values unchanged); nothing measured helped.
+
+### Gaps outside P5
+
+- **Own goals from passes:** about 0.3–0.4 per match against about 0.1 real; `wide.test` now NOT MET (4 in 16).
+- **Keeper hands distributions:** throws 3.20 and punts 0.60 per team-match (real 3.4 and 1.6); keeper passes 24.3 against
+  45.4. Keeper claims are not in the deep report.
+- **Open-play crosses:** 5.5 per match against 14.9 (P4 about 7). S1 loads the box only at set pieces.
+- **10d support gate not cleared at half-time** (P3, Not Important): unchanged.
+- **C3 shot-share spread:** 0.209 against ≤ 0.18 (P4 0.175).
+- **Completion** −2.6 z and **distance** 9.7–9.9 km stay the largest gated misses.
+- **Dead-ball running** 47 m/min against 65: walking at 1–1.5 m/s lowered it from 56.
+- **Press episodes** 539 against 405, with zonal marking on.
+
+### Handed to P6
+
+- Rows P6 must re-judge: `fk_central_shot_share` (0.50, top edge), `corner_shots_per100` (36.7), `gk_long_completion`
+  (0.63, NOT MET) and `aerial_duels_per_match` (34.2, NOT MET).
+- Values P6 may re-set: `directFk.shotShift` (calibrated 4.5; knob `fk_shot` 3–5) and `keeperRestarts.longErrorScale`
+  (2; knob `gk_long_error`).
+- The mean direct free-kick xG was 0.060 at `xgLogit` 0.45 (Task 8, F24).
+
+### Rulings
+
+The plan's rulings 1–28 (plan 8e) hold as written, with the deviations above. The controller and user rulings are in the
+plan's ledger: the preflight findings F1–F35; the wave-1 phase-B values; the two Task 11 plan bugs; user Q1 (a) spatial
+statistics in `GATE_Z`, Q2 (a) fallback order (not needed), Q3–Q6 the recommended options (Q4: penalties NOT MET, no knob).
+
+**Seeds and fixtures re-picked** (each by its file's rule):
+
+| Fixture | Change |
+|---|---|
+| `whatif.test` forced window | 5 → 6 |
+| Stats golden (`replay.test`) | 4245 → 4246 (first from 4245 that raises a `costly_error`); golden renamed `late-comeback-4246.json` |
+| Manager `run.test` | 13 → 14 |
+| Advisor explainer pass | 15 → 3 |
+| API library fixture (and so the web client test) | 4 → 1 |
+| Agents `ERROR_SEED` / `SEED` | 65 → 17 / 6 → 1 (`find_test_seed.py`: 64 error-shape seeds of 1–1400; 58 general of 1–100) |
+| Gateway e2e | 65 → 17 (with `ERROR_SEED`) |
+
+The stats and manager goldens were regenerated. `pnpm library` was not rebuilt (it needs the agent service and the LLM).
+
+### P5 merge checklist
+
+- Regenerate every `out/` run folder in main.
+- Run `pnpm library` once the user OKs it.
+- Tell the P6 controller the merge commit to rebase onto.

@@ -340,7 +340,7 @@
    "dead_fk_att_s": {"label": "Dead time before attacking-third free kicks, median (s)", "real": 42, "lo": 37, "hi": 47, "fmt": "{:.1f}"},
    "dead_fk_other_s": {"label": "Dead time before other free kicks, median (s)", "real": 28, "lo": 24, "hi": 32, "fmt": "{:.1f}"},
    "dead_kickoff_s": {"label": "Dead time before kickoffs after a goal, median (s)", "real": 70, "lo": 62, "hi": 78, "fmt": "{:.1f}"},
-   "dead_speed_mps": {"label": "Outfielders' mean speed while the ball is dead, median over restarts (m/s)", "real": 1.2, "lo": 1.0, "hi": 1.5, "fmt": "{:.2f}"},
+   "dead_speed_mps": {"label": "Moving outfielders' (0.5 m/s or more) mean speed while the ball is dead, median over restarts (m/s)", "real": 1.2, "lo": 1.0, "hi": 1.5, "fmt": "{:.2f}"},
    "fb_overlap": {"label": "FB overlaps per team-match", "real": 13.9, "lo": 11, "hi": 17, "fmt": "{:.1f}"},
    "w_inside": {"label": "Wingers coming inside per team-match", "real": 61.9, "lo": 52, "hi": 72, "fmt": "{:.1f}"},
    "fb_invert": {"label": "FB underlaps and inversions per team-match", "real": 36.4, "lo": 30, "hi": 43, "fmt": "{:.1f}"},

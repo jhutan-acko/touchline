@@ -11,7 +11,8 @@ import { CONCERNS, type MatchState, type PlayerState, type Possession, type Tran
 
 // Explicit on and off (F4): Task 10 flips the defaults. Everything else as the defaults.
 const off: Params = { ...P, transition: { ...P.transition, rule: 0 } }
-const on: Params = { ...P, transition: { ...P.transition, rule: 1 } }
+// P4's pause (pauseRule 0): P5's pause and its ramp (plan 8e ruling 20) are transition-p5.test's.
+const on: Params = { ...P, transition: { ...P.transition, rule: 1, pauseRule: 0 } }
 /** Every losing outfielder within 30 m joins (forced joins, for fixtures that need joiners). */
 const allJoin: Params = { ...on, transition: { ...on.transition, joinP: [1, 1, 1, 1, 1] } }
 const T = on.transition

@@ -9,10 +9,18 @@ import type { MatchState, PlayerState, TransitionState } from "../src/types.js"
 const RM = P.roleMoves
 // Explicit on and off (plan 8e F26): rotations on need transition.rule 1 for the CM drop. Rates forced to 1e6 where a
 // test needs the hazard to fire.
-const mk = (rotateRule: number, transitionRule: number, rm: Partial<Params["roleMoves"]> = {}): Params => ({
+// Every other P5 rule pinned 0 (P5 Task 14 switched them on): the engine these counts were written on, rotations alone (with
+// runs on, the off arm has overlap events; with the set-piece and dead-ball rules on, seed 7 has 17 inside moves for one team).
+const P5_OFF: Params = {
   ...P,
-  transition: { ...P.transition, rule: transitionRule },
-  roleMoves: { ...RM, rotateRule, ...rm }
+  setAttack: { ...P.setAttack, rule: 0 }, setDefend: { ...P.setDefend, rule: 0 }, setShapes: { ...P.setShapes, rule: 0 }, deadBall: { ...P.deadBall, rule: 0 },
+  keeperRestarts: { ...P.keeperRestarts, rule: 0 }, directFk: { ...P.directFk, rule: 0 },
+  marking: { ...P.marking, rule: 0, landingRule: 0 }, release: { ...P.release, freeRule: 0 }
+}
+const mk = (rotateRule: number, transitionRule: number, rm: Partial<Params["roleMoves"]> = {}): Params => ({
+  ...P5_OFF,
+  transition: { ...P.transition, rule: transitionRule, pauseRule: 0 },
+  roleMoves: { ...RM, rotateRule, runRule: 0, ...rm }
 })
 const forced = (rotateRule = 1, transitionRule = 1): Params =>
   mk(rotateRule, transitionRule, {

@@ -23,8 +23,10 @@ export const league = JSON.parse(readFileSync(join(root, "data/league/league.jso
 // realism v2 P3 (2026-10-17: pass choice, release timing, support rule 1; seed 2's first goal moved to 02:24): the first of
 // 1-30 that fits, first goal 39:50 (50 s into its minute), the second at 55:48. Seed 4 since realism v2 P4 (2026-10-19:
 // tackles, fouls, aerial duels, counter-press, team press, recalibrated; on seed 5 the cue order changed): the first of
-// 1-30 that fits, first goal 33:48 (48 s into its minute), the second at 60:06, after the half-time recap.
-const SEED = 4
+// 1-30 that fits, first goal 33:48 (48 s into its minute), the second at 60:06, after the half-time recap. Seed 1 since
+// realism v2 P5 (2026-10-20: set pieces, restart timing, keeper restarts, role moves, zonal marking, recalibrated; on seed 4
+// the moments moved): the first of 1-30 for which the library's session, server, live and studio tests pass.
+const SEED = 1
 export const MATCH_ID = `lib-err-${SEED}`
 const fixture = (f: string) => (JSON.parse(readFileSync(join(root, "packages/schema/fixtures/agents/valid", f), "utf8")) as { value: unknown }).value
 

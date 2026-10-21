@@ -78,7 +78,7 @@ describe("full match", () => {
     for (const e of withOptions) if (Number(e.attrs.chosen_rank) === 1) expect(e.attrs.chosen_value).toBe(e.attrs.best_value)
   })
   it("gives every player a speed and an intent in every frame, and exactly one ball carrier when owned", () => {
-    const kinds = new Set(["shape", "press", "run_in_behind", "chase", "carry", "hold", "on_ball", "recover"])
+    const kinds = new Set(["shape", "press", "run_in_behind", "chase", "carry", "hold", "on_ball", "recover", "rotate"])
     for (const f of a.frames.filter((_, i) => i % 50 === 0)) {
       const all = [...f.home, ...f.away]
       for (const p of all) {

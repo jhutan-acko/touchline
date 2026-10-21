@@ -658,7 +658,7 @@ export const DEFAULT_PARAMS: Params = {
     capS: 6,
     rejudge: 1,
     // P5 release median (plan 8e ruling 22; rule 0: the old behaviour).
-    freeRule: 0, freeS: [0.6, 1.9]
+    freeRule: 1, freeS: [0.6, 1.9]
   },
   actions: {
     logits: {
@@ -772,13 +772,13 @@ export const DEFAULT_PARAMS: Params = {
   support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
   marking: {
     weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
-    // P4 A5 zonal marking (spec item A5). Built, but ships off (user ruling, P4 Task 10): with it on, free space was 9.6 m
-    // against 6.0 real and the recalibrated gate loss 47.79; carried to P5.
-    rule: 0, laneShare: 0.4, cbStepM: 10, dropMps: 1,
+    // P4 A5 zonal marking (spec item A5). Shipped off in P4 (free space 9.6 m against 6.0 real, gate loss 47.79); switched on
+    // in P5 Task 14 with the P5 zonal cap (maxGapM).
+    rule: 1, laneShare: 0.4, cbStepM: 10, dropMps: 1,
     // P5 zonal cap (plan 8e ruling 17; 0: no cap, the old behaviour). 5 (Task 11, 16 matches): free space 7.0 m, tight 0.114.
     maxGapM: 5,
     // P5 landing-spot marking and reaction (plan 8e ruling 18; rule 0: the old behaviour).
-    landingRule: 0, landingGoalSideM: 1, landingReactM: 10
+    landingRule: 1, landingGoalSideM: 1, landingReactM: 10
   },
   movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
   shape: { width: 1, depth: 1, defDepth: 1 },
@@ -845,7 +845,7 @@ export const DEFAULT_PARAMS: Params = {
     // P5 pause and recovery (plan 8e ruling 20; rule 0: the old behaviour). Task 12 (16 held-out matches, every wave-1
     // rule, keeperRestarts, directFk and marking.rule 1 at maxGapM 5): pause_speed_ratio 0.985 off; pauseDip 0.87 0.886,
     // 0.855 0.868 / 0.872 (two runs), 0.84 0.854 (real 0.87, band 0.80-0.90). pauseEndS stays the spec's 0.5 (no row).
-    pauseRule: 0, pauseDip: 0.855, pauseEndS: 0.5
+    pauseRule: 1, pauseDip: 0.855, pauseEndS: 0.5
   },
   // P4 A5 team pressing (spec item A5; switched on in P4 Task 10). Task 7 tuned rateScale and roleWeight with tackle,
   // transition, marking and press on (16 held-out matches): press episodes 428/90 (real 405), >=3 engaged 0.060 (0.049);
@@ -860,7 +860,7 @@ export const DEFAULT_PARAMS: Params = {
   },
   // P5 S1/S4 attacking set pieces (plan 8e rulings 6, 7; rule 0: the old behaviour). Role means from setpieces-report.md.
   setAttack: {
-    rule: 0,
+    rule: 1,
     corner: { GK: [-12, 0], CB: [42, 4], FB: [30, 7], DM: [39, 10], CM: [39, 10], AM: [43, 16], W: [37, 11], ST: [43, 4] },
     fk: { GK: [-13, 0], CB: [34, 5], FB: [22, 8], DM: [32.5, 11], CM: [32.5, 11], AM: [28, 13], W: [30, 9], ST: [37, 4] },
     fkWideShiftU: 3, holdBackM: 2, runWindowS: 2, runSpeedShare: 0.75,
@@ -869,14 +869,16 @@ export const DEFAULT_PARAMS: Params = {
   },
   // P5 S2/S3 defending set pieces (plan 8e rulings 8, 9; rule 0: the old behaviour).
   setDefend: {
-    rule: 0, manM: 12, goalSideM: 1,
+    rule: 1, manM: 12, goalSideM: 1,
     zonal: [[47, -5.5], [47, 0], [47, 5.5], [41.5, 0]],
     corner: { GK: [51, 0], CB: [45.5, 2.5], FB: [45, 3.6], DM: [43, 4], CM: [43, 4], AM: [43.6, 6.7], W: [40, 5.5], ST: [45, 3.5] },
-    outletShare: 0.24, wallCentral: [3, 4], wallWide: [1, 2], wallWideShare: 0.76, wallM: 9.15, wallGapM: 0.6, shadeM: 1, jitterM: 0.5
+    // wallGapM 1.5 (P5 Task 14, Task 4's option): the separation radius, so moveAll's separation no longer pushes members
+    // radially (0.6 put the nearest member at 8.33 m against 9.76 real; 1.5 gave 8.69 m in Task 4's probe).
+    outletShare: 0.24, wallCentral: [3, 4], wallWide: [1, 2], wallWideShare: 0.76, wallM: 9.15, wallGapM: 1.5, shadeM: 1, jitterM: 0.5
   },
   // P5 S5-S7 restart shapes (plan 8e ruling 10; rule 0: the old behaviour).
   setShapes: {
-    rule: 0,
+    rule: 1,
     goalKick: {
       att: { GK: [-48, 3], CB: [-31.5, 11], FB: [-20, 21], DM: [-15, 11], CM: [-15, 11], AM: [-5, 13], W: [-0.4, 18], ST: [5, 12] },
       def: { GK: [31, 3], CB: [6.6, 9], FB: [2, 15], DM: [-5.6, 9], CM: [-5.6, 9], AM: [-18, 9], W: [-13.6, 15], ST: [-24, 9] }
@@ -889,20 +891,20 @@ export const DEFAULT_PARAMS: Params = {
   },
   // P5 S8 dead-ball timing (plan 8e ruling 11; rule 0: the old behaviour). sigma = ln(q75 / q25) / 1.349 from the report's IQRs.
   deadBall: {
-    rule: 0,
+    rule: 1,
     medianS: { throw_in: 13.5, goal_kick: 22, corner: 33, free_kick_att: 42, free_kick: 28, kickoff: 70 },
     sigma: { throw_in: 0.68, goal_kick: 0.47, corner: 0.18, free_kick_att: 0.31, free_kick: 0.57, kickoff: 0.22 },
     minS: 3, lateGrowth: 0.8, walkMps: [1, 1.5], settleS: [2.5, 3.5], settleAttS: [6, 7], settleDefS: [13, 19], takerPauseS: [0.5, 1]
   },
   // P5 G3 keeper restarts (plan 8e rulings 12, 13; rule 0: the old behaviour).
-  keeperRestarts: { rule: 0, fkU: -17.5, fkShare: 0.5, longShift: 2.5, longM: 32, longErrorScale: 2 },
+  keeperRestarts: { rule: 1, fkU: -17.5, fkShare: 0.5, longShift: 2.5, longM: 32, longErrorScale: 2 },
   // P5 S9 direct free kicks (plan 8e ruling 14; rule 0: the old behaviour). Task 8, 32 matches with setAttack, setDefend
   // and directFk on: shotShift 0 / 1 / 2 / 3.5 / 4 gave a central free-kick shot share of 0.04 / 0.05 / 0.07 / 0.27 / 0.37
   // (real 0.36); xgLogit 0 / 0.45 / 0.6 gave a mean direct free-kick xG of 0.039 / 0.060 / 0.069 (real 0.06).
-  directFk: { rule: 0, shotShift: 4, xgLogit: 0.45, maxDistanceM: 35 },
+  directFk: { rule: 1, shotShift: 4, xgLogit: 0.45, maxDistanceM: 35 },
   // P5 A6 role moves (plan 8e rulings 15, 16; runRule 0 and rotateRule 0: the old behaviour).
   roleMoves: {
-    runRule: 0, rotateRule: 0,
+    runRule: 1, rotateRule: 1,
     run: { roleWeight: { ST: 0.45, W: 1.4, AM: 0.5, FB: 0.6 }, holdM: 1, wideShare: 0.6, spaceBehindM: 10 },
     overlap: { ratePerS: 0.1, behindM: 15, outsideM: 3, aheadM: 6, speed: 5, durS: [1, 2] },
     inside: { ratePerS: 0.5, halfSpaceY: [5, 8], durS: [4, 6] },
@@ -917,9 +919,11 @@ export const DEFAULT_PARAMS: Params = {
   // pre-tuned params x1.30 at 4 and x1.71 at 20; on the final params (rateScale 0.5) x1.36 at 4, x1.44 at 10, x1.47 at 20.
   // The stats pressure-shift signal (final params, bound 5 of 6 seeds): 4 at 10, 5 at 15, 20 and 30. howlerSave 1.5 -> 2, since the
   // recalibrated keeper lets in 44 % of shots on target (howlers 0.62 against 1.5 x 0.44; 0.74 at 2).
+  // P5 Task 14: momentumLogit 1 -> 1.25 (script only, bound unchanged): with P5 on and recalibrated the momentum swing
+  // gave 120 home shots against 1.2 x 101 on the scenario seeds at 1.
   script: {
     goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
-    momentumLogit: 1.0, momentumPress: 1.3, pressSurge: 20, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
+    momentumLogit: 1.25, momentumPress: 1.3, pressSurge: 20, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
   substitutions: { windowMinutes: [64, 75, 84], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 0.15, FB: 0.4, DM: 0.7, CM: 0.7, AM: 0.9, W: 1, ST: 0.9 } },

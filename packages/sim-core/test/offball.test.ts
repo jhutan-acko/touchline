@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest"
 import { assignMarks, DEFAULT_PARAMS, dist, initMatch, isFinished, markTarget, PITCH, shieldTarget, spacedTarget, spacingFor, step, steerCarry, supportersWanted, supportGate, supportSpot, type DomainEvent, type Frame, type MatchConfig, type Params, type PlayerState } from "../src/index.js"
 import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
 
+/** Every P5 behaviour off, zonal marking included (P5 Task 14 switched them on): the engine these margins were measured on (F4). */
+const p5Off = (p: Params): Params => ({
+  ...p,
+  setAttack: { ...p.setAttack, rule: 0 }, setDefend: { ...p.setDefend, rule: 0 }, setShapes: { ...p.setShapes, rule: 0 }, deadBall: { ...p.deadBall, rule: 0 },
+  keeperRestarts: { ...p.keeperRestarts, rule: 0 }, directFk: { ...p.directFk, rule: 0 }, roleMoves: { ...p.roleMoves, runRule: 0, rotateRule: 0 },
+  marking: { ...p.marking, rule: 0, landingRule: 0 }, transition: { ...p.transition, pauseRule: 0 }, release: { ...p.release, freeRule: 0 }
+})
 /** Every P4 behaviour off (rules 0, no release cap): the play this file's whole-match margins were measured with (F4). */
 const p4Off = (p: Params): Params => ({
   ...p,
@@ -9,6 +16,7 @@ const p4Off = (p: Params): Params => ({
   press: { ...p.press, rule: 0 }, marking: { ...p.marking, rule: 0 }, firstTick: { ...p.firstTick, scopeRule: 0 },
   release: { ...p.release, capS: 0, rejudge: 0 }
 })
+
 
 const play = (cfg: MatchConfig) => {
   let s = initMatch(cfg)
@@ -51,8 +59,8 @@ describe("support play", () => {
       return n / c
     }
     // P4 behaviours off in both arms (Task 10: with them on, 0.62 against 0.56 + 0.1).
-    const off = near(play(withParams((p) => behavioursOff(p4Off(p)))).frames)
-    const on = near(play(withParams((p) => ({ ...behavioursOff(p4Off(p)), support: { ...p.support, rule: 0, count: 2 } }))).frames)
+    const off = near(play(withParams((p) => behavioursOff(p4Off(p5Off(p))))).frames)
+    const on = near(play(withParams((p) => ({ ...behavioursOff(p4Off(p5Off(p))), support: { ...p.support, rule: 0, count: 2 } }))).frames)
     expect(on).toBeGreaterThan(off + 0.1)
   })
 })
@@ -286,8 +294,9 @@ describe("support rule 1 (P3 Task 10d): come short when pressed, otherwise keep 
       return new Map([...acc].map(([k, [n, m]]) => [k, n / m]))
     }
     // On the shipped defaults (P4 final review: the P4-off pin was needed only while zonal marking was on, which left
-    // spacing short in one side-half, away second half 1.26 against 0.85 x 1.36; marking ships off).
-    const base = DEFAULT_PARAMS
+    // spacing short in one side-half, away second half 1.26 against 0.85 x 1.36; marking ships off). P5 Task 14 switched
+    // zonal marking on with the rest of P5, which brings that back (home first half 1.22 against 1.18), so P5 is pinned off.
+    const base = p5Off(DEFAULT_PARAMS)
     const on = crowd(base)
     const old = crowd({ ...base, support: { ...S, rule: 0 } })
     const noSpace = crowd({ ...base, support: { ...S, spaceM: 0 } })

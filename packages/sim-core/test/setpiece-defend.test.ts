@@ -10,7 +10,9 @@ import type { MatchState, PlayerState, RestartKind } from "../src/types.js"
 
 const P = DEFAULT_PARAMS
 const off: Params = { ...P, setDefend: { ...P.setDefend, rule: 0 } }
-const on: Params = { ...P, setDefend: { ...P.setDefend, rule: 1 } }
+// S2/S3 on the engine these cases were written for (P5 Task 14 switched every P5 rule on in the defaults): S1 off, so the
+// attackers stand where each case puts them, and ruling 9's 0.6 m wall gap (Task 14 ships 1.5, pinned in params.test).
+const on: Params = { ...P, setAttack: { ...P.setAttack, rule: 0 }, setDefend: { ...P.setDefend, rule: 1, wallGapM: 0.6 } }
 const S = on.setDefend
 
 const inBox = (p: Vec2, restarting: Side, period: Period): boolean => attackX(restarting, p.x, period) > 36 && Math.abs(p.y) < 20.16

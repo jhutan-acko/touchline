@@ -221,3 +221,15 @@ def test_setpieces_rows_have_targets(tmp_path):
     md = "\n".join(setpieces_section(ms, t))
     assert "| Corners: attackers in the box, taker excluded | 5.49 | 6.00 | 4.80–6.20 | MET |" in md
     assert "11 real free kicks" in md and "≥ 64 matches" in md
+
+
+def test_dead_speed_counts_moving_players_only(tmp_path):
+    # Dead 10-30 s before a home throw-in: h5 walks at 1.2 m/s and a5 at 1.0 m/s; everyone else stands still. Over all
+    # outfielders the mean would be about 0.1 m/s; over the moving ones it is 1.1 m/s (P5 ruling: moving players only).
+    def layout(f):
+        t = max(0, min(f, 30) - 10) / 10
+        return {**HOME_REST, "h5": (-10.0 + 1.2 * t, 0.0)}, {**AWAY_REST, "a5": (10.0 + 1.0 * t, 5.0)}, (0.0, 34.0), f < 10 or f >= 30, "H"
+
+    events = [_ev("set_piece", 30, "h5", "H", kind="throw_in", x=0.0, y=34.0)]
+    s = summarize([match_setpieces(_write(tmp_path, "m", 50, layout, events), ROLES)])
+    assert math.isclose(s["dead_speed_mps"], 1.1, abs_tol=1e-6)

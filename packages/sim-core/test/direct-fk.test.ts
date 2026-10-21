@@ -48,7 +48,7 @@ describe("S9 direct free kicks", () => {
     expect(rsAt(input({ x: 25, y: 4 }, "second_half"), on)).toBeNull()
     // only free kicks, and nothing under rule 0
     expect(rsAt({ ...input({ x: 25, y: 4 }), restart: null }, on)).toBeNull()
-    expect(rsAt(input({ x: 25, y: 4 }), withFk({ shotShift: 2, xgLogit: 0.5 }))).toBeNull()
+    expect(rsAt(input({ x: 25, y: 4 }), withFk({ rule: 0, shotShift: 2, xgLogit: 0.5 }))).toBeNull()
   })
 
   it("the free-kick xG ignores the wall and adds xgLogit", () => {
@@ -84,7 +84,7 @@ describe("S9 direct free kicks", () => {
     const s0 = share(withFk({ rule: 1, shotShift: 0 })), s1 = share(withFk({ rule: 1, shotShift: 1 }))
     expect(s1).toBeGreaterThan(s0)
     // off: the values do nothing, and the share is today's
-    expect(share(withFk({ rule: 0, shotShift: 2, xgLogit: 0.5 }))).toBe(share(P))
+    expect(share(withFk({ rule: 0, shotShift: 2, xgLogit: 0.5 }))).toBe(share(withFk({ rule: 0 })))
   })
 
   it("a direct free kick is a shot event with technique free_kick", () => {

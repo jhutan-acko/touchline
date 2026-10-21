@@ -31,8 +31,9 @@ passing.py reads them: an event's positions are the tracking frame with its peri
 - Dead time: from the first frame of the dead spell that ends at the set_piece frame, same period (none when the spell
   reaches the period's start), by sim-core deadKey: throw_in, goal_kick, corner, free_kick_att (wide and central attacking
   free kicks), free_kick (other free kicks), kickoff (only after a `goal` in the same period, with no restart between: period-start
-  kickoffs also emit set_piece kickoff); the median. Dead speed: the outfielders' mean speed over
-  the spell on the 5 Hz grid (both sides), the median over restarts.
+  kickoffs also emit set_piece kickoff); the median. Dead speed (P5 ruling, plan 8e Task 6/14): on the 5 Hz grid, the
+  mean speed of the outfielders moving at MOVING_MPS (0.5 m/s) or more (both sides); per spell, the mean over the grid
+  steps with any moving player; the median over restarts. Players who have arrived and stand still do not count.
 - In play: share of live frames in the first 15 minutes of the first half and minutes 30-45 of the second half (75-90).
 - Role moves: rolemoves.py, per team-match.
 """
@@ -56,6 +57,7 @@ WALL_MIN_M, WALL_MAX_M, WALL_DEG = 6.0, 11.5, 25.0
 FC_FROM_S, FC_TO_S, FC_STEP_S, FC_M, TAKER_S, LONG_M = 0.3, 5.0, 0.05, 1.5, 1.0, 32.0
 SHOT_WINDOW = (-0.3, 10.0)
 DIRECT_FK_S = 1.0
+MOVING_MPS = 0.5  # dead-ball speed counts only players at least this fast (walking, not standing)
 DEAD_KEY = {"throw_def": "throw_in", "throw_mid": "throw_in", "throw_att": "throw_in", "goal_kick": "goal_kick", "corner": "corner",
             "fk_wide": "free_kick_att", "fk_central": "free_kick_att", "fk_other": "free_kick", "kickoff": "kickoff"}
 DEAD_ROWS = {"throw_in": "dead_throw_in_s", "goal_kick": "dead_goal_kick_s", "corner": "dead_corner_s", "free_kick_att": "dead_fk_att_s",
@@ -143,7 +145,7 @@ def _first_contact(T: dict, i0: int, fps: float, a: int, sx: float, sy: float, t
 
 
 def _dead(T: dict, i: int, fps: float, outf: np.ndarray) -> tuple[float, float] | None:
-    """(seconds dead, outfielders' mean speed while dead) for the dead spell ending at row i; None without one in the period."""
+    """(seconds dead, moving outfielders' mean speed while dead) for the dead spell ending at row i; None without one in the period."""
     live, per = T["live"], T["per"]
     if i < 1 or per[i - 1] != per[i] or live[i - 1]:
         return None
@@ -156,7 +158,9 @@ def _dead(T: dict, i: int, fps: float, outf: np.ndarray) -> tuple[float, float] 
     X, Y = T["X"][k:i + 1:step][:, outf], T["Y"][k:i + 1:step][:, outf]
     with np.errstate(invalid="ignore"):
         sp = np.hypot(np.diff(X, axis=0), np.diff(Y, axis=0)) / (step / fps)
-    speed = float(np.nanmean(sp)) if np.isfinite(sp).any() else math.nan
+    moving = np.where(sp >= MOVING_MPS, sp, np.nan)
+    per_step = moving[np.isfinite(moving).any(axis=1)]
+    speed = float(np.nanmean(np.nanmean(per_step, axis=1))) if len(per_step) else math.nan
     return (T["fid"][i] - T["fid"][k]) / fps, speed
 
 

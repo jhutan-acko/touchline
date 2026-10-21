@@ -6,7 +6,7 @@ import type { League } from "@touchline/league"
 import { paramsFromJson } from "@touchline/sim-core"
 import { FIXTURES, loss, runMatch, scaleOf, type Targets } from "../src/evaluate.js"
 import { DRIFT_Z, driftZ, GATE_KEYS, GATE_SEEDS, summarize, type Baseline } from "../src/gate.js"
-import { matchMetrics, SCALAR_KEYS } from "../src/metrics.js"
+import { matchMetrics, SCALAR_KEYS, SPATIAL_KEYS } from "../src/metrics.js"
 import { physicsGate, playerMetrics, rolesOf, simHalves, simTracks, workRate, type HalfTracks, type PhysicsFile, type Track } from "../src/physics.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -46,10 +46,12 @@ describe("realism gate", () => {
     expect(existsSync(baselinePath), "data/params/realism-baseline.json is missing").toBe(true)
     const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Baseline
     const drift = driftZ(now.mean, baseline, runs.length)
-    const z = Object.fromEntries(SCALAR_KEYS.map((k) => [k, (now.mean[k] - targets.metrics[k]!.mean) / scaleOf(targets.metrics[k]!)]))
+    // Every gated statistic against real, the seven spatial ones included (P5 Question 1 (a), from P5 Task 14 on).
+    const z = Object.fromEntries(GATE_KEYS.map((k) => [k, (now.mean[k] - targets.metrics[k]!.mean) / scaleOf(targets.metrics[k]!)]))
     console.log("realism gate", JSON.stringify({ loss: Number(loss(now.mean, targets).toFixed(2)), maxDrift: Number(Math.max(...Object.values(drift).map(Math.abs)).toFixed(2)) }))
+    console.log("spatial z", JSON.stringify(Object.fromEntries(SPATIAL_KEYS.map((k) => [k, Number(z[k]!.toFixed(2))]))))
     for (const k of GATE_KEYS) expect(Math.abs(drift[k]), `${k} drifted from the baseline`).toBeLessThan(DRIFT_Z)
-    for (const k of SCALAR_KEYS) expect(Math.abs(z[k]!), `${k} vs real`).toBeLessThan(GATE_Z)
+    for (const k of GATE_KEYS) expect(Math.abs(z[k]!), `${k} vs real`).toBeLessThan(GATE_Z)
     expect(loss(now.mean, targets)).toBeLessThan(GATE_LOSS)
     expect(SCALAR_KEYS.filter((k) => Math.abs(z[k]!) < 1).length).toBeGreaterThanOrEqual(WITHIN_1SD)
     expect(SCALAR_KEYS.filter((k) => Math.abs(z[k]!) < 2).length).toBeGreaterThanOrEqual(WITHIN_2SD)
