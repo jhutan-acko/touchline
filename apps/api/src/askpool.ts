@@ -2,8 +2,8 @@
  * Warm Ask workers (pause-and-ask): one long-lived worker thread per match, holding its rebuilt advisor session, so an
  * ask pays the match rebuild (about 5 s for a scripted match) once rather than per job. Jobs run one at a time, each
  * within its time limit (a longer one while the worker is still cold). A worker that times out or dies is replaced
- * on the next job. A match's worker is kept while any session that asked on it is open, and goes after
- * `ASK_IDLE_MS` with no open session and no job.
+ * on the next job. A match's worker goes after `ASK_IDLE_MS` with no job, whether or not sessions are still open on
+ * the match (the next job starts a cold one).
  */
 import { Worker } from "node:worker_threads"
 import type { AskClip } from "@touchline/rpc"
@@ -13,7 +13,7 @@ import type { AskClipRequest } from "./askclip.js"
 
 /** A job on a worker that has not rebuilt its match yet must finish within this long. */
 export const ASK_WORKER_TIMEOUT_MS = 30_000
-/** A match's worker goes after this long with no open session on the match and no job. */
+/** A match's worker goes after this long with no job (open sessions do not keep it). */
 export const ASK_IDLE_MS = 5 * 60_000
 
 export interface AskWorkers {
@@ -21,7 +21,7 @@ export interface AskWorkers {
   readonly summary: (dir: string, frame: number, timeoutMs: number) => Promise<FrameSummary>
   /** The what-if clip (within `timeoutMs` once warm). */
   readonly askClip: (dir: string, req: AskClipRequest, timeoutMs: number) => Promise<AskClip>
-  /** Keep the match's worker while `holder` (a session) is open. */
+  /** Note that `holder` (a session) uses the match (its bookkeeping is kept until the last holder goes). */
   readonly retain: (dir: string, holder: string) => void
   readonly release: (dir: string, holder: string) => void
   /** Times the match has been rebuilt by its workers (tests: a warm worker rebuilds once). */
@@ -91,15 +91,16 @@ export const makeAskWorkers = (o: AskWorkersOptions = {}): AskWorkers => {
     busy?.reject(error)
   }
 
-  /** Forget the match's worker if nothing holds it and nothing is waiting, `idleMs` from now. */
+  /** Stop the match's worker `idleMs` from now unless a job comes first (restarted after every job). */
   const scheduleIdle = (dir: string, e: Entry) => {
     if (e.idle) clearTimeout(e.idle)
     e.idle = null
-    if (e.holders.size > 0 || e.busy || e.queue.length) return
+    if (e.busy || e.queue.length || !e.worker) return
     e.idle = setTimeout(() => {
-      if (e.holders.size > 0 || e.busy || e.queue.length) return
+      e.idle = null
+      if (e.busy || e.queue.length) return
       kill(e, new Error("evicted"))
-      entries.delete(dir)
+      if (e.holders.size === 0) entries.delete(dir)
     }, idleMs)
     e.idle.unref()
   }
@@ -161,14 +162,12 @@ export const makeAskWorkers = (o: AskWorkersOptions = {}): AskWorkers => {
     retain: (dir, holder) => {
       const e = entry(dir)
       e.holders.add(holder)
-      if (e.idle) clearTimeout(e.idle)
-      e.idle = null
     },
     release: (dir, holder) => {
       const e = entries.get(dir)
       if (!e) return
       e.holders.delete(holder)
-      scheduleIdle(dir, e)
+      if (e.holders.size === 0 && !e.worker && !e.queue.length) entries.delete(dir)
     },
     rebuilds: (dir) => entries.get(dir)?.rebuilds ?? 0,
     running: () => [...entries.values()].filter((e) => e.worker !== null).length,

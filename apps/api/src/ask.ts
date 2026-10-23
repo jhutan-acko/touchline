@@ -3,7 +3,8 @@
  * match's warm Ask worker (askpool.ts); a suggested chip brings its intent, a typed question goes to the question
  * agent; a what-if is played out once, here, over paired seeds (the single source of its numbers); then the answer
  * team streams its stages and reply. Answers for the demo moments are replayed from the run's ask cache. Ask has its
- * own stats server per session, started on the first question and stopped when the session goes: never the live
+ * own stats server per session, started in the background on the session's first suggestions (so the first answer
+ * does not wait for it; on the first question at the latest) and stopped when the session goes: never the live
  * companion's, and never the live budget.
  */
 import { randomUUID } from "node:crypto"
@@ -191,9 +192,10 @@ export const makeAsk = (o: AskOptions) => {
       }
       if (o.send === OFFLINE_SENDER) return yield* emit({ kind: "failed", reason: "offline", message: "no agent service is configured" })
       const lang = req.segment.lang
+      // The panel shows the question stage at once, even while a cold worker replays the match for the summary.
+      yield* emit(stage("question", req.chip_id !== null ? STATUS[lang].chip : STATUS[lang].typed))
       const summary = yield* summaryOf(s, req.frame)
       const chip = req.chip_id === null ? undefined : chipsOf(s, summary, lang).find((c) => c.chip_id === req.chip_id)
-      yield* emit(stage("question", chip ? STATUS[lang].chip : STATUS[lang].typed))
       const intent: AskIntent = chip ? chip.intent : yield* askIntent(o.send, { kind: "ask_intent", question: req.question, lang, summary }, ASK_INTENT_TIMEOUT_MS)
       let clip: AskClip | null = null
       if (intent.kind === "what_if" && intent.intervention) {
@@ -223,7 +225,6 @@ export const makeAsk = (o: AskOptions) => {
       case "AskJobFailed":
         return { kind: "failed", reason: e.timedOut ? "timeout" : "offline", message: e.reason }
       case "AgentUnavailable":
-        return { kind: "failed", reason: "offline", message: e.reason }
       case "AgentFailed":
       case "InvalidArtifact":
         return { kind: "failed", reason: "offline", message: e.reason }

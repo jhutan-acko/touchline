@@ -3,12 +3,12 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect, Exit, Fiber, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { beforeAll, describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 import type { Artifact, McpServer, Sender } from "@touchline/agent-gateway"
 import type { AskClip, AskUpdate, Playback } from "@touchline/rpc"
 import type { AgentRequest, AskReply, DomainEvent, FrameSummary } from "@touchline/schema"
 import { makeAsk, type AskOptions, type AskPayload } from "../src/ask.js"
-import { makeAskWorkers } from "../src/askpool.js"
+import { ASK_IDLE_MS, makeAskWorkers } from "../src/askpool.js"
 import type { AskClipRequest } from "../src/askclip.js"
 import { readMatch, type AskCacheEntry, type LibraryMatch } from "../src/library.js"
 import { makeSessions, type Session } from "../src/session.js"
@@ -181,7 +181,6 @@ describe("ask", () => {
 
   describe("warm workers", () => {
     const echo = (o: { idleMs?: number; coldTimeoutMs?: number } = {}) => makeAskWorkers({ ...o, script: new URL("./workers/ask-echo.mjs", import.meta.url), execArgv: [] })
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
     it("give a cold worker the longer limit, and replace a worker that times out", async () => {
       const w = echo({ coldTimeoutMs: 400 })
@@ -196,19 +195,24 @@ describe("ask", () => {
       }
     })
 
-    it("keep a match's worker while a session holds it, and drop it once idle", async () => {
-      const w = echo({ idleMs: 100 })
+    it("drop a match's worker after ASK_IDLE_MS with no job, even while a session holds it", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+      const w = echo()
       try {
         w.retain("/m", "s1")
         await w.summary("/m", 1, 1000)
-        await sleep(250)
+        vi.advanceTimersByTime(ASK_IDLE_MS - 1000)
+        await w.summary("/m", 2, 1000) // a job restarts the idle time
+        vi.advanceTimersByTime(ASK_IDLE_MS - 1000)
         expect(w.running()).toBe(1)
-        w.release("/m", "s1")
+        vi.advanceTimersByTime(1000)
+        expect(w.running()).toBe(0) // s1 is still open
+        expect(await w.summary("/m", 3, 1000)).toEqual({ frame: 3 })
         expect(w.running()).toBe(1)
-        await sleep(250)
-        expect(w.running()).toBe(0)
+        expect(w.rebuilds("/m")).toBe(2) // a fresh worker
       } finally {
         w.close()
+        vi.useRealTimers()
       }
     })
   })
@@ -279,7 +283,7 @@ describe("ask", () => {
             const [, warm] = yield* Effect.promise(() => timed(() => Effect.runPromise(ask.suggest(real, chip!.frame + 50, "en"))))
             times.suggest_warm_other_frame = warm
             expect(ask.workers.rebuilds(match.dir)).toBe(1)
-            console.log(`ask timings (ms): ${JSON.stringify(times)}`)
+            if (process.env.TOUCHLINE_ASK_TIMINGS) console.log(`ask timings (ms): ${JSON.stringify(times)}`)
             yield* ask.close(real)
             expect(n.mcpStops).toBe(1)
           })
