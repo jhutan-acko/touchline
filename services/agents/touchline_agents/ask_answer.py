@@ -280,7 +280,8 @@ class AskTeam:
         await emit(AskStage(stage="analyst", status=STATUS[lang]["analyst"]))
         if intent.kind == "unsupported":
             await emit(AskStage(stage="personalise", status=STATUS[lang]["personalise"]))
-            return AskReply(headline=intent.reason or FAILED_HEADLINE[lang], body="", chips=[], verified=True, model=self.model_label)
+            # A refusal checks no numbers, so it is not marked fact-checked.
+            return AskReply(headline=intent.reason or FAILED_HEADLINE[lang], body="", chips=[], verified=False, model=self.model_label)
 
         info = await stats.roster()
         who = names(info)
@@ -328,9 +329,11 @@ class AskTeam:
         variant = out.value
         if not out.fallback and check_answer_variant(variant, p_payload, others):
             variant = template_variant(p_payload)
-        headline = variant.headline
-        if verdict == "not_verified" and TOO_CLOSE[lang].lower() not in headline.lower():
-            headline = TOO_CLOSE[lang]
+        # A verdict's headline is the verdict's own words, whatever the personaliser wrote; too close to call also keeps
+        # the template body, so no free text can still claim the alternative was better.
+        if verdict == "not_verified":
+            variant = template_variant(p_payload)
+        headline = VERDICT_HEADLINES[verdict][lang] if verdict else variant.headline
         return AskReply(headline=headline, body=variant.body, chips=chips(passed, lang), verified=verified, model=self.model_label)
 
     async def _draft(self, stats: StatsClient, payload: dict) -> AskDraft:

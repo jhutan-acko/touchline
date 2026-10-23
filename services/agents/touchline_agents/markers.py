@@ -2,7 +2,7 @@
 
 Convention (shared with the web reader): `display.slot = "pitch_marker"`, `display.template` one of `pressure_ring`,
 `pass_arc`, `ghost`; players are `data` keys with value 1 (`at:<id>`, `from:<id>`, `to:<id>`); numbers are `count`
-(pressers) and `x`, `y` (the ghost point, pitch metres). The marker keeps its text cue's anchor, moment, segment,
+(pressers, omitted when unknown) and `x`, `y` (the ghost point, pitch metres). The marker keeps its text cue's anchor, moment, segment,
 ttl and `verified`; it has no text.
 """
 
@@ -39,8 +39,10 @@ def _template(story: "Story") -> tuple[str, dict[str, float]] | None:
 
 def _ring(story: "Story", subject: str | None, value: float | None, data: dict[str, float]) -> dict[str, float]:
     who = story.player_id or subject
-    count = data.get("pressers", value if value is not None else 1)
-    out: dict[str, float] = {"count": float(max(1, round(count)))}
+    # How many press: the `pressers` datum, else the value when it can only be a count (team.press is a 0-1 share, so
+    # a value of at most 1 is not one). Without either the ring carries no number (the web draws it bare).
+    count = data.get("pressers", value if value is not None and value > 1 else None)
+    out: dict[str, float] = {} if count is None else {"count": float(max(1, round(count)))}
     if who:
         out[f"at:{who}"] = 1.0
     return out

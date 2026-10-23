@@ -43,6 +43,15 @@ def test_pressure_gives_ring_with_count():
     assert marker_cue(replace(s, passes=(("h9", "h7"),)), ANALYST, base(s)).display.template == "pressure_ring"
 
 
+def test_ring_has_no_count_without_a_presser_count():
+    # team.press is a 0-1 share, not how many press: without a `pressers` datum the ring carries no number.
+    s = story(claims=(claim(metric_id="team.press", subject="home-fc", value=0.71),))
+    assert marker_cue(s, ANALYST, base(s)).data == {"at:h9": 1.0}
+    sig = signal("pressure_shift", 3000, team="away-fc").model_copy(update={"metric": "team.press", "value": 0.64, "data": {}})
+    t = story(player_id=None, signals=(sig,))
+    assert marker_cue(t, ANALYST, base(t)).data == {"at:away-fc": 1.0}
+
+
 def test_pass_arc_and_none():
     s = story(passes=(("h8", "h9"), ("h9", "h7")))
     assert marker_cue(s, ANALYST, base(s)).data == {"from:h9": 1.0, "to:h7": 1.0}

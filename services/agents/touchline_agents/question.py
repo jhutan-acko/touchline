@@ -2,7 +2,7 @@
 
 The model (tier "fast") reads the question and the frame summary; code owns what must hold whatever it says:
 `validate_intent` turns anything the engine cannot re-simulate (an unknown player, a receiver on the other side, a fork
-event that is not in the summary, a shot or a dribble) into `unsupported` with a reason in the viewer's language.
+event that is not in the summary, a pass from this frame by a player who is not on the ball, a shot or a dribble) into `unsupported` with a reason in the viewer's language.
 `rule_intent` is the deterministic reading of the question, used as the stub model and as the fallback.
 """
 
@@ -53,6 +53,11 @@ REASONS: dict[str, dict[str, str]] = {
         "es": "Nadie tiene el balón ahora; pregunta por un jugador concreto.",
         "hi": "अभी गेंद किसी के पास नहीं है; किसी नामित खिलाड़ी के बारे में पूछें।",
     },
+    "not_on_ball": {
+        "en": "{name} isn't on the ball here, and hasn't passed just before.",
+        "es": "{name} no tiene el balón aquí y no ha dado un pase justo antes.",
+        "hi": "{name} के पास अभी गेंद नहीं है, और उन्होंने अभी-अभी कोई पास भी नहीं दिया।",
+    },
     "not_understood": {
         "en": "I didn't understand that question about this moment.",
         "es": "No he entendido esa pregunta sobre esta jugada.",
@@ -88,6 +93,10 @@ def validate_intent(intent: AskIntent, summary: FrameSummary, lang: str) -> AskI
             return _unsupported("other_side", lang, intent.subject_id)
         if iv.receiver_id == iv.player_id or side[iv.receiver_id] != side[iv.player_id]:
             return _unsupported("other_side", lang, intent.subject_id)
+        # From this frame (no pass to replace) the passer must have the ball, or there is no pass to re-play.
+        if intent.fork_event_id is None and iv.player_id != summary.ball_holder:
+            name = next(p.name for p in summary.players if p.id == iv.player_id)
+            return _unsupported("not_on_ball", lang, intent.subject_id, name=name)
     elif intent.kind == "explain" and intent.subject_id is None:
         return _unsupported("no_subject", lang)
     return intent
@@ -151,7 +160,8 @@ def rule_intent(req: AskIntentRequest) -> AskIntent:
                           intervention=AskInterventionSpec1(kind="pass_to", player_id=mo.passer_id, receiver_id=mo.better_to), reason=None),
                 s, lang)
         if what_if and player is not None and receiver is not None and (_PASS.search(low) or not _ACTION.search(low)):
-            fork = next((e.event_id for e in reversed(s.recent) if e.type == "pass" and e.player_id == player), None)
+            # The player's newest pass (recent is newest first); none: from this frame, which needs him on the ball.
+            fork = next((e.event_id for e in s.recent if e.type == "pass" and e.player_id == player), None)
             return validate_intent(
                 AskIntent(kind="what_if", subject_id=player, fork_event_id=fork,
                           intervention=AskInterventionSpec1(kind="pass_to", player_id=player, receiver_id=receiver), reason=None),

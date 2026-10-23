@@ -105,3 +105,30 @@ def test_passer_must_be_on_the_side_in_possession():
                                      "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-09"}})
     assert validate_intent(away, summary(side_in_possession="away"), "en").kind == "unsupported"
     assert validate_intent(away, summary(side_in_possession=None), "en").kind == "what_if"
+
+
+def test_what_if_forks_at_the_players_newest_pass():
+    # recent is newest first: Diallo's pass at 3980 is newer than his pass at 3800.
+    recent = [
+        {"event_id": "e-3", "frame": 3980, "type": "pass", "player_id": "p-h-09", "receiver_id": "p-h-08"},
+        {"event_id": "e-2", "frame": 3900, "type": "pass", "player_id": "p-h-05", "receiver_id": "p-h-09"},
+        {"event_id": "e-1", "frame": 3800, "type": "pass", "player_id": "p-h-09", "receiver_id": "p-h-05"},
+    ]
+    i = rule_intent(req("What if Diallo passed to Kemp?", recent=recent))
+    assert i.kind == "what_if" and i.fork_event_id == "e-3"
+
+
+def test_what_if_from_this_frame_needs_the_passer_on_the_ball():
+    # Diallo has not passed lately and has not got the ball: there is nothing to re-play from.
+    i = rule_intent(req("What if Diallo passed to Kemp?"))
+    assert i.kind == "unsupported" and i.reason == "Teo Diallo isn't on the ball here, and hasn't passed just before."
+    for lang, word in (("es", "balón"), ("hi", "गेंद")):
+        bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-09", "fork_event_id": None, "reason": None,
+                                        "intervention": {"kind": "pass_to", "player_id": "p-h-09", "receiver_id": "p-h-05"}})
+        out = validate_intent(bad, summary(), lang)
+        assert out.kind == "unsupported" and word in out.reason and "Teo Diallo" in out.reason
+    # A dead ball: nobody is on it.
+    holder = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-08", "fork_event_id": None, "reason": None,
+                                       "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-09"}})
+    assert validate_intent(holder, summary(ball_holder=None), "en").kind == "unsupported"
+    assert validate_intent(holder, summary(), "en").kind == "what_if"

@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from touchline_agents.ask_answer import TOO_CLOSE, AskTeam, sentences_of
+from touchline_agents.ask_answer import TOO_CLOSE, VERDICT_HEADLINES, AskTeam, sentences_of
 from touchline_agents.config import load_settings
 from touchline_agents.contracts import AskAnswerRequest, AskStage, AskWhatIf
 from touchline_agents.factchecker import check_whatif_claim
@@ -120,10 +120,38 @@ async def test_not_verified_is_too_close_to_call(stats):
     assert "mejor" not in reply.headline.lower()
 
 
+@pytest.fixture
+def personaliser_says(monkeypatch):
+    """Replace the Ask personaliser stub's variant."""
+
+    def use(variant: dict) -> None:
+        monkeypatch.setitem(STUB_RESPONDERS, "ask_personalise", lambda _payload, _results: variant)
+
+    return use
+
+
+@pytest.mark.parametrize("lang", ["en", "es", "hi"])
+async def test_not_verified_never_claims_the_alternative_was_better(stats, personaliser_says, lang):
+    plain, _ = await answer(await request(stats, lang=lang, verdict="not_verified"), stats)
+    personaliser_says({"headline": f"{TOO_CLOSE[lang]}, but the striker was better",
+                       "body": "Passing to the striker was clearly the better option.", "numbers": []})
+    reply, _ = await answer(await request(stats, lang=lang, verdict="not_verified"), stats)
+    assert reply.headline == TOO_CLOSE[lang]
+    assert reply.body == plain.body  # the deterministic template body
+    assert "better" not in reply.body
+
+
+async def test_verdict_headline_is_the_verdict_whatever_the_personaliser_writes(stats, personaliser_says):
+    personaliser_says({"headline": "He should have shot instead", "body": "A fine pass.", "numbers": []})
+    reply, _ = await answer(await request(stats, lang="es", verdict="played_pass_was_best"), stats)
+    assert reply.headline == VERDICT_HEADLINES["played_pass_was_best"]["es"]
+
+
 async def test_unsupported_passes_reason_through(stats):
     reason = "Solo puedo responder sobre el equipo con el balón."
     reply, stages = await answer(await request(stats, kind="unsupported", lang="es", reason=reason), stats)
-    assert reply.headline == reason and reply.body == "" and reply.chips == [] and reply.verified is True
+    # A refusal checks no numbers, so it is never shown as fact-checked.
+    assert reply.headline == reason and reply.body == "" and reply.chips == [] and reply.verified is False
     assert [s.stage for s in stages] == ["analyst", "personalise"]
 
 
