@@ -58,6 +58,18 @@ describe("session", () => {
     }
   })
 
+  it("keeps at most maxPinned prefetched states, dropping the least recently used", () => {
+    const fresh = Session.fromRun(dir, league, [DEFAULT_PARAMS])
+    fresh.maxPinned = 3
+    fresh.prefetch([8_001, 8_002, 8_003])
+    const kept = fresh.stateAt(8_001) // used again: 8_002 is now the oldest
+    fresh.prefetch([8_004])
+    expect(fresh.pinnedStates).toBe(3)
+    expect(fresh.stateAt(8_001)).toBe(kept)
+    expect(fresh.stateAt(8_002)).toEqual(session.stateAt(8_002)) // dropped, recomputed the same
+    expect(fresh.pinnedStates).toBe(3)
+  })
+
   it("refuses parameters of another version, a missing folder, and a folder that does not match its manifest", () => {
     expect(() => Session.fromRun(dir, league, [{ ...DEFAULT_PARAMS, provenance: { ...DEFAULT_PARAMS.provenance, version: "other" } }])).toThrow(/the run used parameters "prior-1"; available: other/)
     expect(() => Session.fromRun(join(dir, "nope"), league, [DEFAULT_PARAMS])).toThrow(AdvisorError)

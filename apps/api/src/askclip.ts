@@ -10,6 +10,7 @@ import type { AskClip, PassVerdict } from "@touchline/rpc"
 import type { AskIntent, AskInterventionSpec, AskWhatIf, FrameSummary } from "@touchline/schema"
 import { applyIntervention, forkState, outcomeOf, playAheadFrames, whatIf, WhatIfError, type Intervention, type MatchState, type Side } from "@touchline/sim-core"
 import type { XtGrid } from "@touchline/stats"
+import { RECENT_S } from "./askframe.js"
 import { rebuild, toPitchFrame } from "./whatif.js"
 
 /** Paired seeds and seconds played out per ask. */
@@ -53,6 +54,23 @@ export const askVerdict = (diff: { readonly mean: number; readonly se: number },
   return "not_verified"
 }
 
+/** The states a clip forking at `forkFrame` starts from: its lead-in's first state and the fork state. */
+export const clipTicks = (dt: number, forkFrame: number): [start: number, fork: number] => {
+  const fork = forkFrame - 1
+  return [Math.max(-1, fork - Math.round(CLIP_BEFORE_S / dt)), fork]
+}
+
+/**
+ * Every state an ask at `frame` may need: the frame summary's (the frame and the decision state of each recent pass)
+ * and those of a clip forking at the frame or at any recent pass. Fetched in one replay when the viewer pauses, so a
+ * question asked next costs only its seeds.
+ */
+export const askTicks = (session: AdvisorSession, frame: number): number[] => {
+  const since = frame - Math.round(RECENT_S / session.cfg.dt)
+  const passes = session.events.filter((e) => e.type === "pass" && e.frame_id >= since && Math.max(e.frame_id, e.frame_id_end ?? e.frame_id) <= frame)
+  return [...new Set([frame, ...[frame, ...passes.map((e) => e.frame_id)].flatMap((f) => clipTicks(session.cfg.dt, f))])]
+}
+
 /**
  * Play the what-if on a rebuilt match (CPU only; throws AdvisorError for a frame past full time). An intervention that
  * cannot apply at the fork gives a clip with the real play only, `variant` null and verdict not_verified.
@@ -61,8 +79,7 @@ export const askClipFrom = (session: AdvisorSession, xt: XtGrid, req: AskClipReq
   const { forkFrame, pausedFrame, intervention } = req
   if (!Number.isInteger(forkFrame) || !Number.isInteger(pausedFrame) || forkFrame < 0 || pausedFrame < forkFrame) throw new Error(`fork frame ${forkFrame} must be from 0 to the paused frame ${pausedFrame}`)
   const dt = session.cfg.dt
-  const fork = forkFrame - 1
-  const start = Math.max(-1, fork - Math.round(CLIP_BEFORE_S / dt))
+  const [start, fork] = clipTicks(dt, forkFrame)
   session.prefetch([start, fork])
   const real = playAheadFrames(session.stateAt(start), pausedFrame - start).frames
   const base = {
