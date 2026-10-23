@@ -5,8 +5,12 @@
 import { BrowserSocket } from "@effect/platform-browser"
 import { Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect"
 import { RpcClient, RpcSerialization } from "effect/rpc"
-import { TouchlineRpcs, type Evidence, type MatchInfo, type MatchSummary, type OpsReport, type Playback, type QueueStatus, type RecapView, type StudioAction, type StudioTick, type Tick, type WhatIfClip } from "@touchline/rpc"
+import { TouchlineRpcs, type AskClip, type AskUpdate, type Evidence, type MatchInfo, type MatchSummary, type OpsReport, type Playback, type QuestionChip as QuestionChipSchema, type QueueStatus, type RecapView, type StudioAction, type StudioTick, type Tick, type WhatIfClip } from "@touchline/rpc"
 import type { Decision, Segment } from "@touchline/schema"
+import type { Lang } from "./i18n.js"
+
+/** A suggested question (the contracts export only its schema). */
+export type QuestionChip = typeof QuestionChipSchema.Type
 
 export interface StartOptions {
   readonly speed: number
@@ -36,6 +40,12 @@ export interface TouchlineClient {
   ops(sessionId: string): Promise<OpsReport>
   /** A managed match's manager decisions the session has reached. */
   decisions(sessionId: string): Promise<ReadonlyArray<Decision>>
+  /** Suggested questions for a paused frame, in the viewer's language. */
+  suggest(sessionId: string, frame: number, lang: Lang): Promise<ReadonlyArray<QuestionChip>>
+  /** Ask about a paused frame: calls `onUpdate` for each stage and the answer, `onEnd` once it stops; returns a function that stops it. */
+  ask(sessionId: string, req: { frame: number; question: string; chip_id: string | null; segment: Segment }, onUpdate: (u: AskUpdate) => void, onEnd: () => void): () => void
+  /** The what-if clip behind an answer's Show me. */
+  askClip(sessionId: string, clipId: string): Promise<AskClip>
   close(): Promise<void>
 }
 
@@ -69,6 +79,9 @@ export const connect = async (url: string): Promise<TouchlineClient> => {
     graphics: (session_id, segment, onTick, onEnd) => follow(client.WatchGraphics({ session_id, segment }), onTick, onEnd),
     ops: (session_id) => call(client.GetOps({ session_id })),
     decisions: (session_id) => call(client.GetDecisions({ session_id })),
+    suggest: (session_id, frame, lang) => call(client.SuggestQuestions({ session_id, frame, lang })),
+    ask: (session_id, req, onUpdate, onEnd) => follow(client.Ask({ session_id, ...req }), onUpdate, () => onEnd()),
+    askClip: (session_id, clip_id) => call(client.GetAskClip({ session_id, clip_id })),
     close: async () => {
       await runtime.runPromise(Scope.close(scope, Exit.void))
       await runtime.dispose()

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { decisionKey, type MatchInfo, type Playback } from "@touchline/rpc"
 import type { Cue, Decision } from "@touchline/schema"
+import { AskPanel, markerQuestion } from "./AskPanel.js"
+import { AskSplit } from "./AskSplit.js"
 import type { TouchlineClient } from "./client.js"
 import { t, type Lang } from "./i18n.js"
 import { Live3D } from "./Live3D.js"
@@ -42,7 +44,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -62,6 +64,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   /** Pitch markers to draw besides the session's own (the 3D view only). */
   markers?: ReadonlyArray<Cue>
   onMarkerTap?: (m: Marker, cue: Cue) => void
+  /** The Ask panel: over the picture on the right in 3D, under it in 2D. */
+  ask?: ReactNode
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile), match.fps)
@@ -83,6 +87,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
       {view === "3d" ? (
         <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} {...(onMarkerTap ? { onMarkerTap } : {})}>
           <Overlays state={pane} frame={at} lang={lang} {...(onWhy ? { onWhy } : {})} />
+          {ask && <div className="pointer-events-none absolute inset-y-2 right-2 z-10 flex w-[min(22rem,calc(100%-1rem))] flex-col">{ask}</div>}
         </Live3D>
       ) : (
         <div className="relative">
@@ -90,6 +95,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
           <Overlays state={pane} frame={at} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </div>
       )}
+      {view !== "3d" && ask}
       {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
       {pane.playback?.state === "ended" && <p className="text-center font-semibold">{t(lang, "ended")}</p>}
       {pane.feed.length > 0 && (
@@ -109,8 +115,9 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
 
 /**
  * Watching a session: the pane and the controls. Pause (or the space bar) freezes this viewer's picture on the latest
- * frame while the match plays on underneath; resuming jumps back to live. Speed is the session's, shared by everyone
- * watching it (the session's own pause is in Studio).
+ * frame while the match plays on underneath and opens the Ask panel for that frame (tapping a pitch marker does too,
+ * with its question filled in); its Show me replaces the panes with the spoiler-free split. Resuming closes both and
+ * jumps back to live. Speed is the session's, shared by everyone watching it (the session's own pause is in Studio).
  */
 export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, onFreeze, onResume, onMarkerTap }: {
   client: TouchlineClient
@@ -166,16 +173,36 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
   // This viewer's freeze: the match frame frozen on (the first pane's latest), or null when live.
   const [frozen, setFrozen] = useState<number | null>(null)
   const head = useRef<number | null>(null)
+  // Pause and ask: the panel (open on a freeze until closed), the question a tapped marker filled in, and Show me's clip.
+  const [askOpen, setAskOpen] = useState(false)
+  const [prefill, setPrefill] = useState<string | undefined>(undefined)
+  const [askClip, setAskClip] = useState<string | null>(null)
+  const freeze = () => {
+    const f = head.current ?? 0
+    setFrozen(f)
+    setAskOpen(true)
+    onFreeze?.(f)
+  }
   const toggleFreeze = () => {
-    if (frozen === null) {
-      const f = head.current ?? 0
-      setFrozen(f)
-      onFreeze?.(f)
-    } else {
+    if (frozen === null) freeze()
+    else {
       setFrozen(null)
+      setAskOpen(false)
+      setPrefill(undefined)
+      setAskClip(null)
       onResume?.()
     }
   }
+  const names = useMemo(() => Object.fromEntries(match.players.map((p) => [p.id, `#${p.jersey} ${p.name}`])), [match])
+  const tapMarker = (m: Marker, c: Cue) => {
+    if (frozen === null) freeze()
+    setPrefill(markerQuestion(m, names, lang))
+    setAskOpen(true)
+    onMarkerTap?.(m, c)
+  }
+  const ask = frozen !== null && askOpen
+    ? <AskPanel client={client} sessionId={sessionId} frame={frozen} segment={segmentOf(profile)} {...(prefill !== undefined ? { prefill } : {})} onShowMe={setAskClip} onClose={() => setAskOpen(false)} />
+    : null
   const toggle = useRef(toggleFreeze)
   toggle.current = toggleFreeze
   useEffect(() => {
@@ -222,9 +249,10 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
         </div>
       )}
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
-      <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={(f) => void (head.current = f)} {...(onMarkerTap ? { onMarkerTap } : {})} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
-        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} {...(onMarkerTap ? { onMarkerTap } : {})} />}
+      {askClip && !whatIf && <AskSplit client={client} sessionId={sessionId} clipId={askClip} match={match} lang={lang} onClose={() => setAskClip(null)} />}
+      <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf || askClip ? "hidden" : ""}`}>
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={(f) => void (head.current = f)} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} onShowMe={(id) => (setWhy(null), setWhatIf(id))} />}
