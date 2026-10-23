@@ -44,7 +44,7 @@ async def test_serves_its_agent_card(server):
         card = (await http.get(f"{server}.well-known/agent-card.json")).json()
     assert card["name"] == "touchline-agents" and card["capabilities"]["streaming"]
     assert card["supportedInterfaces"][0] == {"url": server, "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}
-    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage"}
+    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage", "ask"}
 
 
 async def test_signals_stream_back_as_cues_and_traces(server, stats_url, stats):
@@ -111,3 +111,16 @@ async def test_a_manage_request_needs_no_match_session_and_answers_with_a_manage
     assert state == TaskState.TASK_STATE_COMPLETED
     [reply] = [ManagerReply.model_validate(a) for a in arts["manager"]]
     assert reply.task == "propose" and not reply.fallback and len(reply.proposal.options) >= 2
+
+
+async def test_ask_intent_artifact(server):
+    from touchline_agents.contracts import AskIntent
+
+    from .test_question import summary
+
+    req = {"kind": "ask_intent", "question": "What if Okafor passed to Diallo?", "lang": "en", "summary": summary().model_dump(mode="json")}
+    state, arts, _ = await send(server, [new_data_part(req, "application/json")])
+    assert state == TaskState.TASK_STATE_COMPLETED
+    assert len(arts["ask_intent"]) == 1
+    intent = AskIntent.model_validate(arts["ask_intent"][0])
+    assert intent.kind == "what_if" and intent.intervention.receiver_id == "p-h-09"
