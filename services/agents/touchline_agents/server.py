@@ -3,7 +3,8 @@
 Each message carries one AgentRequest as a JSON data part. A signals request runs the moment workflow and streams
 an artifact per verified cue ("cue") and per moment ("trace"); a recap request streams the recap ("recap") and its
 recap cards ("cue"). Sessions are per match; requests for one match run one at a time, in order. A manage request
-(Plan 4b) needs no match session: the manager agent answers it with one "manager" artifact.
+(Plan 4b) needs no match session: the manager agent answers it with one "manager" artifact. An ask_answer request
+(pause and ask) opens its own stats connection and streams an "ask_stage" artifact per stage, then one "ask_reply".
 """
 
 import argparse
@@ -23,12 +24,13 @@ from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 from pydantic import ValidationError
 from starlette.applications import Starlette
 
+from .ask_answer import AskTeam
 from .config import Settings, load_settings
-from .contracts import ManageRequest, RecapRequest, SignalsRequest, dump, parse_request
+from .contracts import AskAnswerRequest, AskStage, ManageRequest, RecapRequest, SignalsRequest, dump, parse_request
 from .llm import deadline, make_client
 from .manager import Manager
 from .session import Agents, MatchSession
-from .stats import StatsError
+from .stats import StatsClient, StatsError
 from .workflow import build, run_moments, run_recap
 
 log = logging.getLogger("touchline.agents")
@@ -112,9 +114,11 @@ class Sessions:
 
 
 class TouchlineExecutor(AgentExecutor):
-    def __init__(self, sessions: Sessions, manager: Manager | None = None) -> None:
+    def __init__(self, sessions: Sessions, manager: Manager | None = None, ask: AskTeam | None = None) -> None:
         self.sessions = sessions
-        self.manager = manager or Manager(make_client(sessions.settings, "large"), sessions.settings)
+        settings = sessions.settings
+        self.manager = manager or Manager(make_client(settings, "large"), settings)
+        self.ask = ask or AskTeam(make_client(settings, "large"), make_client(settings, "fast"), settings)
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task_from_user_message(context.message)
@@ -129,9 +133,15 @@ class TouchlineExecutor(AgentExecutor):
             if isinstance(req, ManageRequest):
                 await self._manage(req, up, task)
                 return
-            session, workflow, lock = await self.sessions.get(req)
+            if isinstance(req, AskAnswerRequest):
+                stats = await open_stats(req.match_id, req.mcp_url, self.sessions.settings)
+            else:
+                session, workflow, lock = await self.sessions.get(req)
         except (ValueError, ValidationError, StatsError) as e:
             await up.failed(new_text_message(f"bad request: {e}", context_id=task.context_id, task_id=task.id))
+            return
+        if isinstance(req, AskAnswerRequest):
+            await self._ask_answer(req, stats, up, task)
             return
         await up.start_work(new_text_message(f"{req.kind} for {req.match_id}", context_id=task.context_id, task_id=task.id))
         try:
@@ -165,8 +175,42 @@ class TouchlineExecutor(AgentExecutor):
         await up.add_artifact([new_data_part(dump(reply), JSON)], artifact_id=f"{req.match_id}-{req.situation.team_id}-{req.task}", name="manager", last_chunk=True)
         await up.complete()
 
+    async def _ask_answer(self, req: AskAnswerRequest, stats: StatsClient, up: TaskUpdater, task) -> None:
+        """An "ask_stage" artifact per stage as it starts, then the "ask_reply". Ask runs on its own stats connection,
+        outside the match sessions and the live request budget."""
+        await up.start_work(new_text_message(f"ask_answer for {req.match_id}", context_id=task.context_id, task_id=task.id))
+
+        async def emit(stage: AskStage) -> None:
+            await up.add_artifact([new_data_part(dump(stage), JSON)], artifact_id=f"{task.id}-{stage.stage}", name="ask_stage", last_chunk=True)
+
+        try:
+            reply = await self.ask.answer(req, stats, emit)
+            await up.add_artifact([new_data_part(dump(reply), JSON)], artifact_id=f"{task.id}-reply", name="ask_reply", last_chunk=True)
+        except Exception as e:  # the task fails with the reason; the service keeps serving
+            log.exception("ask_answer for %s failed", req.match_id)
+            await up.failed(new_text_message(f"ask_answer failed: {type(e).__name__}: {e}", context_id=task.context_id, task_id=task.id))
+            return
+        finally:
+            await stats.__aexit__(None, None, None)
+        await up.complete()
+
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         await TaskUpdater(event_queue, context.task_id, context.context_id).cancel()
+
+
+async def open_stats(match_id: str, mcp_url: str, settings: Settings) -> StatsClient:
+    """A stats connection for one Ask, opened as MatchSession.open does: an allowed host serving this match."""
+    stats = StatsClient(mcp_url, settings.mcp_allowed_hosts)
+    await stats.__aenter__()
+    try:
+        info = await stats.roster()
+    except BaseException:
+        await stats.__aexit__(None, None, None)
+        raise
+    if info["match_id"] != match_id:
+        await stats.__aexit__(None, None, None)
+        raise ValueError(f"the stats server at {mcp_url} serves {info['match_id']}, not {match_id}")
+    return stats
 
 
 def create_app(url: str, settings: Settings | None = None, agents: Agents | None = None, manager: Manager | None = None) -> Starlette:
