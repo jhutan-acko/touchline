@@ -54,7 +54,12 @@ async def test_signals_stream_back_as_cues_and_traces(server, stats_url, stats):
     assert state == TaskState.TASK_STATE_COMPLETED
     cues = [Cue.model_validate(c) for c in arts["cue"]]
     [trace] = [MomentTrace.model_validate(t) for t in arts["trace"]]
-    assert [c.segment.lang for c in cues] == ["en", "es"] and all(c.verified for c in cues)
+    text = [c for c in cues if c.display.slot != "pitch_marker"]
+    assert [c.segment.lang for c in text] == ["en", "es"] and all(c.verified for c in cues)
+    for i, c in enumerate(cues):  # a pitch marker directly follows its text cue
+        if c.display.slot == "pitch_marker":
+            prev = cues[i - 1]
+            assert prev.display.slot != "pitch_marker" and (prev.moment_id, prev.segment, prev.verified) == (c.moment_id, c.segment, c.verified)
     assert trace.cue_ids == [c.cue_id for c in cues]
 
 

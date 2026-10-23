@@ -63,7 +63,12 @@ describe("gateway and agent service", () => {
     expect(result.requests.reduce((n, r) => n + r.unverified + r.late, 0)).toBe(0)
     for (const t of result.traces) {
       const cues = result.cues.filter((c) => c.moment_id === t.moment.moment_id)
-      expect(cues.map((c) => c.segment)).toEqual(segments)
+      expect(cues.filter((c) => c.display.slot !== "pitch_marker").map((c) => c.segment)).toEqual(segments)
+      cues.forEach((c, i) => {
+        if (c.display.slot !== "pitch_marker") return
+        const text = cues[i - 1] // a pitch marker directly follows its text cue
+        expect(text && text.display.slot !== "pitch_marker" && text.moment_id === c.moment_id && JSON.stringify(text.segment) === JSON.stringify(c.segment) && text.verified === c.verified).toBe(true)
+      })
       for (const c of cues) expect([c.anchor.frame_from, c.anchor.frame_to]).toEqual([t.moment.frame_from, t.moment.frame_to])
     }
   })
