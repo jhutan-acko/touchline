@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 def _template(story: "Story") -> tuple[str, dict[str, float]] | None:
+    # Story.positions is unfilled in production, so a ghost anchors on its `at:` receiver, which the web resolves.
     # 1. A better option the Fact-Checker passed: a ghost at the receiver.
     for c in story.claims:
         if c.kind == "better_option" and c.receiver_id:

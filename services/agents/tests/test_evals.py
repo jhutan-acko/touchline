@@ -135,3 +135,16 @@ def test_a_truth_pairs_with_the_moment_that_reports_it_best():
 def test_a_harmless_defensive_error_is_not_credited_to_an_unrelated_goal():
     truth = {"effect": "defensive_error", "team_id": "home-fc", "frames": [0, 9000], "expected_metrics": ["pass.acc", "game.chaos"], "achieved": True}
     assert MomentRecall()(**row([trace("goal", 2000, "away-fc")], [truth]))["moment_recall"] == 0.0
+
+
+def test_pitch_markers_are_not_variants():
+    def cue(mode, body, **kw):
+        return {"moment_id": "mo", "verified": True, "segment": {"mode": mode, "lang": "en", "club": None}, "text": {"headline": "Goal", "body": body}, **kw}
+
+    def marker(mode, verified=True):
+        return {"moment_id": "mo", "verified": verified, "segment": {"mode": mode, "lang": "en", "club": None}, "text": None, "display": {"slot": "pitch_marker"}}
+
+    cues = [cue("casual", "What a goal!"), marker("casual"), cue("analyst", "A 0.12 chance, now 1-0, 58% momentum."), marker("analyst", verified=False)]
+    assert PersonaSeparation()(**row([], cues=cues)) == {"persona_separation": 1.0, "persona_separation_n": 1}
+    assert Grounding()(**row([trace()], cues=cues))["grounding_published"] == 1.0
+    assert score(row([], cues=cues))["cues"] == 2

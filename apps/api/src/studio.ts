@@ -17,17 +17,20 @@ export const talkingPoints = (text: { readonly headline: string; readonly body: 
   ...facts
 ]
 
+/** The text cues a segment sees: a pitch marker (an overlay with no text) is never the cue a presenter reads. */
+const textCues = (cues: QueueEntry["cues"], segment: Segment) => pickCues(cues, segment).filter((c) => c.display.slot !== "pitch_marker")
+
 /** A queue entry as one producer's segment sees it: the variant that would air, and the talking points in its language. */
 export const queueItem = (e: QueueEntry, segment: Segment): QueueItem => {
-  const analyst = pickCues(e.cues, { ...segment, mode: "analyst" })[0]
+  const analyst = textCues(e.cues, { ...segment, mode: "analyst" })[0]
   return {
     moment_id: e.moment_id,
     frame: e.frame,
     clock: e.clock,
     status: e.status,
-    cue: pickCues(e.cues, segment)[0] ?? null,
+    cue: textCues(e.cues, segment)[0] ?? null,
     points: talkingPoints(analyst?.text ?? null, e.facts),
-    variants: e.cues.length
+    variants: e.cues.filter((c) => c.display.slot !== "pitch_marker").length
   }
 }
 
@@ -36,7 +39,7 @@ const next = (status: QueueStatus, action: StudioAction): QueueStatus => (action
 export const makeStudio = (ev: ReturnType<typeof makeEvidence>) => {
   /** The facts behind a moment, as the session saw them when it reached the moment (none if it has no evidence). */
   const facts = (s: Session, e: QueueEntry) =>
-    ev.evidence(s.match.info.match_id, e.cues[0]!.cue_id, { frame: e.frame, live: s.live ? s.agents : null }).pipe(
+    ev.evidence(s.match.info.match_id, (e.cues.find((c) => c.display.slot !== "pitch_marker") ?? e.cues[0]!).cue_id, { frame: e.frame, live: s.live ? s.agents : null }).pipe(
       Effect.map((x) => [
         ...(x.cause ? [`Cause: ${x.cause}`] : []),
         ...x.claims.filter((c) => c.kind === "metric").map((c) => `${c.label}${c.subject_name ? ` (${c.subject_name})` : ""}: ${c.quote || c.value}`)
