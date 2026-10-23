@@ -1,27 +1,16 @@
-import { useEffect, useState } from "react"
 import type { Cue } from "@touchline/schema"
 import { t, type Lang } from "./i18n.js"
 import { inSlot, type PaneState } from "./pane.js"
-
-/** Wall-clock time, refreshed often enough for cues to leave the screen when their ttl runs out (even when paused). */
-export const useNow = (everyMs = 250): number => {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), everyMs)
-    return () => clearInterval(id)
-  }, [everyMs])
-  return now
-}
 
 const Verified = ({ lang }: { lang: Lang }) => <span className="ml-2 rounded bg-emerald-700/60 px-1.5 text-xs font-medium" title={t(lang, "verified")}>✓</span>
 
 const numbers = (cue: Cue) => Object.entries(cue.data).filter(([k]) => !k.startsWith("score."))
 
-/** The cues on screen for this pane, over the pitch (spec §5.4 slots). */
-export const Overlays = ({ state, now, lang, onWhy }: { state: PaneState; now: number; lang: Lang; onWhy?: (cue: Cue) => void }) => {
-  const lower = inSlot(state, "lower_third", now)
-  const side = inSlot(state, "side_panel", now)
-  const recap = inSlot(state, "recap_card", now)
+/** The cues on screen for this pane at a match frame (the latest, or the frozen one), over the pitch (spec §5.4 slots). */
+export const Overlays = ({ state, frame, lang, onWhy }: { state: PaneState; frame: number; lang: Lang; onWhy?: (cue: Cue) => void }) => {
+  const lower = inSlot(state, "lower_third", frame)[0]
+  const side = inSlot(state, "side_panel", frame)[0]
+  const recap = inSlot(state, "recap_card", frame)[0]
   const why = (cue: Cue) =>
     onWhy && (
       <button type="button" className="ml-auto rounded bg-slate-700 px-2 py-0.5 text-xs hover:bg-slate-600" onClick={() => onWhy(cue)}>

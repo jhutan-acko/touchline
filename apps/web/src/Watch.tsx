@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { decisionKey, type MatchInfo, type Playback } from "@touchline/rpc"
 import type { Cue, Decision } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
 import { t, type Lang } from "./i18n.js"
 import { Live3D } from "./Live3D.js"
-import { Overlays, useNow } from "./Overlays.js"
+import { Overlays } from "./Overlays.js"
+import type { Marker } from "./markers.js"
+import { frameAt, inSlot } from "./pane.js"
 import { Pitch } from "./Pitch.js"
 import { ProfileBar } from "./ProfileBar.js"
 import { RecapPanel } from "./RecapPanel.js"
@@ -40,7 +42,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -53,10 +55,22 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   onBetterPass?: (eventId: string) => void
   /** Called with the decision's key when a manager's decision cue arrives. */
   onDecision?: (key: string) => void
+  /** The match frame this viewer froze on, or null when following live. */
+  frozen?: number | null
+  /** Told the latest match frame this pane knows of, as it moves (so the viewer can freeze on it). */
+  onHead?: (frame: number | null) => void
+  /** Pitch markers to draw besides the session's own (the 3D view only). */
+  markers?: ReadonlyArray<Cue>
+  onMarkerTap?: (m: Marker, cue: Cue) => void
 }) => {
   const lang = profile.lang
-  const pane = usePane(client, sessionId, segmentOf(profile))
-  const now = useNow()
+  const pane = usePane(client, sessionId, segmentOf(profile), match.fps)
+  useEffect(() => void onHead?.(pane.head), [pane.head])
+  // Frozen: the frame frozen on, taken from the ring once (ticks keep arriving underneath); overlays at that frame.
+  const still = useMemo(() => (frozen === null ? null : frameAt(pane, frozen)), [frozen])
+  const shown = frozen === null ? pane.frame : still
+  const at = frozen ?? pane.head ?? 0
+  const pitchMarkers = [...inSlot(pane, "pitch_marker", at), ...markers]
   const newest = pane.feed[0]
   useEffect(() => {
     if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])
@@ -67,13 +81,13 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
       <TopBar match={match} board={pane.board} lang={lang} />
       {view === "3d" ? (
-        <Live3D match={match} frame={pane.frame} playback={pane.playback} lang={lang}>
-          <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
+        <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} {...(onMarkerTap ? { onMarkerTap } : {})}>
+          <Overlays state={pane} frame={at} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </Live3D>
       ) : (
         <div className="relative">
-          <Pitch frame={pane.frame} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
-          <Overlays state={pane} now={now} lang={lang} {...(onWhy ? { onWhy } : {})} />
+          <Pitch frame={shown} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
+          <Overlays state={pane} frame={at} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </div>
       )}
       {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
@@ -93,14 +107,24 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   )
 }
 
-/** Watching a session: the pane and the playback controls (shared by everyone watching it). */
-export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: {
+/**
+ * Watching a session: the pane and the controls. Pause (or the space bar) freezes this viewer's picture on the latest
+ * frame while the match plays on underneath; resuming jumps back to live. Speed is the session's, shared by everyone
+ * watching it (the session's own pause is in Studio).
+ */
+export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, onFreeze, onResume, onMarkerTap }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
   profile: Profile
   onProfile: (p: Profile) => void
   onBack: () => void
+  /** Called with the frame when this viewer freezes. */
+  onFreeze?: (frame: number) => void
+  /** Called when this viewer goes back to live. */
+  onResume?: () => void
+  /** A pitch marker tapped in the 3D view. */
+  onMarkerTap?: (m: Marker, cue: Cue) => void
 }) => {
   const lang: Lang = profile.lang
   const [why, setWhy] = useState<Cue | null>(null)
@@ -138,13 +162,40 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
   }, [decision])
   const onWhyCue = (c: Cue) => (c.display.template === "manager_decision" && c.evidence[0] ? void showDecision(c.evidence[0], false) : setWhy(c))
   const [playback, setPlayback] = useState<Pick<Playback, "state" | "speed">>({ state: "playing", speed: 4 })
-  const control = (action: "play" | "pause" | "speed", speed?: number) => client.control(sessionId, action, speed).then(setPlayback, () => {}) // a lost session shows on the pane
+  const control = (action: "speed", speed: number) => client.control(sessionId, action, speed).then(setPlayback, () => {}) // a lost session shows on the pane
+  // This viewer's freeze: the match frame frozen on (the first pane's latest), or null when live.
+  const [frozen, setFrozen] = useState<number | null>(null)
+  const head = useRef<number | null>(null)
+  const toggleFreeze = () => {
+    if (frozen === null) {
+      const f = head.current ?? 0
+      setFrozen(f)
+      onFreeze?.(f)
+    } else {
+      setFrozen(null)
+      onResume?.()
+    }
+  }
+  const toggle = useRef(toggleFreeze)
+  toggle.current = toggleFreeze
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== " " || e.repeat) return
+      const el = e.target
+      // Typing, or a focused control the space bar presses itself.
+      if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement || (el instanceof HTMLElement && el.isContentEditable)) return
+      e.preventDefault()
+      toggle.current()
+    }
+    window.addEventListener("keydown", key)
+    return () => window.removeEventListener("keydown", key)
+  }, [])
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={onBack}>← {t(lang, "back")}</button>
-        <button type="button" className="rounded bg-emerald-600 px-3 py-1 text-white" onClick={() => control(playback.state === "paused" ? "play" : "pause")}>
-          {playback.state === "paused" ? t(lang, "play") : t(lang, "pause")}
+        <button type="button" className="rounded bg-emerald-600 px-3 py-1 text-white" aria-pressed={frozen !== null} onClick={toggleFreeze}>
+          {frozen !== null ? t(lang, "play") : t(lang, "pause")}
         </button>
         <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={toggleSplit}>{second ? t(lang, "single") : t(lang, "split")}</button>
         <button type="button" className="rounded bg-slate-800 px-3 py-1 disabled:opacity-50" onClick={toggleView} disabled={!webgl} title={webgl ? undefined : t(lang, "noWebgl")}>
@@ -172,8 +223,8 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack }: 
       )}
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
       <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
-        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} />}
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={(f) => void (head.current = f)} {...(onMarkerTap ? { onMarkerTap } : {})} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} {...(onMarkerTap ? { onMarkerTap } : {})} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} onShowMe={(id) => (setWhy(null), setWhatIf(id))} />}

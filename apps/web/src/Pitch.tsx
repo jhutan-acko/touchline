@@ -12,5 +12,5 @@ export const Pitch = ({ frame, kits, label }: { frame: PitchFrame | null; kits: 
     const ctx = ref.current?.getContext("2d")
     if (ctx) drawFrame(ctx, { w: W, h: H }, frame, kits)
   }, [frame, kits])
-  return <canvas ref={ref} width={W} height={H} role="img" aria-label={label} className="aspect-[105/68] w-full rounded-lg" />
+  return <canvas ref={ref} width={W} height={H} role="img" aria-label={label} data-frame={frame?.frame} className="aspect-[105/68] w-full rounded-lg" />
 }
