@@ -52,5 +52,5 @@ pnpm --filter @touchline/api ask-cache --library <library> --match c5-3001 --fra
 ```
 
 - **What it writes.** It writes `<library>/c5-3001/ask-cache.json`, with an answer for every chip suggested at each frame.
-- **One viewer per run.** The answers are written for one viewer: `--lang en --mode casual` by default. The cache key has no segment, so a replayed answer is in that language for every viewer.
+- **Viewers.** The answers are written for `--lang en --mode casual` by default, or for several viewers with `--segments casual.en,analyst.es,casual.hi`. A cached answer replays only for the language and mode it was written in; any other viewer is answered live.
 - **Failures.** An ask that fails is listed, and the command then exits 1. A failed ask never replaces an entry already in the file.

@@ -14,16 +14,33 @@ import { AskNotAvailable, type AskClip, type AskUpdate } from "@touchline/rpc"
 import type { AskIntent, AskInterventionSpec, AskReply, AskStage, FrameSummary, Lang as LangSchema, Segment } from "@touchline/schema"
 import { ASK_SEEDS, askWhatIfOf, forkFrameOf } from "./askclip.js"
 import { makeAskWorkers, type AskWorkers } from "./askpool.js"
+import { askCacheKey } from "./library.js"
 import type { Session } from "./session.js"
 import { suggestChips, type Chip } from "./suggest.js"
 import { WHATIF_TIMEOUT_MS, type askClipInWorker, type summaryInWorker } from "./whatif.js"
 
 type Lang = typeof LangSchema.Type
 
-/** The question agent must classify a typed question within this long. */
-export const ASK_INTENT_TIMEOUT_MS = 5_000
-/** The answer team must deliver its reply within this long. */
-export const ASK_ANSWER_TIMEOUT_MS = 15_000
+/**
+ * The agents' stage budgets in seconds (services/agents config.py TIMEOUTS_S), which the API's limits are derived from.
+ * The answer: the analyst drafts at most twice (a retry on failed claims), then the personaliser writes, plus the stats
+ * calls; the intent gets a second over the question agent's budget for the round trip.
+ */
+export const ASK_STAGE_BUDGET_S = { question: 4, ask_analyst: 8, ask_personalizer: 4, stats: 5 } as const
+const ASK_INTENT_S = ASK_STAGE_BUDGET_S.question + 1
+const ASK_ANSWER_S = 2 * ASK_STAGE_BUDGET_S.ask_analyst + ASK_STAGE_BUDGET_S.ask_personalizer + ASK_STAGE_BUDGET_S.stats
+
+/** The Ask time limits under the agents' TOUCHLINE_TIMEOUT_SCALE (a positive number, default 1), as the agents scale theirs. */
+export const askTimeoutsMs = (env: Readonly<Record<string, string | undefined>>): { readonly intent: number; readonly answer: number } => {
+  const n = Number(env.TOUCHLINE_TIMEOUT_SCALE ?? "1")
+  const scale = Number.isFinite(n) && n > 0 ? n : 1
+  return { intent: Math.round(ASK_INTENT_S * 1000 * scale), answer: Math.round(ASK_ANSWER_S * 1000 * scale) }
+}
+const TIMEOUTS = askTimeoutsMs(process.env)
+/** The question agent must classify a typed question within this long (5 s at scale 1). */
+export const ASK_INTENT_TIMEOUT_MS = TIMEOUTS.intent
+/** The answer team must deliver its reply within this long (25 s at scale 1). */
+export const ASK_ANSWER_TIMEOUT_MS = TIMEOUTS.answer
 /** A cached answer replays its stages this far apart, so the team stays visible. */
 export const ASK_REPLAY_MS = 350
 /** What-if clips a session keeps for "Show me", at most (the oldest dropped). */
@@ -181,7 +198,9 @@ export const makeAsk = (o: AskOptions) => {
       const now = (yield* Ref.get(s.playback)).frame
       if (req.frame > now) return yield* emit({ kind: "failed", reason: "bad_frame", message: `frame ${req.frame} is past the session's frame ${now}` })
       const st = stateOf(s)
-      const cached = req.chip_id === null ? undefined : s.match.askCache.get(`${req.frame}:${req.chip_id}`)
+      // A cached answer replays only for the language and mode it was written in; any other viewer gets it live.
+      const entry = req.chip_id === null ? undefined : s.match.askCache.get(askCacheKey(req.frame, req.chip_id, req.segment))
+      const cached = entry && entry.segment.lang === req.segment.lang && entry.segment.mode === req.segment.mode ? entry : undefined
       if (cached) {
         if (cached.clip) keepClip(st, cached.clip)
         for (const x of cached.stages) {
@@ -197,12 +216,16 @@ export const makeAsk = (o: AskOptions) => {
       const summary = yield* summaryOf(s, req.frame)
       const chip = req.chip_id === null ? undefined : chipsOf(s, summary, lang).find((c) => c.chip_id === req.chip_id)
       const intent: AskIntent = chip ? chip.intent : yield* askIntent(o.send, { kind: "ask_intent", question: req.question, lang, summary }, ASK_INTENT_TIMEOUT_MS)
+      // A what-if that could not apply at its fork has no numbers: the answer then carries no verdict and no Show me.
       let clip: AskClip | null = null
       if (intent.kind === "what_if" && intent.intervention) {
         const intervention = intent.intervention
         yield* emit(stage("whatif", whatIfStatus(summary, intervention, lang)))
-        clip = yield* job(() => clipJob(s.match.dir, { forkFrame: forkFrameOf(summary, intent), pausedFrame: req.frame, intervention }, timeoutMs))
-        keepClip(st, clip)
+        const played = yield* job(() => clipJob(s.match.dir, { forkFrame: forkFrameOf(summary, intent), pausedFrame: req.frame, intervention }, timeoutMs))
+        if (askWhatIfOf(played) !== null) {
+          clip = played
+          keepClip(st, clip)
+        }
       }
       const mcp = yield* mcpOf(st, s.match.dir)
       let reply: AskReply | null = null

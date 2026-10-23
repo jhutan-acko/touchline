@@ -118,17 +118,18 @@ describe("pause and ask, end to end on the stub agents", () => {
 
     // The demo cache, written through the same Ask path, at the same frame.
     const lines: string[] = []
-    const built = await buildAskCache({ library: dirname(lib.run), matchId: MATCH_ID, frames: [frame], agentsUrl, segment, log: (l) => lines.push(l) })
+    const built = await buildAskCache({ library: dirname(lib.run), matchId: MATCH_ID, frames: [frame], agentsUrl, segments: [segment, { ...segment, lang: "es" }], log: (l) => lines.push(l) })
     expect(built.failed).toEqual([])
-    const key = askCacheKey(frame, chipId)
-    expect(key).toBe(`${frame}:${frame}:what_if_pass`)
+    const key = askCacheKey(frame, chipId, segment)
+    expect(key).toBe(`${frame}:${frame}:what_if_pass:${segment.lang}:${segment.mode}`)
     expect(built.written).toContain(key)
+    expect(built.written).toContain(askCacheKey(frame, chipId, { ...segment, lang: "es" }))
     expect(built.path).toBe(join(lib.run, "ask-cache.json"))
     const match = readMatch(lib.run, league)
     expect(match.askCache.get(key)?.clip?.real.at(-1)!.frame).toBeLessThanOrEqual(frame)
     // A rerun whose asks all fail reports them and keeps what the file holds.
     const before = readFileSync(built.path, "utf8")
-    const again = await buildAskCache({ library: dirname(lib.run), matchId: MATCH_ID, frames: [frame], agentsUrl, segment, ask: { send: OFFLINE_SENDER } })
+    const again = await buildAskCache({ library: dirname(lib.run), matchId: MATCH_ID, frames: [frame], agentsUrl, segments: [segment], ask: { send: OFFLINE_SENDER } })
     expect(again.written).toEqual([])
     expect(again.failed).toContainEqual(expect.objectContaining({ key, reason: "offline" }))
     expect(JSON.parse(readFileSync(built.path, "utf8"))).toEqual(JSON.parse(before))
@@ -142,7 +143,9 @@ describe("pause and ask, end to end on the stub agents", () => {
           const end = updates.at(-1)!
           const clip = end.kind === "answer" && end.answer.clip_id ? yield* c.GetAskClip({ session_id: sid, clip_id: end.answer.clip_id }) : null
           const uncached = [...(yield* Stream.runCollect(c.Ask({ session_id: sid, frame, question: "Who is pressing?", chip_id: null, segment })))]
-          return { updates, clip, uncached }
+          // Another viewer's mode was not written: it is asked live, which fails offline here.
+          const otherMode = [...(yield* Stream.runCollect(c.Ask({ session_id: sid, frame, question: "What if?", chip_id: chipId, segment: { ...segment, mode: segment.mode === "casual" ? "analyst" : "casual" } })))]
+          return { updates, clip, uncached, otherMode }
         })
       )
       expect(replay.updates.map(label)).toEqual([...match.askCache.get(key)!.stages.map((s): string => s.stage), "answer"])
@@ -150,6 +153,7 @@ describe("pause and ask, end to end on the stub agents", () => {
       expect(end.kind === "answer" && end.answer.cached).toBe(true)
       expect(replay.clip?.real.at(-1)!.frame).toBeLessThanOrEqual(frame)
       expect(replay.uncached.map(label)).toEqual(["failed:offline"])
+      expect(replay.otherMode.map(label)).toEqual(["failed:offline"])
     } finally {
       await offline.stop()
     }

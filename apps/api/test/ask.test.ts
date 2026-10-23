@@ -7,10 +7,10 @@ import { beforeAll, describe, expect, it, vi } from "vitest"
 import type { Artifact, McpServer, Sender } from "@touchline/agent-gateway"
 import type { AskClip, AskUpdate, Playback } from "@touchline/rpc"
 import type { AgentRequest, AskReply, DomainEvent, FrameSummary } from "@touchline/schema"
-import { makeAsk, type AskOptions, type AskPayload } from "../src/ask.js"
+import { ASK_ANSWER_TIMEOUT_MS, ASK_INTENT_TIMEOUT_MS, askTimeoutsMs, makeAsk, type AskOptions, type AskPayload } from "../src/ask.js"
 import { ASK_IDLE_MS, makeAskWorkers } from "../src/askpool.js"
 import type { AskClipRequest } from "../src/askclip.js"
-import { readMatch, type AskCacheEntry, type LibraryMatch } from "../src/library.js"
+import { askCacheKey, readMatch, type AskCacheEntry, type LibraryMatch } from "../src/library.js"
 import { makeSessions, type Session } from "../src/session.js"
 import { league, makeLibrary } from "./fixture.js"
 
@@ -120,7 +120,7 @@ describe("ask", () => {
       Effect.gen(function* () {
         const s = yield* fakeSession(6000)
         const f = yield* Effect.forkChild(Stream.runCollect(ask.ask(s, chipAsk("plan"))))
-        for (let t = 0; t < 20_000 && !f.pollUnsafe(); t += 500) {
+        for (let t = 0; t < ASK_ANSWER_TIMEOUT_MS + 5_000 && !f.pollUnsafe(); t += 500) {
           yield* Effect.promise(() => new Promise((r) => setImmediate(r)))
           yield* TestClock.adjust("500 millis")
         }
@@ -166,9 +166,10 @@ describe("ask", () => {
     const entry: AskCacheEntry = {
       stages: [{ stage: "question", status: "q" }, { stage: "whatif", status: "w" }, { stage: "analyst", status: "a" }],
       answer: { ...REPLY, ask_id: "ask-1", frame: F, clip_id: clip.clip_id, verdict: clip.verdict, cached: false },
-      clip
+      clip,
+      segment: { lang: "en", mode: "casual" }
     }
-    const s = await Effect.runPromise(fakeSession(6000, new Map([[`${F}:${F}:why_not_pass`, entry]])))
+    const s = await Effect.runPromise(fakeSession(6000, new Map([[askCacheKey(F, `${F}:why_not_pass`, segment), entry]])))
     const t0 = performance.now()
     const out = await collect(ask.ask(s, chipAsk("why_not_pass")))
     expect(performance.now() - t0).toBeGreaterThanOrEqual(3 * 350 - 50)
@@ -177,6 +178,54 @@ describe("ask", () => {
     expect(a.calls).toEqual([])
     expect(n).toMatchObject({ summary: 0, clips: [], mcpStarts: 0 })
     expect(await Effect.runPromise(ask.clip(s, clip.clip_id))).toEqual(clip)
+  })
+
+  it("replays a cached answer only for the language and mode it was written in", async () => {
+    const { o } = fakes()
+    const a = agents()
+    const ask = makeAsk({ send: a.send, ...o })
+    const entry: AskCacheEntry = {
+      stages: [{ stage: "analyst", status: "a" }],
+      answer: { ...REPLY, ask_id: "ask-1", frame: F, clip_id: null, verdict: null, cached: false },
+      clip: null,
+      segment: { lang: "en", mode: "casual" }
+    }
+    expect(askCacheKey(F, `${F}:pressers`, segment)).toBe(`${F}:${F}:pressers:en:casual`)
+    const s = await Effect.runPromise(fakeSession(6000, new Map([[askCacheKey(F, `${F}:pressers`, segment), entry]])))
+    const es = await collect(ask.ask(s, { ...chipAsk("pressers"), segment: { ...segment, lang: "es" } }))
+    const analyst = await collect(ask.ask(s, { ...chipAsk("pressers"), segment: { ...segment, mode: "analyst" } }))
+    expect(a.calls.map((c) => c.kind)).toEqual(["ask_answer", "ask_answer"]) // both went live
+    for (const out of [es, analyst]) expect(out.at(-1)!.kind === "answer" && (out.at(-1) as { answer: { cached: boolean } }).answer.cached).toBe(false)
+    const en = await collect(ask.ask(s, chipAsk("pressers")))
+    expect(en.at(-1)!.kind === "answer" && (en.at(-1) as { answer: { cached: boolean } }).answer.cached).toBe(true)
+    // An entry whose recorded segment disagrees with its key is not replayed either.
+    const odd = await Effect.runPromise(fakeSession(6000, new Map([[askCacheKey(F, `${F}:pressers`, segment), { ...entry, segment: { lang: "hi", mode: "casual" } } as AskCacheEntry]])))
+    const out = await collect(ask.ask(odd, chipAsk("pressers")))
+    expect(out.at(-1)!.kind === "answer" && (out.at(-1) as { answer: { cached: boolean } }).answer.cached).toBe(false)
+  })
+
+  it("sends no verdict and no Show me for a what-if that could not apply", async () => {
+    const { o } = fakes()
+    const a = agents()
+    const unapplied = (req: AskClipRequest): AskClip => ({ ...clipOf(req), verdict: "not_verified", variant: null, seeds: 0, typical_seed: null, shots: null, goals: null, gain: null })
+    const ask = makeAsk({ send: a.send, ...o, askClip: async (_dir, req) => unapplied(req) })
+    const s = await Effect.runPromise(fakeSession(6000))
+    const out = await collect(ask.ask(s, chipAsk("why_not_pass")))
+    const end = out.at(-1)!
+    expect(end.kind === "answer" && end.answer).toMatchObject({ verdict: null, clip_id: null })
+    const req = a.calls.find((c) => c.kind === "ask_answer")!
+    expect(req.kind === "ask_answer" && req.what_if).toBeNull()
+    expect(Exit.isFailure(await Effect.runPromiseExit(ask.clip(s, `c-4980`)))).toBe(true)
+  })
+
+  it("derives its time limits from the agents' stage budgets and their timeout scale", () => {
+    // The answer: two analyst drafts (8 s each), the personaliser (4 s) and 5 s for the stats calls; the intent 5 s.
+    expect(askTimeoutsMs({})).toEqual({ intent: 5_000, answer: (2 * 8 + 4 + 5) * 1000 })
+    expect(askTimeoutsMs({ TOUCHLINE_TIMEOUT_SCALE: "2" })).toEqual({ intent: 10_000, answer: 50_000 })
+    expect(askTimeoutsMs({ TOUCHLINE_TIMEOUT_SCALE: "nonsense" })).toEqual({ intent: 5_000, answer: 25_000 })
+    expect(askTimeoutsMs({ TOUCHLINE_TIMEOUT_SCALE: "-1" })).toEqual({ intent: 5_000, answer: 25_000 })
+    const env = askTimeoutsMs(process.env)
+    expect([ASK_INTENT_TIMEOUT_MS, ASK_ANSWER_TIMEOUT_MS]).toEqual([env.intent, env.answer])
   })
 
   describe("warm workers", () => {
