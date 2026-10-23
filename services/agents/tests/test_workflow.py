@@ -42,13 +42,26 @@ async def test_a_batch_comes_out_as_verified_cues_for_every_segment(session, sig
     results = await run(session, batch)
     assert results and {r.trace.moment.type for r in results} >= {"goal"}
     for r in results:
-        assert [c.segment for c in r.cues] == SEGMENTS  # in the order the segments were asked for
+        assert [c.segment for c in r.cues if c.display.slot != "pitch_marker"] == SEGMENTS  # in the order the segments were asked for
         assert all(c.verified and c.moment_id == r.trace.moment.moment_id for c in r.cues)
         assert r.trace.verdicts[-1].status == "pass" and r.trace.fallbacks == [] and r.trace.model == "stub"
         assert {"detector", "analyst", "narrator", "factchecker", "personalizer_casual", "personalizer_analyst"} <= set(r.trace.timings_ms)
-        casual = [c for c in r.cues if c.segment.mode == "casual"]
+        casual = [c for c in r.cues if c.segment.mode == "casual" and c.text]
         assert all(len(numbers_in(f"{c.text.headline} {c.text.body}")) <= 1 for c in casual)
     assert [t.moment.moment_id for t in session.told] == [r.trace.moment.moment_id for r in results]
+
+
+async def test_markers_flow_from_workflow(session, signals):
+    results = await run(session, [s for s in signals if s.frame_id <= 20000])
+    markers = [c for r in results for c in r.cues if c.display.slot == "pitch_marker"]
+    assert any(c.segment.mode == "analyst" for c in markers)
+    for r in results:
+        by_id = {c.cue_id: c for c in r.cues}
+        for c in r.cues:
+            if c.display.slot == "pitch_marker":
+                base = by_id[c.cue_id.removesuffix(":m")]
+                assert c.text is None and c.segment == base.segment and c.verified == base.verified and c.display.template in ("pressure_ring", "pass_arc", "ghost")
+                assert [x.cue_id for x in r.cues].index(c.cue_id) == [x.cue_id for x in r.cues].index(base.cue_id) + 1
 
 
 async def test_a_wrong_draft_is_retried_once_then_published(session, signals):
@@ -78,7 +91,7 @@ async def test_a_draft_still_wrong_after_the_retry_loses_the_bad_sentence(sessio
     finally:
         STUB_RESPONDERS["narrate"] = original
     assert [v.status for v in r.trace.verdicts] == ["retry", "drop"]
-    assert not any("9 shots" in (c.text.body + c.text.headline) for c in r.cues)
+    assert not any("9 shots" in (c.text.body + c.text.headline) for c in r.cues if c.text)
     assert r.trace.draft.sentences[1] == "They have had 9 shots."  # the trace keeps what was dropped
 
 
@@ -95,7 +108,7 @@ async def test_every_agent_failing_still_publishes_template_cues(stats_url, sign
     finally:
         await s.close()
     assert set(r.trace.fallbacks) == {"moment_detector", "tactical_analyst", "narrator", "personalizer"}
-    assert len(r.cues) == len(SEGMENTS) and all(c.verified for c in r.cues)
+    assert len([c for c in r.cues if c.text]) == len(SEGMENTS) and all(c.verified for c in r.cues)
 
 
 async def test_checkpoints_are_written_and_load(session, signals, caplog):

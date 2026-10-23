@@ -11,7 +11,7 @@ Recaps are a short sequence on the same agents (`run_recap`).
 
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from agent_framework import Executor, FileCheckpointStorage, Workflow, WorkflowBuilder, WorkflowContext, handler
 from pydantic import BaseModel
@@ -20,6 +20,7 @@ from typing_extensions import Never
 from . import contracts_gen
 from .contracts import Analysis, Cue, Draft, Moment, MomentTrace, Recap, Signal, Verdict, segment_key
 from .factchecker import feedback, other_names, published
+from .markers import marker_cue, passes_in
 from .personalizer import Story
 from .recap import Told, recap_story
 from .session import MatchSession
@@ -169,9 +170,14 @@ class Personalize(Executor):
         names = n.pack["names"]
         others = other_names(await self.s.stats.roster(), set(names))
         story = Story.of_moment(n.job.moment, n.analysis.cause, names, n.analysis.explanation)
-        evidence = list(dict.fromkeys(e for s in n.job.signals if s.id in n.job.moment.signal_ids for e in s.evidence))
+        m = n.job.moment
+        story = replace(story, claims=tuple(v.published.claims), signals=tuple(s for s in n.job.signals if s.id in m.signal_ids),
+                        passes=passes_in(n.pack.get("events", []), m.frame_to, m.team_id))
+        evidence = list(dict.fromkeys(e for s in n.job.signals if s.id in m.signal_ids for e in s.evidence))
         out = await self.s.agents.personalizer.fan_out(story, v.published, names, segments, others, evidence) if segments else []
-        await ctx.send_message(Variants(v, self.mode, [p.cue for p in out], any(p.fallback for p in out), _ms(t0)))
+        # Each text cue is followed by its pitch marker, when it has one.
+        cues = [c for p, seg in zip(out, segments) for c in (p.cue, marker_cue(story, seg, p.cue)) if c is not None]
+        await ctx.send_message(Variants(v, self.mode, cues, any(p.fallback for p in out), _ms(t0)))
 
 
 class Publish(Executor):
