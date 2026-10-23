@@ -24,9 +24,10 @@ from pydantic import ValidationError
 from starlette.applications import Starlette
 
 from .config import Settings, load_settings
-from .contracts import ManageRequest, RecapRequest, SignalsRequest, dump, parse_request
+from .contracts import AskIntentRequest, ManageRequest, RecapRequest, SignalsRequest, dump, parse_request
 from .llm import deadline, make_client
 from .manager import Manager
+from .question import QuestionAgent
 from .session import Agents, MatchSession
 from .stats import StatsError
 from .workflow import build, run_moments, run_recap
@@ -51,6 +52,8 @@ def agent_card(url: str) -> AgentCard:
                        tags=["football", "recap"], examples=['{"kind": "recap", "recap": "half_time", ...}']),
             AgentSkill(id="manage", name="Manager", description="A team's manager at a key moment: propose changes, or choose among re-simulated ones.",
                        tags=["football", "tactics"], examples=['{"kind": "manage", "task": "propose", ...}']),
+            AgentSkill(id="ask", name="Ask the match", description="A viewer's question about a paused frame: intent, then a fact-checked, personalised answer with re-simulated evidence.",
+                       tags=["football", "ask"], examples=['{"kind": "ask_intent", ...}']),
         ],
     )
 
@@ -112,8 +115,9 @@ class Sessions:
 
 
 class TouchlineExecutor(AgentExecutor):
-    def __init__(self, sessions: Sessions, manager: Manager | None = None) -> None:
+    def __init__(self, sessions: Sessions, manager: Manager | None = None, question: QuestionAgent | None = None) -> None:
         self.sessions = sessions
+        self.question = question or QuestionAgent(make_client(sessions.settings, "fast"), sessions.settings)
         self.manager = manager or Manager(make_client(sessions.settings, "large"), sessions.settings)
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
@@ -128,6 +132,9 @@ class TouchlineExecutor(AgentExecutor):
             req = parse_request(data[0])
             if isinstance(req, ManageRequest):
                 await self._manage(req, up, task)
+                return
+            if isinstance(req, AskIntentRequest):
+                await self._ask_intent(req, up, task)
                 return
             session, workflow, lock = await self.sessions.get(req)
         except (ValueError, ValidationError, StatsError) as e:
@@ -163,6 +170,13 @@ class TouchlineExecutor(AgentExecutor):
         await up.start_work(new_text_message(f"manage {req.task} for {req.match_id}", context_id=task.context_id, task_id=task.id))
         reply = await self.manager.handle(req)
         await up.add_artifact([new_data_part(dump(reply), JSON)], artifact_id=f"{req.match_id}-{req.situation.team_id}-{req.task}", name="manager", last_chunk=True)
+        await up.complete()
+
+    async def _ask_intent(self, req: AskIntentRequest, up: TaskUpdater, task) -> None:
+        """One "ask_intent" artifact: the question's intent (needs no match session; a failed model call is the rule-based reading)."""
+        await up.start_work(new_text_message(f"ask_intent for {req.summary.match_id}", context_id=task.context_id, task_id=task.id))
+        intent = await self.question.parse(req)
+        await up.add_artifact([new_data_part(dump(intent), JSON)], artifact_id=f"{req.summary.match_id}-{req.summary.frame}-intent", name="ask_intent", last_chunk=True)
         await up.complete()
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:

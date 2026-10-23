@@ -44,7 +44,7 @@ async def test_serves_its_agent_card(server):
         card = (await http.get(f"{server}.well-known/agent-card.json")).json()
     assert card["name"] == "touchline-agents" and card["capabilities"]["streaming"]
     assert card["supportedInterfaces"][0] == {"url": server, "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}
-    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage"}
+    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage", "ask"}
 
 
 async def test_signals_stream_back_as_cues_and_traces(server, stats_url, stats):
