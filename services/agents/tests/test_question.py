@@ -80,9 +80,14 @@ async def test_parse_falls_back_on_garbage():
 
 
 def test_possessive_names_are_not_unknown_players():
-    for q in ("Why didn't Okafor's pass go to Diallo?", "What if Okafor's pass went to Diallo?"):
-        i = rule_intent(req(q))
-        assert i.kind == "what_if" and (i.intervention.player_id, i.intervention.receiver_id) == ("p-h-08", "p-h-09"), q
+    # no missed option in this frame, so "why didn't" is an explanation of the passer, not unsupported
+    i = rule_intent(req("Why didn't Okafor's pass go to Diallo?"))
+    assert i.kind == "explain" and i.subject_id == "p-h-08"
+    mo = {"event_id": "e-1", "passer_id": "p-h-08", "played_to": "p-h-05", "better_to": "p-h-09"}
+    i = rule_intent(req("Why didn't Okafor's pass go to Diallo?", missed_option=mo))
+    assert i.kind == "what_if" and i.intervention.receiver_id == "p-h-09"
+    i = rule_intent(req("What if Okafor's pass went to Diallo?"))
+    assert i.kind == "what_if" and (i.intervention.player_id, i.intervention.receiver_id) == ("p-h-08", "p-h-09")
 
 
 def test_invalid_id_reason_does_not_show_the_id():
