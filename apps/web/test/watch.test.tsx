@@ -1,10 +1,23 @@
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PitchFrame } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 import { App } from "../src/App.js"
+import { parseMarker } from "../src/markers.js"
+import type { Stage3DProps } from "../src/view3d/Stage3D.js"
 import { fakeClient } from "./fake-client.js"
+
+// jsdom has no WebGL: the 3D stage is a stand-in with a button per pitch marker (the 2D view needs none of this).
+vi.mock("../src/view3d/webgl.js", () => ({ hasWebGL: () => true }))
+vi.mock("../src/view3d/Stage3D.js", () => ({
+  Stage3D: (p: Stage3DProps) => (
+    <div data-testid="stage">
+      {p.markers?.cues.map((c) => <button key={c.cue_id} type="button" onClick={() => p.markers!.onTap(parseMarker(c)!, c)}>{`tap ${c.display.template}`}</button>)}
+    </div>
+  )
+}))
+beforeEach(() => localStorage.clear())
 
 const board = (home: number, away: number, clock: string): Cue => ({
   cue_id: `b-${clock}`, schema: "touchline.cue/1", match_id: "m", moment_id: null, anchor: { frame_from: 0, frame_to: 0, clock },
@@ -81,5 +94,44 @@ describe("watching a match", () => {
     expect(shown()).toBe("20")
     await userEvent.click(screen.getByRole("button", { name: "Play" }))
     expect(shown()).toBe("90")
+  })
+
+  it("freeze opens Ask for the frozen frame", async () => {
+    const client = await watching()
+    expect(screen.queryByRole("region", { name: "Ask" })).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }))
+    expect(await screen.findByRole("region", { name: "Ask" })).toBeTruthy()
+    expect(client.calls).toContain("suggest 20 en")
+    await userEvent.type(screen.getByRole("textbox", { name: "Ask about this moment" }), "Who has the ball?{Enter}")
+    expect(client.asks[0]!.req).toEqual({ frame: 20, question: "Who has the ball?", chip_id: null, segment: { mode: "casual", lang: "en", club: null } })
+  })
+
+  it("resume closes Ask", async () => {
+    const client = await watching()
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }))
+    await userEvent.type(await screen.findByRole("textbox", { name: "Ask about this moment" }), "Who has the ball?{Enter}")
+    await userEvent.click(screen.getByRole("button", { name: "Play" }))
+    expect(screen.queryByRole("region", { name: "Ask" })).toBeNull()
+    expect(client.asks[0]!.stopped).toBe(true)
+    expect(shown()).toBe("20")
+  })
+
+  it("tapping a marker opens Ask pre-filled", async () => {
+    const client = fakeClient()
+    render(<App client={client} />)
+    await userEvent.click(await screen.findByRole("button", { name: "Watch" }))
+    await userEvent.click(screen.getByRole("button", { name: "3D" }))
+    for (let n = 1; n <= 20; n++) act(() => client.push({ kind: "frame", frame: frame(n) }))
+    const ring: Cue = {
+      cue_id: "ring-1", schema: "touchline.cue/1", match_id: "m", moment_id: null, anchor: { frame_from: 10, frame_to: 40, clock: "10:00" },
+      display: { slot: "pitch_marker", priority: 1, ttl_ms: 4000, template: "pressure_ring" }, segment: { mode: "casual", lang: "en", club: null },
+      text: null, data: { "at:p-lar-09": 1, count: 2 }, evidence: [], verified: true
+    }
+    act(() => client.push({ kind: "cue", cue: ring }))
+    await userEvent.click(within(screen.getByTestId("stage")).getByRole("button", { name: "tap pressure_ring" }))
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy() // frozen
+    const ask = await screen.findByRole("region", { name: "Ask" })
+    expect((within(ask).getByRole("textbox", { name: "Ask about this moment" }) as HTMLInputElement).value).toBe("Who's pressing #9 Feseo Wylford?")
+    expect(client.calls).toContain("suggest 20 en")
   })
 })

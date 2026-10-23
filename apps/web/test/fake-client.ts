@@ -1,7 +1,7 @@
 /** A TouchlineClient for component tests: canned answers, and ticks the test pushes to every watcher. */
-import type { Evidence, MatchInfo, MatchSummary, OpsReport, Playback, RecapView, StudioTick, Tick, WhatIfClip } from "@touchline/rpc"
+import type { AskClip, AskUpdate, Evidence, MatchInfo, MatchSummary, OpsReport, Playback, RecapView, StudioTick, Tick, WhatIfClip } from "@touchline/rpc"
 import type { Decision, Segment } from "@touchline/schema"
-import type { TouchlineClient } from "../src/client.js"
+import type { QuestionChip, TouchlineClient } from "../src/client.js"
 
 export const team = (id: string, side: "home" | "away", name: string, color: string) => ({ id, name, short: id.slice(0, 3).toUpperCase(), side, kit: { primary: color, secondary: "#ffffff" } })
 
@@ -33,9 +33,13 @@ export interface FakeClient extends TouchlineClient {
   studioCount(): number
   readonly outputs: Array<{ segment: Segment; onTick: (t: Tick) => void }>
   pushGraphics(t: Tick): void
+  /** Every ask made, newest last, and whether its stream was stopped. */
+  readonly asks: Array<{ req: Parameters<TouchlineClient["ask"]>[1]; onUpdate: (u: AskUpdate) => void; onEnd: () => void; stopped: boolean }>
+  /** Send an update to the newest ask. */
+  pushAsk(u: AskUpdate): void
 }
 
-export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip>; decisions?: ReadonlyArray<Decision>; info?: MatchInfo } = {}): FakeClient => {
+export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?: Evidence; recap?: RecapView; ops?: OpsReport; whatIf?: () => Promise<WhatIfClip>; decisions?: ReadonlyArray<Decision>; info?: MatchInfo; chips?: ReadonlyArray<QuestionChip>; askClip?: () => Promise<AskClip> } = {}): FakeClient => {
   const watchers: FakeClient["watchers"] = []
   const studios: FakeClient["studios"] = []
   const outputs: FakeClient["outputs"] = []
@@ -44,6 +48,7 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
     return () => void list.splice(list.indexOf(w), 1)
   }
   const calls: string[] = []
+  const asks: FakeClient["asks"] = []
   let playback: Playback = { state: "playing", frame: 0, speed: 4, live: false }
   let watched = 0
   let studied = 0
@@ -59,6 +64,23 @@ export const fakeClient = (o: { matches?: ReadonlyArray<MatchSummary>; evidence?
     studioCount: () => studied,
     outputs,
     pushGraphics: (t) => outputs.forEach((w) => w.onTick(t)),
+    asks,
+    pushAsk: (u) => asks.at(-1)?.onUpdate(u),
+    suggest: async (_s, frame, lang) => {
+      calls.push(`suggest ${frame} ${lang}`)
+      return [...(o.chips ?? [])]
+    },
+    ask: (_s, req, onUpdate, onEnd) => {
+      calls.push(`ask ${req.frame} ${req.chip_id ?? "-"} ${req.question}`)
+      const a = { req, onUpdate, onEnd, stopped: false }
+      asks.push(a)
+      return () => void (a.stopped = true)
+    },
+    askClip: async (_s, clipId) => {
+      calls.push(`askClip ${clipId}`)
+      if (!o.askClip) throw new Error("no clip")
+      return o.askClip()
+    },
     studio: (_id, segment, onTick, onEnd) => {
       studied++
       return follow(studios, { segment, onTick, ...(onEnd ? { onEnd } : {}) })
