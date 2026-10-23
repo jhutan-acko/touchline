@@ -92,11 +92,13 @@ export const AskPanel = ({ client, sessionId, frame, segment, prefill, onShowMe,
     e.preventDefault()
     start(text, null)
   }
-  const stateOf = (name: StageName): "pending" | "working" | "done" => {
+  // An answer ends every stage; a failure stops the one that was working (the rest never ran).
+  const stateOf = (name: StageName): "pending" | "working" | "done" | "stopped" => {
     if (!ask) return "pending"
     const i = ask.stages.findIndex((x) => x.stage === name)
     if (i < 0) return ask.answer ? "done" : "pending"
-    return ask.answer || i < ask.stages.length - 1 ? "done" : "working"
+    if (ask.answer || i < ask.stages.length - 1) return "done"
+    return ask.failed ? "stopped" : "working"
   }
   const shownStages = STAGES.filter((s) => s !== "whatif" || ask?.stages.some((x) => x.stage === "whatif"))
   const answer = ask?.answer ?? null
@@ -124,7 +126,7 @@ export const AskPanel = ({ client, sessionId, frame, segment, prefill, onShowMe,
             const status = ask.stages.find((x) => x.stage === name)?.status
             return (
               <li key={name} data-stage={name} data-state={state} className={`flex items-baseline gap-2 ${state === "pending" ? "text-slate-500" : ""}`}>
-                <span aria-hidden className={`w-4 text-center ${state === "done" ? "text-emerald-400" : state === "working" ? "animate-pulse text-amber-400" : ""}`}>{state === "done" ? "✓" : state === "working" ? "●" : "○"}</span>
+                <span aria-hidden className={`w-4 text-center ${state === "done" ? "text-emerald-400" : state === "working" ? "animate-pulse text-amber-400" : state === "stopped" ? "text-red-400" : ""}`}>{state === "done" ? "✓" : state === "working" ? "●" : state === "stopped" ? "■" : "○"}</span>
                 <span className="font-medium">{t(lang, STAGE_KEY[name])}</span>
                 {status && <span className="truncate text-slate-400">{status}</span>}
               </li>
@@ -148,7 +150,7 @@ export const AskPanel = ({ client, sessionId, frame, segment, prefill, onShowMe,
           )}
           <div className="flex flex-wrap items-center gap-2">
             {answer.verified && <span className="text-emerald-400">{t(lang, "factChecked")}</span>}
-            {answer.verdict && <span className="font-medium text-amber-300">{t(lang, VERDICT_KEY[answer.verdict])}</span>}
+            {answer.verdict && t(lang, VERDICT_KEY[answer.verdict]) !== answer.headline && <span className="font-medium text-amber-300">{t(lang, VERDICT_KEY[answer.verdict])}</span>}
             {answer.clip_id && (
               <button type="button" className="ml-auto rounded bg-amber-400 px-3 py-1 font-semibold text-slate-950" onClick={() => onShowMe(answer.clip_id!)}>{t(lang, "showMe")}</button>
             )}

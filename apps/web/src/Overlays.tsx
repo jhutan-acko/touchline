@@ -6,11 +6,14 @@ const Verified = ({ lang }: { lang: Lang }) => <span className="ml-2 rounded bg-
 
 const numbers = (cue: Cue) => Object.entries(cue.data).filter(([k]) => !k.startsWith("score."))
 
-/** The cues on screen for this pane at a match frame (the latest, or the frozen one), over the pitch (spec §5.4 slots). */
-export const Overlays = ({ state, frame, lang, onWhy }: { state: PaneState; frame: number; lang: Lang; onWhy?: (cue: Cue) => void }) => {
-  const lower = inSlot(state, "lower_third", frame)[0]
-  const side = inSlot(state, "side_panel", frame)[0]
-  const recap = inSlot(state, "recap_card", frame)[0]
+/**
+ * The cues on screen for this pane at a match frame (the latest, or the frozen one), over the pitch (spec §5.4 slots).
+ * `frozen`: the frame the view froze on, so cues that arrived after it stay off.
+ */
+export const Overlays = ({ state, frame, lang, onWhy, frozen = null }: { state: PaneState; frame: number; lang: Lang; onWhy?: (cue: Cue) => void; frozen?: number | null }) => {
+  const lower = inSlot(state, "lower_third", frame, frozen)[0]
+  const side = inSlot(state, "side_panel", frame, frozen)[0]
+  const recap = inSlot(state, "recap_card", frame, frozen)[0]
   const why = (cue: Cue) =>
     onWhy && (
       <button type="button" className="ml-auto rounded bg-slate-700 px-2 py-0.5 text-xs hover:bg-slate-600" onClick={() => onWhy(cue)}>

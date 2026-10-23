@@ -18,6 +18,8 @@ export interface OnScreen {
   readonly cue: Cue
   /** The last match frame it shows on: its ttl counted (in frames) from the end of its anchor, or from its arrival if later. */
   readonly untilFrame: number
+  /** The latest match frame known when it arrived: a view frozen before then never shows it (no spoilers). */
+  readonly arrivedAt: number
 }
 
 export interface PaneState {
@@ -32,9 +34,11 @@ export interface PaneState {
   readonly onScreen: ReadonlyArray<OnScreen>
   /** Every agent cue received (but pitch markers), newest first. */
   readonly feed: ReadonlyArray<Cue>
+  /** When each cue in the feed arrived (the latest match frame known then), by cue id. */
+  readonly feedArrivedAt: Readonly<Record<string, number>>
 }
 
-export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [] }
+export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {} }
 
 /** At most this many agent cues stay in the feed. */
 export const FEED_SIZE = 50
@@ -73,17 +77,28 @@ export const reduce = (s: PaneState, tick: Tick, fps: number): PaneState => {
       if (cue.display.slot === "top_bar") return { ...s, head, board: boardOf(cue) }
       const arrival = s.head ?? cue.anchor.frame_to
       const untilFrame = Math.max(cue.anchor.frame_to, arrival) + Math.round((cue.display.ttl_ms * fps) / 1000)
-      const onScreen = [{ cue, untilFrame }, ...s.onScreen.filter((o) => o.cue.cue_id !== cue.cue_id)].slice(0, ONSCREEN_SIZE)
+      const onScreen = [{ cue, untilFrame, arrivedAt: arrival }, ...s.onScreen.filter((o) => o.cue.cue_id !== cue.cue_id)].slice(0, ONSCREEN_SIZE)
       // Pitch markers are drawn on the pitch, not listed (they carry no text to explain).
-      const feed = cue.display.slot === "pitch_marker" ? s.feed : [cue, ...s.feed.filter((c) => c.cue_id !== cue.cue_id)].slice(0, FEED_SIZE)
-      return { ...s, head, onScreen, feed }
+      if (cue.display.slot === "pitch_marker") return { ...s, head, onScreen }
+      const feed = [cue, ...s.feed.filter((c) => c.cue_id !== cue.cue_id)].slice(0, FEED_SIZE)
+      const feedArrivedAt = Object.fromEntries(feed.map((c) => [c.cue_id, c === cue ? arrival : s.feedArrivedAt[c.cue_id] ?? arrival]))
+      return { ...s, head, onScreen, feed, feedArrivedAt }
     }
   }
 }
 
-/** The cues showing in a slot at a match frame, newest first (a slot's overlay shows the first). */
-export const inSlot = (s: PaneState, slot: Slot, frame: number): Cue[] =>
-  s.onScreen.filter((o) => o.cue.display.slot === slot && o.cue.anchor.frame_from <= frame && frame <= o.untilFrame).map((o) => o.cue)
+/**
+ * The cues showing in a slot at a match frame, newest first (a slot's overlay shows the first). `frozen` is the frame a
+ * view froze on, if it did: a cue that arrived after it does not show then, even when its anchor spans the frame (the
+ * view had not seen it yet; no spoilers).
+ */
+export const inSlot = (s: PaneState, slot: Slot, frame: number, frozen: number | null = null): Cue[] =>
+  s.onScreen
+    .filter((o) => o.cue.display.slot === slot && o.cue.anchor.frame_from <= frame && frame <= o.untilFrame && (frozen === null || o.arrivedAt <= frozen))
+    .map((o) => o.cue)
+
+/** The feed as it stood at a match frame: the cues that had arrived by then, newest first. */
+export const feedAt = (s: PaneState, frame: number): Cue[] => s.feed.filter((c) => (s.feedArrivedAt[c.cue_id] ?? Infinity) <= frame)
 
 /** The frame held at a match frame (the newest at or before it), or null when it is older than the ring. */
 export const frameAt = (s: PaneState, frame: number): PitchFrame | null => {

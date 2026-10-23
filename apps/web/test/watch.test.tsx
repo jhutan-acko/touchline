@@ -134,4 +134,83 @@ describe("watching a match", () => {
     expect((within(ask).getByRole("textbox", { name: "Ask about this moment" }) as HTMLInputElement).value).toBe("Who's pressing #9 Feseo Wylford?")
     expect(client.calls).toContain("suggest 20 en")
   })
+  const textCue = (id: string, headline: string, template = "goal", evidence: string[] = []): Cue => ({
+    cue_id: id, schema: "touchline.cue/1", match_id: "m", moment_id: id, anchor: { frame_from: 15, frame_to: 30, clock: "10:00" },
+    display: { slot: "lower_third", priority: 2, ttl_ms: 8000, template }, segment: { mode: "casual", lang: "en", club: null },
+    text: { headline, body: "." }, data: {}, evidence, verified: true
+  })
+  const pauseAndPlayOn = async (client: ReturnType<typeof fakeClient>) => {
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }))
+    for (let n = 21; n <= 40; n++) act(() => client.push({ kind: "frame", frame: frame(n) }))
+  }
+
+  it("keeps the scoreboard as it was while frozen", async () => {
+    const client = await watching()
+    act(() => client.push({ kind: "cue", cue: board(1, 0, "10:00") }))
+    await pauseAndPlayOn(client)
+    act(() => client.push({ kind: "cue", cue: board(1, 1, "10:02") }))
+    expect(screen.getByTestId("score").textContent).toBe("1–0")
+    expect(screen.getByTestId("clock").textContent).toBe("10:00")
+    await userEvent.click(screen.getByRole("button", { name: "Play" }))
+    expect(screen.getByTestId("score").textContent).toBe("1–1")
+  })
+
+  it("keeps the feed and the overlays to what had arrived by the freeze, even for a cue anchored before it", async () => {
+    const client = await watching()
+    act(() => client.push({ kind: "cue", cue: textCue("c-before", "Before the pause") }))
+    await pauseAndPlayOn(client)
+    // Anchored 15..30, spanning the frozen frame 20, but arriving at 40.
+    act(() => client.push({ kind: "cue", cue: textCue("c-after", "After the pause") }))
+    const feed = () => screen.getByRole("list", { name: "feed" }).textContent
+    expect(feed()).toContain("Before the pause")
+    expect(feed()).not.toContain("After the pause")
+    expect(document.querySelector('[data-slot="lower_third"]')?.textContent).toContain("Before the pause")
+    await userEvent.click(screen.getByRole("button", { name: "Play" }))
+    expect(feed()).toContain("After the pause")
+    expect(document.querySelector('[data-slot="lower_third"]')?.textContent).toContain("After the pause")
+  })
+
+  it("does not pop up a better pass or a manager's decision while frozen", async () => {
+    const client = await watching()
+    await userEvent.click(screen.getByLabelText("Auto-show better passes"))
+    await pauseAndPlayOn(client)
+    act(() => client.push({ kind: "cue", cue: textCue("bp", "A better pass was on", "better_pass", ["e-1"]) }))
+    act(() => client.push({ kind: "cue", cue: textCue("md", "Press higher", "manager_decision", ["decision-1-home"]) }))
+    expect(client.calls.filter((c) => c.startsWith("whatIf") || c.startsWith("decisions"))).toEqual([])
+    // Live again, they pop up as before.
+    await userEvent.click(screen.getByRole("button", { name: "Play" }))
+    act(() => client.push({ kind: "cue", cue: textCue("md2", "Press higher", "manager_decision", ["decision-2-home"]) }))
+    act(() => client.push({ kind: "cue", cue: textCue("bp2", "A better pass was on", "better_pass", ["e-2"]) }))
+    expect(client.calls.filter((c) => c.startsWith("whatIf") || c.startsWith("decisions"))).toEqual(["decisions s1", "whatIf e-2"])
+  })
+
+  it("does not draw a pitch marker that arrived after the freeze, until resumed", async () => {
+    const client = fakeClient()
+    render(<App client={client} />)
+    await userEvent.click(await screen.findByRole("button", { name: "Watch" }))
+    await userEvent.click(screen.getByRole("button", { name: "3D" }))
+    for (let n = 1; n <= 20; n++) act(() => client.push({ kind: "frame", frame: frame(n) }))
+    await pauseAndPlayOn(client)
+    const ring: Cue = {
+      cue_id: "ring-late", schema: "touchline.cue/1", match_id: "m", moment_id: null, anchor: { frame_from: 10, frame_to: 40, clock: "10:00" },
+      display: { slot: "pitch_marker", priority: 1, ttl_ms: 4000, template: "pressure_ring" }, segment: { mode: "casual", lang: "en", club: null },
+      text: null, data: { "at:p-lar-09": 1, count: 2 }, evidence: [], verified: true
+    }
+    act(() => client.push({ kind: "cue", cue: ring }))
+    expect(within(screen.getByTestId("stage")).queryByRole("button", { name: "tap pressure_ring" })).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Play" }))
+    expect(within(screen.getByTestId("stage")).getByRole("button", { name: "tap pressure_ring" })).toBeTruthy()
+  })
+
+  it("reopens Ask after closing it while still frozen", async () => {
+    await watching()
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }))
+    const ask = await screen.findByRole("region", { name: "Ask" })
+    await userEvent.click(within(ask).getByRole("button", { name: "Close" }))
+    expect(screen.queryByRole("region", { name: "Ask" })).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }))
+    expect(await screen.findByRole("region", { name: "Ask" })).toBeTruthy()
+    await userEvent.click(screen.getByRole("button", { name: "Play" }))
+    expect(screen.queryByRole("button", { name: "Ask" })).toBeNull() // live: nothing to reopen
+  })
 })

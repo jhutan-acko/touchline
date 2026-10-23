@@ -8,7 +8,7 @@ import { t, type Lang } from "./i18n.js"
 import { Live3D } from "./Live3D.js"
 import { Overlays } from "./Overlays.js"
 import type { Marker } from "./markers.js"
-import { frameAt, inSlot } from "./pane.js"
+import { feedAt, frameAt, inSlot } from "./pane.js"
 import { Pitch } from "./Pitch.js"
 import { ProfileBar } from "./ProfileBar.js"
 import { RecapPanel } from "./RecapPanel.js"
@@ -74,33 +74,38 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   const still = useMemo(() => (frozen === null ? null : frameAt(pane, frozen)), [frozen])
   const shown = frozen === null ? pane.frame : still
   const at = frozen ?? pane.head ?? 0
-  const pitchMarkers = [...inSlot(pane, "pitch_marker", at), ...markers]
+  const pitchMarkers = [...inSlot(pane, "pitch_marker", at, frozen), ...markers]
+  // Frozen, nothing that arrived since shows: the scoreboard as it was, the feed as it stood, and no pop-ups.
+  const frozenBoard = useMemo(() => (frozen === null ? null : pane.board), [frozen])
+  const board = frozen === null ? pane.board : frozenBoard
+  const feed = frozen === null ? pane.feed : feedAt(pane, frozen)
   const newest = pane.feed[0]
   useEffect(() => {
+    if (frozen !== null) return
     if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])
     if (newest?.display.template === "manager_decision" && newest.evidence[0]) onDecision?.(newest.evidence[0])
   }, [newest?.cue_id])
   return (
     <section className="flex flex-col gap-2" aria-label={label}>
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
-      <TopBar match={match} board={pane.board} lang={lang} />
+      <TopBar match={match} board={board} lang={lang} />
       {view === "3d" ? (
         <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} {...(onMarkerTap ? { onMarkerTap } : {})}>
-          <Overlays state={pane} frame={at} lang={lang} {...(onWhy ? { onWhy } : {})} />
+          <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
           {ask && <div className="pointer-events-none absolute inset-y-2 right-2 z-10 flex w-[min(22rem,calc(100%-1rem))] flex-col">{ask}</div>}
         </Live3D>
       ) : (
         <div className="relative">
           <Pitch frame={shown} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
-          <Overlays state={pane} frame={at} lang={lang} {...(onWhy ? { onWhy } : {})} />
+          <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </div>
       )}
       {view !== "3d" && ask}
       {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
       {pane.playback?.state === "ended" && <p className="text-center font-semibold">{t(lang, "ended")}</p>}
-      {pane.feed.length > 0 && (
+      {feed.length > 0 && (
         <ol aria-label="feed" className="flex max-h-40 flex-col gap-1 overflow-y-auto text-sm">
-          {pane.feed.map((c) => (
+          {feed.map((c) => (
             <li key={c.cue_id} lang={c.segment.lang} className="flex items-center gap-2 rounded bg-slate-900 px-2 py-1">
               <span className="tabular-nums text-slate-400">{c.anchor.clock}</span>
               <span className="truncate">{c.text?.headline}</span>
@@ -224,6 +229,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
         <button type="button" className="rounded bg-emerald-600 px-3 py-1 text-white" aria-pressed={frozen !== null} onClick={toggleFreeze}>
           {frozen !== null ? t(lang, "play") : t(lang, "pause")}
         </button>
+        {frozen !== null && !askOpen && <button type="button" className="rounded bg-amber-400 px-3 py-1 font-semibold text-slate-950" onClick={() => setAskOpen(true)}>{t(lang, "askReopen")}</button>}
         <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={toggleSplit}>{second ? t(lang, "single") : t(lang, "split")}</button>
         <button type="button" className="rounded bg-slate-800 px-3 py-1 disabled:opacity-50" onClick={toggleView} disabled={!webgl} title={webgl ? undefined : t(lang, "noWebgl")}>
           {view === "3d" ? t(lang, "view2d") : t(lang, "view3d")}

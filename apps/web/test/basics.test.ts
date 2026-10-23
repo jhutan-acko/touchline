@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import type { Tick } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 import { STRINGS, t, type Key } from "../src/i18n.js"
-import { EMPTY, FEED_SIZE, inSlot, reduce } from "../src/pane.js"
+import { EMPTY, FEED_SIZE, feedAt, inSlot, reduce } from "../src/pane.js"
 import { presetProfile, PRESETS, segmentOf } from "../src/profile.js"
 
 const cue = (JSON.parse(readFileSync(join(import.meta.dirname, "../../../packages/schema/fixtures/agents/valid/cue.json"), "utf8")) as { value: Cue }).value
@@ -60,6 +60,32 @@ describe("pane", () => {
     const s = reduce(reduce(EMPTY, tick(cue), 10), tick(marker), 10)
     expect(s.feed.map((c) => c.cue_id)).toEqual([cue.cue_id])
     expect(inSlot(s, "pitch_marker", cue.anchor.frame_to).map((c) => c.cue_id)).toEqual(["pm1"])
+  })
+
+  const frameTick = (n: number): Tick => ({ kind: "frame", frame: { frame: n, period: "first_half", clock: "10:00.00", ball: { x: 0, y: 0, z: 0 }, home: [], away: [] } })
+
+  it("does not show, at a frozen frame, a cue that arrived after it even when its anchor spans that frame", () => {
+    // Frozen at 100; the match plays on to 130, then a cue anchored 90..120 (a better-pass cue released at its end) arrives.
+    let s = EMPTY
+    for (let n = 95; n <= 130; n++) s = reduce(s, frameTick(n), 10)
+    const late: Cue = { ...cue, cue_id: "late", anchor: { frame_from: 90, frame_to: 120, clock: "10:00" } }
+    const ring: Cue = { ...late, cue_id: "late-ring", text: null, display: { ...cue.display, slot: "pitch_marker", template: "pressure_ring" }, data: { "at:p-1": 1 } }
+    s = reduce(reduce(s, tick(late), 10), tick(ring), 10)
+    expect(inSlot(s, "lower_third", 100, 100)).toEqual([])
+    expect(inSlot(s, "pitch_marker", 100, 100)).toEqual([])
+    // Back to live (the head), both show.
+    expect(inSlot(s, "lower_third", 130).map((c) => c.cue_id)).toEqual(["late"])
+    expect(inSlot(s, "pitch_marker", 130).map((c) => c.cue_id)).toEqual(["late-ring"])
+  })
+
+  it("lists in the feed at a frame only the cues that had arrived by then", () => {
+    let s = EMPTY
+    for (let n = 95; n <= 100; n++) s = reduce(s, frameTick(n), 10)
+    s = reduce(s, tick({ ...cue, cue_id: "before", anchor: { frame_from: 90, frame_to: 99, clock: "10:00" } }), 10)
+    for (let n = 101; n <= 130; n++) s = reduce(s, frameTick(n), 10)
+    s = reduce(s, tick({ ...cue, cue_id: "after", anchor: { frame_from: 90, frame_to: 120, clock: "10:00" } }), 10)
+    expect(feedAt(s, 100).map((c) => c.cue_id)).toEqual(["before"])
+    expect(feedAt(s, 130).map((c) => c.cue_id)).toEqual(["after", "before"])
   })
 
   it("keeps a bounded feed", () => {

@@ -115,6 +115,26 @@ describe("the Ask panel", () => {
     expect(screen.queryByRole("alert")).toBeNull()
   })
 
+  it("stops the last stage, not leaving it working, when the ask fails", async () => {
+    const { client } = await panel()
+    await userEvent.click(await screen.findByRole("button", { name: "Who's pressing him?" }))
+    act(() => client.pushAsk({ kind: "stage", stage: { stage: "question", status: "Reading the question…" } }))
+    act(() => client.pushAsk({ kind: "stage", stage: { stage: "analyst", status: "Looking at the frame…" } }))
+    expect(stateOf("analyst")).toBe("working")
+    act(() => client.pushAsk({ kind: "failed", reason: "timeout", message: "" }))
+    expect(stateOf("question")).toBe("done")
+    expect(stateOf("analyst")).toBe("stopped")
+    expect(stateOf("factcheck")).toBe("pending")
+    expect(document.querySelector(".animate-pulse")).toBeNull()
+  })
+
+  it("does not repeat the verdict when the headline already says it", async () => {
+    const { client } = await panel()
+    await userEvent.click(await screen.findByRole("button", { name: "Who's pressing him?" }))
+    act(() => client.pushAsk({ kind: "answer", answer: answer({ headline: "Too close to call", verdict: "not_verified" }) }))
+    expect(screen.getAllByText("Too close to call")).toHaveLength(1)
+  })
+
   it("shows the offline copy on failed:offline in hi", async () => {
     const { client } = await panel({ segment: { mode: "casual", lang: "hi", club: null } })
     expect(client.calls).toEqual(["suggest 9900 hi"])
