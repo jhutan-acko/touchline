@@ -114,6 +114,17 @@ describe("queue items", () => {
     expect(queueItem(entry(), casual).points).toEqual(["Cause: clear chance converted"]) // no English analyst text was written
   })
 
+  it("never pick a pitch marker as the presenter's cue, nor count it as a variant", () => {
+    const base = entry()
+    const markers = base.cues.map((c) => ({ ...c, cue_id: `${c.cue_id}:m`, display: { ...c.display, slot: "pitch_marker" as const, template: "ghost" }, text: null }))
+    const e = { ...base, cues: [...markers, ...base.cues] }
+    const es = queueItem(e, spanish)
+    expect(es.cue?.display.slot).not.toBe("pitch_marker")
+    expect(es.points[0]).toBe("Goal (analyst es)")
+    expect(es.variants).toBe(3)
+    expect(queueItem(e, casual).cue?.text).not.toBeNull()
+  })
+
   it("split analyst text into one talking point per sentence", () => {
     expect(talkingPoints({ headline: "Press wins it.", body: "Two passes. Then a shot!" }, ["Cause: x"])).toEqual(["Press wins it.", "Two passes.", "Then a shot!", "Cause: x"])
   })
