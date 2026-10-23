@@ -1,0 +1,14 @@
+{
+  "contract": "ask_intent",
+  "value": {
+    "kind": "what_if",
+    "subject_id": "p-h-05",
+    "fork_event_id": "e-3101",
+    "intervention": {
+      "kind": "pass_to",
+      "player_id": "p-h-05",
+      "receiver_id": "p-h-09"
+    },
+    "reason": null
+  }
+}

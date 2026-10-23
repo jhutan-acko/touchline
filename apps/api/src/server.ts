@@ -4,10 +4,10 @@
  */
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Effect, Layer, Ref } from "effect"
+import { Effect, Layer, Ref, Stream } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
-import { MatchNotFound, TouchlineRpcs, type MatchSummary } from "@touchline/rpc"
+import { AskNotAvailable, MatchNotFound, TouchlineRpcs, type MatchSummary } from "@touchline/rpc"
 import { makeEvidence } from "./evidence.js"
 import type { LibraryMatch } from "./library.js"
 import { makeOps } from "./ops.js"
@@ -57,7 +57,11 @@ export const handlersLayer = (o: ApiOptions) =>
         StudioAct: ({ session_id, moment_id, action }) => sessions.get(session_id).pipe(Effect.flatMap((s) => studio.act(s, moment_id, action))),
         WatchGraphics: ({ session_id, segment }) => sessions.graphics(session_id, segment),
         GetOps: ({ session_id }) => sessions.get(session_id).pipe(Effect.flatMap((s) => Effect.map(Ref.get(s.playback), (p) => ops.report(s, p.frame)))),
-        GetDecisions: ({ session_id }) => view(session_id).pipe(Effect.map(({ s, v }) => s.match.decisions.filter((d) => d.tick <= v.frame)))
+        GetDecisions: ({ session_id }) => view(session_id).pipe(Effect.map(({ s, v }) => s.match.decisions.filter((d) => d.tick <= v.frame))),
+        // Stubs until the ask service (Task 8).
+        SuggestQuestions: () => Effect.fail(new AskNotAvailable({ reason: "not implemented" })),
+        Ask: () => Stream.empty,
+        GetAskClip: () => Effect.fail(new AskNotAvailable({ reason: "not implemented" }))
       })
     })
   )

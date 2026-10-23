@@ -60,7 +60,7 @@ export type Moment = typeof Moment.Type
  * - event: event `event_id` happened by `at_frame` (and, if `subject` is a player id, by that player).
  * - better_option: at event `event_id` a pass to `receiver_id` was the better option (the decision record's rank 1).
  */
-export const ClaimKind = Schema.Literals(["metric", "score", "minute", "event", "better_option"])
+export const ClaimKind = Schema.Literals(["metric", "score", "minute", "event", "better_option", "what_if"])
 export const Claim = Schema.Struct({
   kind: ClaimKind,
   /** Index of the sentence that states it: 0 is the headline, 1.. the body sentences. */
@@ -167,6 +167,88 @@ export const MomentTrace = Schema.Struct({
 }).annotate({ identifier: "MomentTrace" })
 export type MomentTrace = typeof MomentTrace.Type
 
+/** Pause-and-ask (a viewer's question about the paused frame): the stages the answer goes through. */
+export const AskStageName = Schema.Literals(["question", "analyst", "whatif", "factcheck", "personalise"])
+export const AskVerdict = Schema.Literals(["played_pass_was_best", "better_option_found", "not_verified"])
+export const AskInterventionSpec = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("pass_to"), player_id: Id, receiver_id: Id }),
+  Schema.Struct({ kind: Schema.Literal("move_player"), player_id: Id, to: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }) })
+]).annotate({ identifier: "AskInterventionSpec" })
+export type AskInterventionSpec = typeof AskInterventionSpec.Type
+
+export const AskIntent = Schema.Struct({
+  kind: Schema.Literals(["explain", "what_if", "unsupported"]),
+  subject_id: Schema.NullOr(Id),
+  /** A past pass (in summary.recent) the what-if replays from; null forks at the paused frame. */
+  fork_event_id: Schema.NullOr(Id),
+  /** Non-null iff kind = what_if. */
+  intervention: Schema.NullOr(AskInterventionSpec),
+  /** Non-null iff kind = unsupported; in the viewer's language. */
+  reason: Schema.NullOr(Schema.String)
+}).annotate({ identifier: "AskIntent" })
+export type AskIntent = typeof AskIntent.Type
+
+export const FrameSummary = Schema.Struct({
+  match_id: Id,
+  frame: NonNegInt,
+  clock: Schema.String,
+  ball_holder: Schema.NullOr(Id),
+  side_in_possession: Schema.NullOr(Schema.Literals(["home", "away"])),
+  players: Schema.Array(Schema.Struct({ id: Id, name: Schema.String, side: Schema.Literals(["home", "away"]), role: Schema.String, x: Schema.Finite, y: Schema.Finite })),
+  /** The holder's options, best first (sim-core passOptions), at most 5. */
+  pass_options: Schema.Array(Schema.Struct({ receiver_id: Id, xpass: Schema.Finite, value: Schema.Finite })),
+  /** Opponents within 5 m of the ball holder. */
+  pressers: Schema.Array(Id),
+  /** Events in the 10 s up to and including `frame`, newest first. */
+  recent: Schema.Array(Schema.Struct({ event_id: Id, frame: NonNegInt, type: Schema.String, player_id: Schema.NullOr(Id), receiver_id: Schema.NullOr(Id) })),
+  /** The newest pass by the side in possession (frame ≤ frame) re-scored at its own frame, when a different receiver had a higher value; null otherwise. */
+  missed_option: Schema.NullOr(Schema.Struct({ event_id: Id, passer_id: Id, played_to: Id, better_to: Id }))
+}).annotate({ identifier: "FrameSummary" })
+export type FrameSummary = typeof FrameSummary.Type
+
+export const AskArms = Schema.Struct({ played: NonNegInt, alt: NonNegInt }).annotate({ identifier: "AskArms" })
+export type AskArms = typeof AskArms.Type
+
+export const AskWhatIf = Schema.Struct({
+  intervention: AskInterventionSpec,
+  fork_frame: NonNegInt,
+  verdict: AskVerdict,
+  seeds: NonNegInt,
+  shots: AskArms,
+  goals: AskArms,
+  gain: Schema.Struct({ mean: Schema.Finite, se: Schema.Finite })
+}).annotate({ identifier: "AskWhatIf" })
+export type AskWhatIf = typeof AskWhatIf.Type
+
+/** Step 1 of an ask: classify the viewer's question into an intent. */
+export const AskIntentRequest = Schema.Struct({ kind: Schema.Literal("ask_intent"), question: Schema.String, lang: Lang, summary: FrameSummary }).annotate({ identifier: "AskIntentRequest" })
+
+/** Step 2: answer it, with the what-if the API ran (null for an explain). */
+export const AskAnswerRequest = Schema.Struct({
+  kind: Schema.Literal("ask_answer"),
+  match_id: Id,
+  mcp_url: Schema.String,
+  at_frame: NonNegInt,
+  question: Schema.String,
+  segment: Segment,
+  intent: AskIntent,
+  summary: FrameSummary,
+  what_if: Schema.NullOr(AskWhatIf)
+}).annotate({ identifier: "AskAnswerRequest" })
+
+export const AskStage = Schema.Struct({ stage: AskStageName, status: Schema.String }).annotate({ identifier: "AskStage" })
+export type AskStage = typeof AskStage.Type
+
+export const EvidenceChip = Schema.Struct({ label: Schema.String, value: Schema.String, source: Schema.Literals(["stats", "what_if", "event"]) }).annotate({ identifier: "EvidenceChip" })
+export const AskReply = Schema.Struct({
+  headline: Schema.String,
+  body: Schema.String,
+  chips: Schema.Array(EvidenceChip).check(Schema.isMaxLength(4)),
+  verified: Schema.Boolean,
+  model: Schema.NullOr(Schema.String)
+}).annotate({ identifier: "AskReply" })
+export type AskReply = typeof AskReply.Type
+
 const Base = {
   match_id: Id,
   /** The MCP stats server for this match (Streamable HTTP); the agent service only accepts loopback or allowed hosts. */
@@ -190,13 +272,13 @@ export const RecapRequest = Schema.Struct({
 }).annotate({ identifier: "RecapRequest" })
 
 /** The data part of every A2A message the gateway sends. */
-export const AgentRequest = Schema.Union([SignalsRequest, RecapRequest, ManageRequest]).annotate({ identifier: "AgentRequest" })
+export const AgentRequest = Schema.Union([SignalsRequest, RecapRequest, ManageRequest, AskIntentRequest, AskAnswerRequest]).annotate({ identifier: "AgentRequest" })
 export type AgentRequest = typeof AgentRequest.Type
 /** The requests of a match's commentary timeline (the gateway's batches and recaps). */
 export type MatchRequest = typeof SignalsRequest.Type | typeof RecapRequest.Type
 
 /** A2A artifact names and the contract each one carries. */
-export const ARTIFACTS = { cue: Cue, trace: MomentTrace, recap: Recap, manager: ManagerReply } as const
+export const ARTIFACTS = { cue: Cue, trace: MomentTrace, recap: Recap, manager: ManagerReply, ask_intent: AskIntent, ask_stage: AskStage, ask_reply: AskReply } as const
 
 /** All contracts in one document (the JSON Schema export's root). */
 export const AgentContracts = Schema.Struct({
@@ -210,7 +292,10 @@ export const AgentContracts = Schema.Struct({
   recap: Recap,
   trace: MomentTrace,
   request: AgentRequest,
-  manager_reply: ManagerReply
+  manager_reply: ManagerReply,
+  ask_intent: AskIntent,
+  ask_stage: AskStage,
+  ask_reply: AskReply
 }).annotate({ identifier: "AgentContracts" })
 
 export const decodeCue = Schema.decodeUnknownSync(Cue)

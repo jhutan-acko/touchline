@@ -3,7 +3,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
-import { decodeTick, MatchNotFound, MatchSummary, TouchlineRpcs, WhatIfClip, WhatIfNotAvailable } from "../src/contracts.js"
+import { AskUpdate, decodeTick, MatchNotFound, MatchSummary, TouchlineRpcs, WhatIfClip, WhatIfNotAvailable } from "../src/contracts.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const cue = (JSON.parse(readFileSync(join(root, "packages/schema/fixtures/agents/valid/cue.json"), "utf8")) as { value: unknown }).value
@@ -26,7 +26,7 @@ describe("API contracts", () => {
   })
 
   it("offer the endpoints of spec §5.7", () => {
-    expect([...TouchlineRpcs.requests.keys()].sort()).toEqual(["Control", "GetDecisions", "GetEvidence", "GetMatch", "GetOps", "GetRecap", "GetWhatIf", "ListMatches", "StartSession", "StudioAct", "StudioWatch", "Watch", "WatchGraphics"])
+    expect([...TouchlineRpcs.requests.keys()].sort()).toEqual(["Ask", "Control", "GetAskClip", "GetDecisions", "GetEvidence", "GetMatch", "GetOps", "GetRecap", "GetWhatIf", "ListMatches", "StartSession", "StudioAct", "StudioWatch", "SuggestQuestions", "Watch", "WatchGraphics"])
   })
 
   it("refuse playback speeds out of range", () => {
@@ -50,5 +50,13 @@ describe("API contracts", () => {
     const none = { ...clip, verdict: "played_pass_was_best", better_to: null, variant: null, typical_seed: null, shots: null, goals: null, gain: null }
     expect(Schema.decodeUnknownSync(WhatIfClip)(none)).toEqual(none)
     expect(() => Schema.decodeUnknownSync(WhatIfClip)({ ...clip, verdict: "maybe" })).toThrow()
+  })
+  it("decodes every AskUpdate kind", () => {
+    const updates = [
+      { kind: "stage", stage: { stage: "analyst", status: "Looking at the options" } },
+      { kind: "answer", answer: { headline: "h", body: "b", chips: [], verified: true, model: null, ask_id: "a-1", frame: 40000, clip_id: null, verdict: null, cached: false } },
+      { kind: "failed", reason: "bad_frame", message: "That frame is not available" }
+    ]
+    for (const u of updates) expect(Schema.decodeUnknownSync(AskUpdate)(u)).toEqual(u)
   })
 })

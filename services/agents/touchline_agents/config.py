@@ -13,13 +13,15 @@ REPO = Path(__file__).resolve().parents[3]
 ENV_FILE = REPO / ".env.local"
 
 Provider = Literal["stub", "openai"]
-Tier = Literal["small", "large"]
+Tier = Literal["small", "large", "fast"]
 Effort = Literal["low", "medium", "high"]
 
 # Both tiers default to the same model; set TOUCHLINE_MODEL_SMALL / TOUCHLINE_MODEL_LARGE to split them.
 DEFAULT_MODEL = "gpt-6.1-sol"
 # gpt-6.1-sol rejects "none" and "minimal"; "low" is its fastest (about 5 s for a short structured answer, 2026-10-07).
 DEFAULT_EFFORT: Effort = "low"
+# The fast tier (pause-and-ask question parsing and personalising) defaults to a small, quick model.
+DEFAULT_FAST_MODEL = "gpt-5.4-mini"
 
 # Seconds each agent may take before its deterministic fallback is used (spec §6). The whole moment must fit the
 # gateway's 4 s budget when live; recorded runs (cached replay) can raise these with TOUCHLINE_TIMEOUT_SCALE.
@@ -33,6 +35,10 @@ TIMEOUTS_S: Mapping[str, float] = {
     "judge": 20.0,
     # The manager decides ahead of time (Plan 4b), so a slow model only slows match generation.
     "manager": 30.0,
+    # Pause-and-ask: a viewer waits on these, so they are short.
+    "question": 4.0,
+    "ask_analyst": 8.0,
+    "ask_personalizer": 4.0,
 }
 
 
@@ -49,6 +55,7 @@ class Settings:
     mcp_allowed_hosts: frozenset[str]
     checkpoint_dir: Path | None
     reasoning_effort: Effort = DEFAULT_EFFORT
+    fast_model: str = DEFAULT_FAST_MODEL
     # Seconds the service may spend on one request before every remaining agent uses its fallback (live runs).
     request_budget_s: float | None = None
     # Kept out of repr so the key never reaches a log line or a test report.
@@ -64,6 +71,8 @@ class Settings:
         return (tokens_in * p_in + tokens_out * p_out) / 1_000_000
 
     def model(self, tier: Tier) -> str:
+        if tier == "fast":
+            return self.fast_model
         return self.small_model if tier == "small" else self.large_model
 
     def timeout(self, agent: str) -> float:
@@ -131,6 +140,7 @@ def load_settings(env: Mapping[str, str] | None = None, env_file: Path | None = 
         mcp_allowed_hosts=frozenset(h.strip() for h in hosts.split(",") if h.strip()),
         checkpoint_dir=Path(cp) if cp else None,
         reasoning_effort=effort,
+        fast_model=merged.get("TOUCHLINE_MODEL_FAST", DEFAULT_FAST_MODEL),
         request_budget_s=budget_s,
         openai_api_key=key,
         price_usd_per_mtok=price_pair,

@@ -11,6 +11,11 @@ def test_defaults_to_the_stub_with_one_model_for_both_tiers():
     assert s.mcp_allowed_hosts == {"127.0.0.1", "localhost", "::1"}
 
 
+def test_fast_tier_model():
+    assert load_settings({}, env_file=None).model("fast") == "gpt-5.4-mini"
+    assert load_settings({"TOUCHLINE_MODEL_FAST": "tiny-1"}, env_file=None).model("fast") == "tiny-1"
+
+
 def test_openai_needs_a_key():
     with pytest.raises(SettingsError, match="OPENAI_API_KEY"):
         load_settings({"TOUCHLINE_LLM": "openai"}, env_file=None)

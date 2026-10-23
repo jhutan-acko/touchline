@@ -1,0 +1,71 @@
+{
+  "contract": "request",
+  "value": {
+    "kind": "ask_intent",
+    "question": "What if he had passed to the striker?",
+    "lang": "en",
+    "summary": {
+      "match_id": "m042",
+      "frame": 40000,
+      "clock": "66:40",
+      "ball_holder": "p-h-08",
+      "side_in_possession": "home",
+      "players": [
+        {
+          "id": "p-h-08",
+          "name": "Marek Voss",
+          "side": "home",
+          "role": "CM",
+          "x": 12.5,
+          "y": -3.0
+        },
+        {
+          "id": "p-h-09",
+          "name": "Teo Arden",
+          "side": "home",
+          "role": "ST",
+          "x": 30.0,
+          "y": 4.5
+        },
+        {
+          "id": "p-a-04",
+          "name": "Luis Brandt",
+          "side": "away",
+          "role": "CB",
+          "x": 28.0,
+          "y": 2.0
+        }
+      ],
+      "pass_options": [
+        {
+          "receiver_id": "p-h-09",
+          "xpass": 0.62,
+          "value": 0.071
+        },
+        {
+          "receiver_id": "p-h-05",
+          "xpass": 0.91,
+          "value": 0.032
+        }
+      ],
+      "pressers": [
+        "p-a-06"
+      ],
+      "recent": [
+        {
+          "event_id": "e-3101",
+          "frame": 39880,
+          "type": "pass",
+          "player_id": "p-h-05",
+          "receiver_id": "p-h-08"
+        }
+      ],
+      "missed_option": {
+        "event_id": "e-3101",
+        "passer_id": "p-h-05",
+        "played_to": "p-h-08",
+        "better_to": "p-h-09"
+      }
+    }
+  }
+}

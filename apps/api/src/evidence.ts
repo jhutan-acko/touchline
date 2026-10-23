@@ -33,7 +33,7 @@ const jsonl = <A>(path: string, decode: (u: unknown) => A): A[] =>
 
 const label = (c: Claim): string => {
   if (c.kind === "metric" && c.metric_id) return METRICS.find((m) => m.id === c.metric_id)?.name ?? c.metric_id
-  return { score: "Score", minute: "Minute", event: "Event", better_option: "Better option", metric: "Metric" }[c.kind]
+  return { score: "Score", minute: "Minute", event: "Event", better_option: "Better option", what_if: "What if", metric: "Metric" }[c.kind]
 }
 
 /** What re-simulation has said about passes so far; the what-if module answers it. */

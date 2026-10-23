@@ -32,7 +32,7 @@ def test_invalid_fixture_rejected(name, fixture):
 
 def test_requests_parse_by_kind():
     kinds = sorted(c.parse_request(f["value"]).kind for _, f in load("valid") if f["contract"] == "request")
-    assert kinds == ["manage", "manage", "recap", "signals"]
+    assert kinds == ["ask_answer", "ask_intent", "manage", "manage", "recap", "signals"]
 
 
 def test_segment_key_matches_typescript():
