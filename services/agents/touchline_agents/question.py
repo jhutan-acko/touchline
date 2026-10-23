@@ -78,12 +78,14 @@ def validate_intent(intent: AskIntent, summary: FrameSummary, lang: str) -> AskI
     ids = [i for i in (intent.subject_id, getattr(iv, "player_id", None), getattr(iv, "receiver_id", None)) if i is not None]
     for i in ids:
         if i not in side:
-            return _unsupported("unknown_player", lang, name=i)
+            return _unsupported("not_understood", lang, intent.subject_id if intent.subject_id in side else None)
     if intent.fork_event_id is not None and intent.fork_event_id not in {e.event_id for e in summary.recent}:
         return _unsupported("unknown_event", lang, intent.subject_id)
     if intent.kind == "what_if":
         if not isinstance(iv, AskInterventionSpec1):
             return _unsupported("unsupported_action", lang, intent.subject_id)  # a move_player what-if is a run
+        if summary.side_in_possession is not None and side[iv.player_id] != summary.side_in_possession:
+            return _unsupported("other_side", lang, intent.subject_id)
         if iv.receiver_id == iv.player_id or side[iv.receiver_id] != side[iv.player_id]:
             return _unsupported("other_side", lang, intent.subject_id)
     elif intent.kind == "explain" and intent.subject_id is None:
@@ -94,7 +96,7 @@ def validate_intent(intent: AskIntent, summary: FrameSummary, lang: str) -> AskI
 _WHAT_IF = ("what if", "qué pasa si", "que pasa si", "y si", "अगर")
 _WHY_NOT = ("why didn't", "why did not", "why didnt", "por qué no", "por que no", "क्यों नहीं")
 _PASS = re.compile(r"\bpass|\bpas[eóo]|\bpasar|पास")
-_ACTION = re.compile(r"\bshot|\bshoot|\bshout|\bdribbl|\brun\b|\bran\b|\btir|\bdispar|\bremat|\bregat|\bcorr|शॉट|शूट|ड्रिबल|दौड़|भाग")
+_ACTION = re.compile(r"\bshot|\bshoot|\bdribbl|\brun\b|\bran\b|\btir|\bdispar|\bremat|\bregat|\bcorr|शॉट|शूट|ड्रिबल|दौड़|भाग")
 _CAPITAL = re.compile(r"(?<![\w'’])([A-ZÁÉÍÓÚÑÜ][\wÁÉÍÓÚÑÜáéíóúñü'’-]+)")
 _SENTENCE_START = re.compile(r"(?:^|[.!?¿¡]\s*)\s*$")
 
@@ -113,6 +115,7 @@ def _names(summary: FrameSummary, text: str) -> list[str]:
 
 def _unknown_name(summary: FrameSummary, text: str) -> str | None:
     """A capitalised word, not opening a sentence, that is no player's name: someone who is not on the pitch."""
+    text = re.sub(r"['’]s?\b", "", text)  # "Okafor's" names Okafor
     known = {t.casefold() for p in summary.players for t in re.split(r"[\s-]+", p.name)}
     for m in _CAPITAL.finditer(text):
         w = m.group(1)
@@ -132,7 +135,6 @@ def rule_intent(req: AskIntentRequest) -> AskIntent:
     holder = s.ball_holder
     if (what_if or why_not) and (unknown := _unknown_name(s, text)):
         return _unsupported("unknown_player", lang, name=unknown)
-    side = {p.id: p.side for p in s.players}
     if what_if or why_not:
         if len(named) >= 2:
             player, receiver = named[0], named[1]
@@ -156,11 +158,10 @@ def rule_intent(req: AskIntentRequest) -> AskIntent:
                 s, lang)
         if _ACTION.search(low):
             return _unsupported("unsupported_action", lang, player)
-        if what_if or why_not:
-            if player is None:
-                return _unsupported("no_subject", lang)
-            if what_if and player in side:
-                return _unsupported("not_understood", lang, player)
+        if player is None:
+            return _unsupported("no_subject", lang)
+        if what_if:
+            return _unsupported("not_understood", lang, player)
     subject = named[0] if named else holder
     if subject is None:
         return _unsupported("no_subject", lang)

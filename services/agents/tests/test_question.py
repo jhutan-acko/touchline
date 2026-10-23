@@ -77,3 +77,26 @@ async def test_parse_falls_back_on_garbage():
     r = req("What if Okafor passed to Diallo?")
     assert await QuestionAgent(StubChatClient("garbage"), s).parse(r) == rule_intent(r)
     assert await QuestionAgent(StubChatClient("ok"), s).parse(r) == rule_intent(r)
+
+
+def test_possessive_names_are_not_unknown_players():
+    for q in ("Why didn't Okafor's pass go to Diallo?", "What if Okafor's pass went to Diallo?"):
+        i = rule_intent(req(q))
+        assert i.kind == "what_if" and (i.intervention.player_id, i.intervention.receiver_id) == ("p-h-08", "p-h-09"), q
+
+
+def test_invalid_id_reason_does_not_show_the_id():
+    bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-x-99", "fork_event_id": None, "reason": None,
+                                    "intervention": {"kind": "pass_to", "player_id": "p-x-99", "receiver_id": "p-h-09"}})
+    i = validate_intent(bad, summary(), "en")
+    assert i.kind == "unsupported" and i.reason and "p-x-99" not in i.reason
+
+
+def test_passer_must_be_on_the_side_in_possession():
+    bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-a-04", "fork_event_id": None, "reason": None,
+                                    "intervention": {"kind": "pass_to", "player_id": "p-a-04", "receiver_id": "p-h-09"}})
+    assert validate_intent(bad, summary(), "en").kind == "unsupported"
+    away = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-08", "fork_event_id": None, "reason": None,
+                                     "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-09"}})
+    assert validate_intent(away, summary(side_in_possession="away"), "en").kind == "unsupported"
+    assert validate_intent(away, summary(side_in_possession=None), "en").kind == "what_if"
