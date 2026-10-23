@@ -272,6 +272,9 @@ describe("SH2: the header seam (step)", () => {
 
 // In-match tests use the calibrated file plus the rule on, corners and free-kick deliveries included, at the shipped
 // header values (b0 0.5, set by Task 4 phase B).
+// setPieces stays pinned at 1 here although the file ships 0 (P6 pre-merge fix 1): this is SH2's mechanism check, and
+// with set-piece deliveries off the 8 seeds give too few headers to judge it (2 at dt 0.1, under the >= 8 non-vacuity
+// floor; both dt fail). The open-play header share is a real target, judged in the reports and shots-targets.test.ts.
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const calibrated = paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8")))
 const matchOn: Params = {

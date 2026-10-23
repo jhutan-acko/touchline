@@ -2128,6 +2128,121 @@ These did not move: `xg_b0` (−3.004), `box_intensity` (1), `decision_scale` (0
 - The stats and manager situation goldens were regenerated.
 - `pnpm library` was not rebuilt (it needs the agent service and the LLM).
 
+### Pre-merge fixes (2026-10-21)
+
+The user approved three fixes before the merge (2026-10-21). The branch was then recalibrated, re-baselined and re-pinned.
+Commits on `p6-task8`: `29daa82`, `93b7ffc`, `0b37516`, `fb1432b`, then the reports, re-picks and this section.
+
+**The fixes:**
+1. **Set-piece contacts off.** `firstTime.setPieces` is 0. `contactPlan` gates both contact rules on it, so set-piece
+   first-time finishes and set-piece headers are off together (the user's choice; a comment at the gate says so). Q1 (a) is
+   reversed.
+2. **`marking_weight` range 0.75–1** (was 0–1). The P6 tuner had moved it to 0.25. A knob's identity value must sit inside
+   its range, so `DEFAULT_PARAMS.marking.weight` moved 0.5 → 1.
+3. **One xG.** The stats engine (and through it the analyst agent, the manager situation and the advisor) now computes the
+   simulator's xG: `xgCoefs(params)` from the parameter file the matches run with (the DFL refit under `shotModel.rule` 1),
+   with sim-core's `xgFrom`, `shotLineCount` and `directFkXg`. Features: distance (m), goal-mouth angle, header, outfield
+   defenders within 1.5 m of the line to the goal centre (keepers by role). A shot after control is measured in the frame
+   before its tick, a first-time shot or header in its own frame. `stats-models.json` (stats-models-2) keeps only the xG
+   feature names and the penalty rate; xPass is unchanged. Python follows (`stats_models.py`, `xt.py`); `xt-grid.json` is
+   not refit.
+   - Tests: the stats xG equals `xgOf` to 1e-12 on 400 placed shots; it equals the recorded `attrs.xg` within 0.002 on every
+     shot of two matches (`attrs.xg` is rounded to 0.001 and frame positions to 0.01 m; worst 0.00136). The TypeScript and
+     Python feature parity test passes, shots included.
+
+**Calibration.** `pnpm calibrate --from` the P6 file, 24 matches, 1 round, 90 evals: 21.63 → 18.08.
+- The tuned file failed the gate on free space: `{"loss":22.68,"maxDrift":0}`, free space z +3.65, line height −2.70.
+- The controller ruled a one-change gate probe before any re-calibration (16 gate seeds; the probe reproduces the gate
+  exactly on the tuned file):
+
+  | Probe | Loss | Within 1 / 2 SD | Physics inside | Largest \|z\| | Free space | Line height | Passes |
+  |---|---|---|---|---|---|---|---|
+  | Tuned (`pos_out_shift` −3, `marking_weight` 1) | 22.68 | 12 / 19 | 6 | free space 3.65 | +3.65 | −2.70 | no |
+  | (a) `pos_out_shift` 0 | 23.45 | 13 / 18 | 5 | completion 2.34 | +2.12 | −1.17 | yes |
+  | **(b) (a) and `marking_weight` 0.75** | **20.95** | 14 / 18 | 5 | free space 2.19 | +2.19 | −1.60 | **yes, ships** |
+  | (c) pre-recalibration knobs, `marking_weight` 1, `setPieces` 0 | 22.30 | 11 / 18 | 6 | completion 2.22 | +2.20 | −1.20 | yes |
+
+- **Knobs that moved** (tuner, kept): `long_shift` 0 → 0.5, `reach_margin` 0.675 → 0.625, `yellow_per_foul` 0.1 → 0.15,
+  `loose_share` 0.3 → 0.4, `deflect_behind` 1 → 1.25, `save_b0` 1.55 → 1.8, `aerial_contest` 2.5 → 2.25, `press_rate`
+  1 → 0.875, **`gk_long` 2 → 1.5 (P5 knob, now on its minimum)**. Set after the tuner (probe b): `pos_out_shift` 0 (the
+  tuner's −3 dropped), `marking_weight` 0.75 (Task 8: 0.25). Not moved: `xg_b0` (−3.004), `shot_xg_slope` 3.5,
+  `shot_bias` −0.3, `fk_shot` 4, `aim_noise` 1.15, every other P5 knob.
+- **On their bounds:** `decision_scale` 0.8, `tackle_rate` 0.1, `clear_to_touch` 0, `gk_long` 1.5 (minimum);
+  `marking_weight` 0.75 (new minimum); `switch_shift` 2, `foul_per_tackle` 0.6, `support_space` 20, `counter_join` 1.25
+  (maximum). Off a bound now: `yellow_per_foul`, `aerial_contest`.
+
+**Gate: MET.** `{"loss":20.95,"maxDrift":0}` after re-baselining, physics 5 of 13 inside (`speed_GK`, `speed_DEF`,
+`speed_FWD`, `max_speed`, `hsr25`), 14 / 18 within 1 / 2 SD, every gated |z| < 3. Spatial z: width in possession +1.07, out
++0.10, defending length −1.88, line height −1.60, ball pressure +1.08, support −0.05, free space +2.19. Largest scalar z:
+completion −2.12, in-play −1.82, distance −1.71.
+
+**Re-measured** (64 matches unless noted; Task 8 → pre-merge fixes):
+
+| Row | Real | Task 8 | Now | Status |
+|---|---|---|---|---|
+| Corner shots within 10 s, per 100 | 32.1 | 53.1 | **36.7** | **MET** (was NOT MET) |
+| Nearest outfield defender at the shot, median (m) | 2.04 | 3.47 | 3.40 | NOT MET |
+| Conversion, nearest defender < 1.5 m | 0.118 | 0.057 | **0.099** | **MET** (was NOT MET) |
+| Conversion, ≥ 3 m | 0.032 | 0.150 | 0.124 | NOT MET |
+| Tight minus open | 0.086 | −0.093 | −0.025 | NOT MET (closer) |
+| Clear lanes per open-play pass | 4.95 | 5.83 | **5.34** | **MET** (was NOT MET) |
+| Losers within 5 m in 3 s, per loss | 2.29 | 1.96 | **2.06** | **MET** (was NOT MET) |
+| Losses with 3 or more losers within 5 m | 0.430 | 0.287 | 0.334 | NOT MET |
+| Goals, match table (shot goals) | 2.71 | 2.81 (z +0.08) | 2.89 (z +0.14) | MET (z) |
+| Goals, goal events (own goals included) | 2.71 | 3.14 | 3.23 | NOT MET (band 2.40–3.00) |
+| Shots / open-play shots per match | 24.4 / 17.1 | 26.4 / 18.3 | 24.2 / 17.3 | MET / MET |
+| First-time share of open-play shots | 0.410 | 0.310 | 0.297 | NOT MET (open play only, as expected) |
+| First-time conversion | 0.122 | 0.096 | 0.067 | **NOT MET** (was MET) |
+| Header share of open-play shots | 0.140 | 0.015 | 0.012 | NOT MET |
+| Open-play conversion | 0.092 | 0.118 | 0.112 | NOT MET |
+| xG per open-play shot (refit scale) | 0.101 | 0.170 | 0.170 | — |
+| Direct free-kick shot share | 0.36 | 0.39 | 0.33 | MET |
+| Long goal kicks completed | 0.49 | 0.68 | 0.64 | NOT MET |
+| Goal-kick shots against, per 100 | 0.9 | 2.7 | 4.4 | **NOT MET** (was MET; `gk_long` 1.5) |
+| Press episodes per 90 | 405 | 406 | 485 | **NOT MET** (was MET; `press_rate` 0.875, tighter marking) |
+| Keeper open-play completion | 0.779 | 0.842 | 0.783 | **MET** (was NOT MET) |
+| Fouls per match | 22.9 | 19.1 | 18.8 | NOT MET (just under the band) |
+
+- **C1: NOT MET.** 12 of 19 within 1 SD, 18 within 2 SD (Task 8: 14 / 18). Beyond 2 SD: completion −2.28 only.
+- **C2: NOT MET** (was MET). Free kicks +0.94, goals −0.02, on target −0.63, but fouls −1.00, on the edge.
+- **C3: NOT MET.** 0.203 (Task 8 0.209; needs ≤ 0.18).
+- **C4: MET.** Width in +0.91, out +0.36, defending length −2.05, line height −1.19, ball pressure +1.05, support −0.04,
+  free space +1.94 (16-match report).
+
+**Script nudges** (scripts only, bounds unchanged; spec §5.1.1 precedent): `pressSurge` 20 → 30 (the stats pressure-shift
+signal fired in 4 of 6 seeds; 5 at 30), `heroicsSave` 1.5 → 1.75 (heroics let in 0.2258 against the bound 0.2257; 0.170 at
+1.75), `goalRatePerMin` 0.016 → 0.02 (`late_comeback` reached its target unforced in 8 of 10 seeds; 10 at 0.02).
+
+**Tests changed** (no bound widened):
+- Re-picked by each file's rule: agents `ERROR_SEED` 2 → 7 and `SEED` 8 (unchanged after the search), gateway e2e 2 → 7,
+  stats golden 4245 → 4246 (renamed `late-comeback-4246.json`), carriers parity 4246 → 4243, manager `run` 13 → 11,
+  advisor better-pass case pass 3 → 4, API library fixture 6 → 3, `whatif` forced window seed 6 → 1.
+- Goldens regenerated: stats (3-3, 75 signals; xG now the simulator's) and the manager situation (xG 0.62 / 1.67 for 5 / 12
+  shots, where the old model gave 0.76 / 0.45 for 8 / 8).
+- Flipped to MET (`it.fails` → `it`): duels-targets tackle win 0.489, aerial duels 40.25, losers in 3 s 2.052;
+  shots-targets first-time conversion minus the rest +0.064; wide own goals 3 over 16 seeds (on the bound); positioning
+  keeper off his line 3.16 m.
+- Flipped to NOT MET (`it` → `it.fails`; DEFAULT_PARAMS real-target cases moved by the marking default): positioning
+  build-up players deep, median 8 (≤ 6); deadball throw-in dead time 17.35 s (11–16; the shipped file reads 14.4 s, MET).
+- Pinned: `aerial` in-match counts at `marking.weight` 0.5 (the default they were measured on), `offball` crowding with P6
+  off (F4 precedent). `header.test`'s in-match case keeps `setPieces` 1: with the shipped 0 the 8 seeds give 2 headers,
+  under its non-vacuity floor of 8.
+- `record.test`: a lay-off's action is short_pass (the first-time choice it records, ruling F21), whatever kind the pass
+  classifies as; seed 1 now has a lay-off played backwards.
+- `shots-targets` (test teams): first-time share 0.169, header 0.014, tight minus open −0.091, goals 3.875, late drop
+  −0.021, all still NOT MET.
+
+**Test lines.** Full suite, `pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism`: nine packages passed in
+the full run (stats 55, manager 55, sim 52, advisor 20, agent-gateway 20, web 101, league 7, rpc 9, schema 11); the Mac slept
+mid-run (lid closed, on battery), so api, calibrate, mcp-stats and sim-core failed only on timeouts and were re-run once,
+sequentially: api 74 passed, calibrate 44 passed, mcp-stats 18 passed, sim-core 639 passed and 16 expected fail (655).
+`pnpm typecheck` 13 of 13. Analytics pytest 165 passed; agents pytest 175 passed, 7 deselected. Gate 1 passed,
+`{"loss":20.95,"maxDrift":0}`.
+
+**Concerns carried:** goal-kick shots against and press episodes turned NOT MET; first-time conversion turned NOT MET on 64
+matches (MET on the test teams); C2 lost fouls by 0.004 of an SD; `xt-grid.json` still rests on the old goal logistic.
+C5 stays PENDING on the rebuilt set.
+
 ### P6 merge checklist
 
 - Merge to `main` only after the user has seen these results and given the C5 verdict. Record the verdict here and in the

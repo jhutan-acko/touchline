@@ -70,7 +70,10 @@ describe("on-ball records", () => {
     for (const e of passes) {
       const opts = e.attrs.options as ReadonlyArray<OptionRecord>
       expect(opts.some((o) => o.receiver_id === e.attrs.intended_receiver_id && o.value === e.attrs.chosen_value), e.id).toBe(true)
-      const action = e.attrs.kind === "set_piece" ? null : KIND_TO_ACTION[e.attrs.kind as keyof typeof KIND_TO_ACTION]
+      // A lay-off (first_time) records the first-time choice, where it is the short_pass option whatever kind the pass
+      // classifies as (a lay-off played backwards is a "back" pass; P6 Task 3, ruling F21; seed 1 has one since the
+      // pre-merge fixes).
+      const action = e.attrs.first_time === true ? "short_pass" : e.attrs.kind === "set_piece" ? null : KIND_TO_ACTION[e.attrs.kind as keyof typeof KIND_TO_ACTION]
       const probs = e.attrs.action_probs as Record<string, number>
       if (action) expect(action in probs || e.attrs.fallback === true, e.id).toBe(true)
     }

@@ -101,8 +101,9 @@ describe("better option explainer", () => {
   })
 
   it("plays every alternative out against the pass played and reports a better one only when it is clearly better", () => {
-    // Pass 3: the first from 3 on where the case below holds (P5 Task 14 re-pick; it was pass 15 in P4, pass 3 since P3).
-    const x = explainPass(session, passes()[3]!.id, xt, { seeds: 12, horizonS: 10 })
+    // Pass 4: the first from 3 on where the case below holds (P6 pre-merge fixes re-pick; pass 3 from P3 to P6 Task 8, pass
+    // 15 in P4).
+    const x = explainPass(session, passes()[4]!.id, xt, { seeds: 12, horizonS: 10 })
     expect(x.verdict).not.toBe("not_verified")
     for (const o of x.options) if (o.chosen) expect(o.simulated).toBeNull()
     const simulated = x.options.filter((o) => o.simulated)
@@ -114,7 +115,7 @@ describe("better option explainer", () => {
     expect(simulated.some((o) => o.simulated!.mean > 2 * o.simulated!.se && o.simulated!.mean > 0 && !clearlyBetter(o.simulated!, 12, simulated.length))).toBe(true)
     expect(x.verdict).toBe(clearly.length ? "better_option_found" : "played_pass_was_best")
     if (x.better) expect(x.better.simulated!.mean).toBe(Math.max(...clearly.map((o) => o.simulated!.mean)))
-    expect(explainPass(session, passes()[3]!.id, xt, { seeds: 12, horizonS: 10 })).toEqual(x)
+    expect(explainPass(session, passes()[4]!.id, xt, { seeds: 12, horizonS: 10 })).toEqual(x)
   })
 
   it("refuses an event that is not a pass", () => {

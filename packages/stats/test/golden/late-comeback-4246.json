@@ -1,0 +1,338 @@
+{
+ "score": {
+  "home": 3,
+  "away": 3
+ },
+ "metrics": {
+  "pass.dist|eastvale": 10.458678,
+  "pass.dist|ironmoor": 10.899018,
+  "pass.acc|eastvale": 0.707207,
+  "pass.acc|ironmoor": 0.708333,
+  "pass.xp|eastvale": 0.812693,
+  "pass.xp|ironmoor": 0.812068,
+  "ball.speed|match": 29.355456,
+  "shot.speed|eastvale": 90.162891,
+  "shot.speed|ironmoor": 94.240605,
+  "plyr.dist|eastvale": 99977.120126,
+  "plyr.dist|ironmoor": 100488.518013,
+  "shot.xg|eastvale": 1.510328,
+  "shot.xg|ironmoor": 0.644397,
+  "team.mom|eastvale": 0.583847,
+  "team.mom|ironmoor": 0.416153,
+  "team.press|eastvale": 0.483871,
+  "team.press|ironmoor": 0.636364,
+  "ppda|eastvale": 2.54717,
+  "ppda|ironmoor": 2.180124,
+  "tilt|eastvale": 0.523364,
+  "tilt|ironmoor": 0.476636,
+  "game.chaos|match": 0.745793,
+  "act.xt|eastvale": 0.654308,
+  "act.xt|ironmoor": 0.592921,
+  "pitch.ctrl|eastvale": 0.50439,
+  "pitch.ctrl|ironmoor": 0.49561,
+  "team.poss|eastvale": 0.459862,
+  "team.poss|ironmoor": 0.508502
+ },
+ "signals": [
+  [
+   "golden-speed_alert-727-p-iro-05",
+   31.4
+  ],
+  [
+   "golden-pressure_shift-3100-ironmoor",
+   0.526
+  ],
+  [
+   "golden-momentum_swing-3300-eastvale",
+   0.569
+  ],
+  [
+   "golden-costly_error-3553-p-iro-05",
+   0.1
+  ],
+  [
+   "golden-difficult_pass_completed-3705-p-iro-01",
+   0.371
+  ],
+  [
+   "golden-speed_alert-5170-p-evu-03",
+   30
+  ],
+  [
+   "golden-costly_error-5673-p-evu-07",
+   0.024
+  ],
+  [
+   "golden-goal-5673-p-iro-10",
+   0.024
+  ],
+  [
+   "golden-player_milestone-6781-p-iro-11",
+   null
+  ],
+  [
+   "golden-speed_alert-6843-p-evu-08",
+   31.8
+  ],
+  [
+   "golden-speed_alert-6849-p-evu-02",
+   30.7
+  ],
+  [
+   "golden-speed_alert-6849-p-iro-11",
+   30.4
+  ],
+  [
+   "golden-speed_alert-6850-p-iro-05",
+   31.9
+  ],
+  [
+   "golden-difficult_pass_completed-7413-p-iro-01",
+   0.302
+  ],
+  [
+   "golden-pressure_shift-8400-eastvale",
+   0.5
+  ],
+  [
+   "golden-pressure_shift-9000-ironmoor",
+   0.538
+  ],
+  [
+   "golden-speed_alert-11254-p-iro-09",
+   30.2
+  ],
+  [
+   "golden-speed_alert-11321-p-evu-11",
+   30.7
+  ],
+  [
+   "golden-player_milestone-11492-p-iro-04",
+   null
+  ],
+  [
+   "golden-difficult_pass_completed-11544-p-iro-04",
+   0.509
+  ],
+  [
+   "golden-speed_alert-12727-p-evu-05",
+   30.5
+  ],
+  [
+   "golden-player_milestone-12793-p-evu-07",
+   null
+  ],
+  [
+   "golden-goal-15914-p-iro-07",
+   0.038
+  ],
+  [
+   "golden-speed_alert-17695-p-iro-02",
+   32.6
+  ],
+  [
+   "golden-speed_alert-17699-p-evu-10",
+   34.9
+  ],
+  [
+   "golden-speed_alert-17704-p-evu-04",
+   32.9
+  ],
+  [
+   "golden-speed_alert-17704-p-iro-09",
+   35.1
+  ],
+  [
+   "golden-card-18028-p-iro-09",
+   null
+  ],
+  [
+   "golden-player_milestone-19414-p-evu-03",
+   null
+  ],
+  [
+   "golden-speed_alert-20411-p-evu-05",
+   32.2
+  ],
+  [
+   "golden-player_milestone-20441-p-iro-08",
+   null
+  ],
+  [
+   "golden-player_milestone-20461-p-evu-11",
+   null
+  ],
+  [
+   "golden-pressure_shift-20500-eastvale",
+   0.565
+  ],
+  [
+   "golden-card-20626-p-iro-03",
+   null
+  ],
+  [
+   "golden-pressure_shift-21000-ironmoor",
+   0.531
+  ],
+  [
+   "golden-player_milestone-22691-p-iro-05",
+   null
+  ],
+  [
+   "golden-momentum_swing-22700-eastvale",
+   0.69
+  ],
+  [
+   "golden-speed_alert-22765-p-iro-07",
+   30.3
+  ],
+  [
+   "golden-card-22992-p-iro-08",
+   null
+  ],
+  [
+   "golden-difficult_pass_completed-25960-p-evu-08",
+   0.549
+  ],
+  [
+   "golden-pressure_shift-26500-eastvale",
+   0.525
+  ],
+  [
+   "golden-player_milestone-26984-p-evu-06",
+   null
+  ],
+  [
+   "golden-difficult_pass_completed-27036-p-evu-03",
+   0.463
+  ],
+  [
+   "golden-momentum_swing-27500-ironmoor",
+   0.557
+  ],
+  [
+   "golden-pressure_shift-27500-ironmoor",
+   0.51
+  ],
+  [
+   "golden-player_milestone-29788-p-iro-09",
+   null
+  ],
+  [
+   "golden-player_milestone-29890-p-iro-06",
+   null
+  ],
+  [
+   "golden-difficult_pass_completed-29905-p-iro-06",
+   0.458
+  ],
+  [
+   "golden-chaos_spike-32000-match",
+   0.709
+  ],
+  [
+   "golden-pressure_shift-32000-ironmoor",
+   0.527
+  ],
+  [
+   "golden-player_milestone-36260-p-evu-08",
+   null
+  ],
+  [
+   "golden-difficult_pass_completed-36624-p-evu-09",
+   0.541
+  ],
+  [
+   "golden-card-38092-p-iro-07",
+   null
+  ],
+  [
+   "golden-player_milestone-38206-p-evu-09",
+   null
+  ],
+  [
+   "golden-player_milestone-38268-p-iro-02",
+   null
+  ],
+  [
+   "golden-pressure_shift-38700-eastvale",
+   0.509
+  ],
+  [
+   "golden-pressure_shift-38800-ironmoor",
+   0.491
+  ],
+  [
+   "golden-goal-39351-p-iro-03",
+   0.381
+  ],
+  [
+   "golden-momentum_swing-41200-ironmoor",
+   0.688
+  ],
+  [
+   "golden-pressure_shift-41900-eastvale",
+   0.658
+  ],
+  [
+   "golden-pressure_shift-42700-ironmoor",
+   0.6
+  ],
+  [
+   "golden-card-43982-p-evu-08",
+   null
+  ],
+  [
+   "golden-goal-44740-p-evu-07",
+   0.034
+  ],
+  [
+   "golden-momentum_swing-45500-eastvale",
+   0.566
+  ],
+  [
+   "golden-difficult_pass_completed-48726-p-iro-01",
+   0.4
+  ],
+  [
+   "golden-goal-49362-p-evu-19",
+   0.056
+  ],
+  [
+   "golden-momentum_swing-50100-eastvale",
+   0.833
+  ],
+  [
+   "golden-player_milestone-51363-p-iro-10",
+   null
+  ],
+  [
+   "golden-substitution_impact-51700-p-evu-18",
+   0.386
+  ],
+  [
+   "golden-goal-52249-p-evu-07",
+   0.147
+  ],
+  [
+   "golden-player_milestone-52249-p-evu-07",
+   null
+  ],
+  [
+   "golden-chaos_spike-54000-match",
+   0.704
+  ],
+  [
+   "golden-pressure_shift-54300-ironmoor",
+   0.689
+  ],
+  [
+   "golden-substitution_impact-54300-p-evu-17",
+   0.293
+  ],
+  [
+   "golden-distance_milestone-54400-p-iro-06",
+   10000
+  ]
+ ]
+}

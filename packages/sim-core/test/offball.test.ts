@@ -9,6 +9,8 @@ const p5Off = (p: Params): Params => ({
   keeperRestarts: { ...p.keeperRestarts, rule: 0 }, directFk: { ...p.directFk, rule: 0 }, roleMoves: { ...p.roleMoves, runRule: 0, rotateRule: 0 },
   marking: { ...p.marking, rule: 0, landingRule: 0 }, transition: { ...p.transition, pauseRule: 0 }, release: { ...p.release, freeRule: 0 }
 })
+/** Every P6 rule off (the P6 pre-merge fixes' pin, F4 precedent). */
+const p6Off = (p: Params): Params => ({ ...p, firstTime: { ...p.firstTime, rule: 0 }, header: { ...p.header, rule: 0 }, saveGeo: { ...p.saveGeo, rule: 0 }, execFatigue: { ...p.execFatigue, rule: 0 }, shotModel: { ...p.shotModel, rule: 0 } })
 /** Every P4 behaviour off (rules 0, no release cap): the play this file's whole-match margins were measured with (F4). */
 const p4Off = (p: Params): Params => ({
   ...p,
@@ -296,7 +298,9 @@ describe("support rule 1 (P3 Task 10d): come short when pressed, otherwise keep 
     // On the shipped defaults (P4 final review: the P4-off pin was needed only while zonal marking was on, which left
     // spacing short in one side-half, away second half 1.26 against 0.85 x 1.36; marking ships off). P5 Task 14 switched
     // zonal marking on with the rest of P5, which brings that back (home first half 1.22 against 1.18), so P5 is pinned off.
-    const base = p5Off(DEFAULT_PARAMS)
+    // P6 is pinned off too since the P6 pre-merge fixes (marking default 1, set-piece contacts off): home second half 1.22
+    // against 1.09 with P6 on, 1.25 against 1.18 with the old marking weight 0.5; it passes with P6 off.
+    const base = p6Off(p5Off(DEFAULT_PARAMS))
     const on = crowd(base)
     const old = crowd({ ...base, support: { ...S, rule: 0 } })
     const noSpace = crowd({ ...base, support: { ...S, spaceM: 0 } })

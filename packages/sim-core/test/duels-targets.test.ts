@@ -127,7 +127,8 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
   }, 600_000)
   // NOT MET (P6 Task 8, calibrated params): 0.531 of 98 attempts (P5 Task 14: 0.609 of 87; P4 Task 10: 0.568 of 88).
   // The tuner moved tackle_rate to its 0.1 minimum, so fewer tackles (deep report: see Results: P4).
-  it.fails("NOT MET: defenders win about 48 % of tackle attempts (T2)", () => {
+  // MET after the P6 pre-merge fixes (marking_weight 0.75, recalibrated): 0.489 of 94 attempts.
+  it("defenders win about 48 % of tackle attempts (T2)", () => {
     const v = win(tackles())
     expect(v).toBeGreaterThanOrEqual(0.43)
     expect(v).toBeLessThanOrEqual(0.53)
@@ -165,14 +166,16 @@ describe("P4 real-data targets on the calibrated parameters (4 matches)", () => 
   }, 600_000)
   // NOT MET (P6 Task 8): 39.25 per match (P5 Task 14: 37.75; P4 Task 10: 35.5). P5's landing-spot marking and set-piece shapes added little;
   // P6 SH2 (headers) owns the rest.
-  it.fails("NOT MET: about 47 aerial duels per match (T4)", () => {
+  // MET after the P6 pre-merge fixes: 40.25 per match (on the band's floor; the 64-match report reads 34.0, NOT MET).
+  it("about 47 aerial duels per match (T4)", () => {
     const v = perMatch("aerials")
     expect(v).toBeGreaterThanOrEqual(40)
     expect(v).toBeLessThanOrEqual(54)
   }, 600_000)
   // NOT MET (P6 Task 8, calibrated params): 1.947 per loss over 526 losses (P5 Task 14: 2.069 over 519, MET; P4 Task 10:
   // 1.954 over 480). The P6 tuner moved marking_weight 1 -> 0.25 (looser marking: losers start farther from the ball).
-  it.fails("NOT MET: about 2.3 losing players reach the ball within 3 s (A4)", () => {
+  // MET after the P6 pre-merge fixes (marking_weight 0.75): 2.052 per loss over 496 losses.
+  it("about 2.3 losing players reach the ball within 3 s (A4)", () => {
     const r = ms().flatMap((m) => m.reach5)
     const v = r.reduce((a, b) => a + b, 0) / r.length
     expect(v).toBeGreaterThanOrEqual(2.0)

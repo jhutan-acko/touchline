@@ -98,6 +98,7 @@ describe("P6 real-data targets on the calibrated parameters (8 matches)", () => 
     expect(op.filter((x) => x.nearDef !== null && x.nearDef >= OPEN_M).length).toBeGreaterThanOrEqual(30)
   }, 1_800_000)
   // NOT MET (Task 8, calibrated params): 0.279. Too few clean ground receptions within 25 m of goal (Task 3).
+  // Pre-merge fixes (set-piece first-time finishes off, recalibrated): 0.169 over 142 open-play shots.
   it.fails("NOT MET: about two in five open-play shots are first time (SH1)", () => {
     const op = open()
     const v = op.filter((x) => x.firstTime).length / op.length
@@ -105,30 +106,31 @@ describe("P6 real-data targets on the calibrated parameters (8 matches)", () => 
     expect(v).toBeLessThanOrEqual(0.49)
   }, 1_800_000)
   // NOT MET (Task 8): conv_ft - conv_other = -0.136 (first-time shots convert worse; deep report below).
-  it.fails("NOT MET: first-time shots convert better than the rest (SH1)", () => {
+  // MET after the pre-merge fixes: +0.064 (the 64-match report still reads 0.067 against 0.131, NOT MET there).
+  it("first-time shots convert better than the rest (SH1)", () => {
     const op = open()
     expect(conv(op.filter((x) => x.firstTime)) - conv(op.filter((x) => !x.firstTime))).toBeGreaterThanOrEqual(0.02)
   }, 1_800_000)
-  // NOT MET (Task 8): 0.008. Open-play crosses are about a third of real (P5 gap), so few high balls reach the box.
+  // NOT MET (Task 8): 0.008; pre-merge fixes 0.014. Open-play crosses are about a third of real (P5 gap), so few high balls reach the box.
   it.fails("NOT MET: about one shot in seven is a header (SH2)", () => {
     const op = open()
     const v = op.filter((x) => x.header).length / op.length
     expect(v).toBeGreaterThanOrEqual(0.1)
     expect(v).toBeLessThanOrEqual(0.18)
   }, 1_800_000)
-  // NOT MET (Task 8): conv_tight - conv_open = -0.092 (open shots convert far above real 0.032; Task 5).
+  // NOT MET (Task 8): conv_tight - conv_open = -0.092; pre-merge fixes -0.091 (open shots convert far above real 0.032; Task 5).
   it.fails("NOT MET: tight shots convert better than open ones (SH3)", () => {
     const op = open().filter((x) => x.nearDef !== null)
     expect(conv(op.filter((x) => x.nearDef! < TIGHT_M)) - conv(op.filter((x) => x.nearDef! >= OPEN_M))).toBeGreaterThanOrEqual(0.03)
   }, 1_800_000)
-  // NOT MET (Task 8): 4.25 goal events per match on the test teams (own goals included; the gate's league fixtures read
+  // NOT MET (Task 8): 4.25 goal events per match on the test teams (pre-merge fixes: 3.875) (own goals included; the gate's league fixtures read
   // 3.44 shot goals on the gate seeds and 3.25 goal events in the 16-match report).
   it.fails("NOT MET: goals stay about 2.7 per match", () => {
     const v = ms().reduce((a, m) => a + m.goals, 0) / SEEDS.length
     expect(v).toBeGreaterThanOrEqual(2.3)
     expect(v).toBeLessThanOrEqual(3.1)
   }, 1_800_000)
-  // NOT MET (Task 8): -0.020 against real -0.063 (Task 6: execution fatigue is not the driver).
+  // NOT MET (Task 8): -0.020 against real -0.063 (pre-merge fixes: -0.021) (Task 6: execution fatigue is not the driver).
   it.fails("NOT MET: late-match completion falls as in real matches (SH4)", () => {
     const v = rate(bin(5)) - rate(bin(0))
     expect(v).toBeGreaterThanOrEqual(REAL_LATE_DROP - 0.02)

@@ -984,9 +984,15 @@ export const DEFAULT_PARAMS: Params = {
   // recalibrated keeper lets in 44 % of shots on target (howlers 0.62 against 1.5 x 0.44; 0.74 at 2).
   // P5 Task 14: momentumLogit 1 -> 1.25 (script only, bound unchanged): with P5 on and recalibrated the momentum swing
   // gave 120 home shots against 1.2 x 101 on the scenario seeds at 1.
+  // P6 pre-merge fixes (2026-10-22): pressSurge 20 -> 30 (script only, bound unchanged): after the recalibration (press_rate
+  // 0.875) the stats pressure-shift signal fired in 4 of 6 seeds at 20 (2, 3, 4, 6), 5 at 30 (1-5), 4 at 40. heroicsSave
+  // 1.5 -> 1.75 (bound unchanged): goals let in from shots on target over 24 seeds, base 0.376, heroics 0.2258 at 1.5 (bound
+  // below 0.6 x base = 0.2257), 0.170 at 1.75, 0.135 at 2; howlers 0.761 (bound above 0.564). goalRatePerMin 0.016 -> 0.02
+  // (bound unchanged): late_comeback reached its target unforced in 8 of 10 seeds (1 and 8 forced), 10 at 0.02 (9 with
+  // goalShotLogit 2.5, 8 with goalScoring 2.5); the other scripted scenarios are unchanged (10, 10, 10, keeper_heroics 9).
   script: {
-    goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
-    momentumLogit: 1.25, momentumPress: 1.3, pressSurge: 20, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
+    goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.02, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
+    momentumLogit: 1.25, momentumPress: 1.3, pressSurge: 30, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.75, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
   substitutions: { windowMinutes: [64, 75, 84], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 0.15, FB: 0.4, DM: 0.7, CM: 0.7, AM: 0.9, W: 1, ST: 0.9 } },
