@@ -72,6 +72,11 @@ export class LiveBuffer {
     if (this.arrivals.length > this.keep) this.arrivals.shift()
   }
 
+  /** Drop every frame held (the next one pushed starts afresh). */
+  clear(): void {
+    this.arrivals.length = 0
+  }
+
   /** The frames held, oldest first (kicks are found in them). */
   get frames(): ReadonlyArray<PitchFrame> {
     return this.arrivals.map((a) => a.frame)

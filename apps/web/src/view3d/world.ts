@@ -37,7 +37,8 @@ export const pitchTexture = (): THREE.Texture => {
   return t
 }
 
-const labelTexture = (text: string, colour: string): THREE.Texture => {
+/** A number on a dark rounded tag, as a texture (the jersey numbers, the markers' counts). */
+export const labelTexture = (text: string, colour: string): THREE.Texture => {
   const c = document.createElement("canvas")
   c.width = 128
   c.height = 64

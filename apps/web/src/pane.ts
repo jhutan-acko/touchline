@@ -1,9 +1,12 @@
 /**
- * What one view (pane) of a session shows, from the ticks it receives: the latest frame, the scoreboard, the cues on
- * screen by slot (each until its ttl runs out, in wall-clock time) and every agent cue so far (for "Why?").
+ * What one view (pane) of a session shows, from the ticks it receives: the latest frame and the last 30 s of frames
+ * (a frozen view shows one of them), the scoreboard, the cues on screen (each anchored to match frames, so a frozen view
+ * keeps the overlays it had) and every agent cue so far (for "Why?").
  */
 import type { PitchFrame, Playback, Tick } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
+
+export type Slot = Cue["display"]["slot"]
 
 export interface Board {
   readonly score: { readonly home: number; readonly away: number }
@@ -13,23 +16,35 @@ export interface Board {
 
 export interface OnScreen {
   readonly cue: Cue
-  /** Wall-clock milliseconds when it leaves the screen. */
-  readonly until: number
+  /** The last match frame it shows on: its ttl counted (in frames) from the end of its anchor, or from its arrival if later. */
+  readonly untilFrame: number
 }
 
 export interface PaneState {
   readonly frame: PitchFrame | null
+  /** The frames of the last RING_S seconds, oldest first. */
+  readonly ring: ReadonlyArray<PitchFrame>
+  /** The latest match frame known: the newest frame received or, before any (the graphics output gets none), the newest cue's anchor end. */
+  readonly head: number | null
   readonly playback: Playback | null
   readonly board: Board | null
+  /** Newest first. */
   readonly onScreen: ReadonlyArray<OnScreen>
   /** Every agent cue received, newest first. */
   readonly feed: ReadonlyArray<Cue>
 }
 
-export const EMPTY: PaneState = { frame: null, playback: null, board: null, onScreen: [], feed: [] }
+export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [] }
 
 /** At most this many agent cues stay in the feed. */
 export const FEED_SIZE = 50
+/** Seconds of frames kept for freezing. */
+export const RING_S = 30
+/**
+ * At most this many cues are held for the screen. They are not dropped when their time is up, since a view frozen
+ * long ago may still be showing them.
+ */
+export const ONSCREEN_SIZE = 32
 
 const boardOf = (cue: Cue): Board => {
   const d = cue.data
@@ -37,22 +52,39 @@ const boardOf = (cue: Cue): Board => {
   return { score: { home: d["score.home"] ?? 0, away: d["score.away"] ?? 0 }, clock: cue.anchor.clock, momentum: mom }
 }
 
-export const reduce = (s: PaneState, tick: Tick, now: number): PaneState => {
+/** The ring with a new frame: an earlier frame than the newest (a seek back) starts it afresh. */
+const ringWith = (ring: ReadonlyArray<PitchFrame>, f: PitchFrame, fps: number): ReadonlyArray<PitchFrame> => {
+  const last = ring.at(-1)
+  if (last && last.frame === f.frame) return ring
+  const kept = last && f.frame < last.frame ? [] : ring
+  const from = f.frame - RING_S * fps
+  return [...kept.filter((x) => x.frame >= from), f]
+}
+
+export const reduce = (s: PaneState, tick: Tick, fps: number): PaneState => {
   switch (tick.kind) {
     case "frame":
-      return { ...s, frame: tick.frame }
+      return { ...s, frame: tick.frame, ring: ringWith(s.ring, tick.frame, fps), head: tick.frame.frame }
     case "playback":
       return { ...s, playback: tick.playback }
     case "cue": {
       const cue = tick.cue
-      if (cue.display.slot === "top_bar") return { ...s, board: boardOf(cue) }
-      // A newer cue in the same slot replaces the one showing there; higher priority (1) first among the rest.
-      const onScreen = [...s.onScreen.filter((o) => o.until > now && o.cue.display.slot !== cue.display.slot), { cue, until: now + cue.display.ttl_ms }]
-      return { ...s, onScreen, feed: [cue, ...s.feed.filter((c) => c.cue_id !== cue.cue_id)].slice(0, FEED_SIZE) }
+      const head = s.frame ? s.head : Math.max(s.head ?? 0, cue.anchor.frame_to)
+      if (cue.display.slot === "top_bar") return { ...s, head, board: boardOf(cue) }
+      const arrival = s.head ?? cue.anchor.frame_to
+      const untilFrame = Math.max(cue.anchor.frame_to, arrival) + Math.round((cue.display.ttl_ms * fps) / 1000)
+      const onScreen = [{ cue, untilFrame }, ...s.onScreen.filter((o) => o.cue.cue_id !== cue.cue_id)].slice(0, ONSCREEN_SIZE)
+      return { ...s, head, onScreen, feed: [cue, ...s.feed.filter((c) => c.cue_id !== cue.cue_id)].slice(0, FEED_SIZE) }
     }
   }
 }
 
-/** The cue showing in a slot now, if any. */
-export const inSlot = (s: PaneState, slot: Cue["display"]["slot"], now: number): Cue | null =>
-  s.onScreen.find((o) => o.cue.display.slot === slot && o.until > now)?.cue ?? null
+/** The cues showing in a slot at a match frame, newest first (a slot's overlay shows the first). */
+export const inSlot = (s: PaneState, slot: Slot, frame: number): Cue[] =>
+  s.onScreen.filter((o) => o.cue.display.slot === slot && o.cue.anchor.frame_from <= frame && frame <= o.untilFrame).map((o) => o.cue)
+
+/** The frame held at a match frame (the newest at or before it), or null when it is older than the ring. */
+export const frameAt = (s: PaneState, frame: number): PitchFrame | null => {
+  for (let i = s.ring.length - 1; i >= 0; i--) if (s.ring[i]!.frame <= frame) return s.ring[i]!
+  return null
+}

@@ -139,15 +139,20 @@ export class MultiView {
 
   /** The player under a click (CSS pixels from the canvas's top left), in the viewport clicked. */
   pick(x: number, y: number, worlds: Frame3D["worlds"]): string | null {
+    return this.pickAmong(x, y, worlds, (world) => world.onPitch.map((id) => ({ id, at: world.positionOf(id)!.clone().setY(1) })))
+  }
+
+  /** Which of some points (world positions, given the clicked viewport's world) is under a click, by id. */
+  pickAmong(x: number, y: number, worlds: Frame3D["worlds"], points: (world: World, v: Viewport) => ReadonlyArray<{ readonly id: string; readonly at: THREE.Vector3 }>): string | null {
     const v = viewportAt(this.last, x, y)
     const view = v && this.views.get(v.key)
     const world = v && worlds[v.world]
     if (!v || !view || !world) return null
-    const points = world.onPitch.flatMap((id) => {
-      const p = world.positionOf(id)!.clone().setY(1).project(view.camera)
+    const onScreen = points(world, v).flatMap(({ id, at }) => {
+      const p = at.clone().project(view.camera)
       return p.z > 1 ? [] : [{ id, sx: v.x + ((p.x + 1) / 2) * v.w, sy: v.y + ((1 - p.y) / 2) * v.h }]
     })
-    return nearestOnScreen(points, x, y)
+    return nearestOnScreen(onScreen, x, y)
   }
 
   dispose(): void {

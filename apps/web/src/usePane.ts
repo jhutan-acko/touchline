@@ -12,10 +12,11 @@ export const RETRIES = 5
 
 /**
  * A pane's state for one segment of a session, updated by every tick; a broken watch is retried with backoff.
- * `source` picks the stream: the fan view (`watch`) or the broadcast graphics output (`graphics`).
+ * `fps` is the match's frame rate (cue ttls are counted in frames). `source` picks the stream: the fan view (`watch`) or
+ * the broadcast graphics output (`graphics`).
  */
-export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection } => {
-  const [state, dispatch] = useReducer((s: PaneState, t: Tick) => reduce(s, t, Date.now()), EMPTY)
+export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, fps: number, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection } => {
+  const [state, dispatch] = useReducer((s: PaneState, t: Tick) => reduce(s, t, fps), EMPTY)
   const [connection, setConnection] = useState<Connection>("ok")
   const key = `${segment.mode}.${segment.lang}.${segment.club ?? ""}`
   useEffect(() => {
