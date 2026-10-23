@@ -16,7 +16,7 @@ from agent_framework import Agent, BaseChatClient
 from pydantic import BaseModel, ConfigDict
 
 from .config import Settings
-from .contracts import Claim, Draft, SentenceCheck, Verdict
+from .contracts import AskWhatIf, Claim, Draft, SentenceCheck, Verdict
 from .llm import agent_options, run_structured, stub_responder
 from .numbers import matches, numbers_in, read
 from .stats import StatsClient, StatsError
@@ -108,6 +108,8 @@ class FactChecker:
                     return f"no event {c.event_id} by frame {latest}"
                 if c.subject and c.subject.startswith("p-") and found["events"][0]["player_id"] != c.subject:
                     return f"event {c.event_id} was by {found['events'][0]['player_id']}, not {c.subject}"
+            elif c.kind == "what_if":
+                return "a what-if claim is checked against the re-simulation (check_whatif_claim), not the stats server"
             elif c.kind == "better_option":
                 if not c.event_id or not c.receiver_id:
                     return "a better option needs event_id and receiver_id"
@@ -178,6 +180,31 @@ class FactChecker:
             claims_verified=verified, undeclared=undeclared,
         )
         return Check(v, extracted, draft.model_copy(update={"claims": claims}), fallback, (time.perf_counter() - t0) * 1000)
+
+
+WHATIF_COUNTS = ("shots_played", "shots_alt", "goals_played", "goals_alt", "seeds")
+GAIN_TOLERANCE = 0.005
+
+
+def whatif_quantity(w: AskWhatIf, name: str | None) -> float | None:
+    """The re-simulation's number a what-if claim names in `subject` (None for an unknown name)."""
+    return {
+        "shots_played": w.shots.played, "shots_alt": w.shots.alt, "goals_played": w.goals.played, "goals_alt": w.goals.alt,
+        "seeds": w.seeds, "gain": w.gain.mean,
+    }.get(name or "")
+
+
+def check_whatif_claim(c: Claim, w: AskWhatIf | None) -> bool:
+    """Whether a what-if claim states the re-simulation's number exactly (counts) or within 0.005 (`gain`). The
+    quantity is named in `subject`; `metric_id` must be null. With no re-simulation the claim cannot hold."""
+    if w is None or c.kind != "what_if" or c.metric_id is not None or c.value is None:
+        return False
+    actual = whatif_quantity(w, c.subject)
+    if actual is None:
+        return False
+    if c.subject == "gain":
+        return abs(c.value - actual) <= GAIN_TOLERANCE
+    return c.value == actual
 
 
 def quoted(quote: str, text: str) -> bool:

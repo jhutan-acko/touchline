@@ -124,3 +124,41 @@ async def test_ask_intent_artifact(server):
     assert len(arts["ask_intent"]) == 1
     intent = AskIntent.model_validate(arts["ask_intent"][0])
     assert intent.kind == "what_if" and intent.intervention.receiver_id == "p-h-09"
+
+
+async def test_ask_answer_streams_stages_then_reply(server, stats_url, stats):
+    from touchline_agents.contracts import AskReply, AskStage
+
+    info = await stats.roster()
+    home = info["home"]["players"]
+    passer, receiver = home[5]["id"], home[9]["id"]
+    at = 3000
+    req = {
+        "kind": "ask_answer", "match_id": MATCH_ID, "mcp_url": stats_url, "at_frame": at, "question": "What if he had passed?",
+        "segment": {"mode": "casual", "lang": "en", "club": None},
+        "intent": {"kind": "what_if", "subject_id": passer, "fork_event_id": None,
+                   "intervention": {"kind": "pass_to", "player_id": passer, "receiver_id": receiver}, "reason": None},
+        "summary": {"match_id": MATCH_ID, "frame": at, "clock": "05:00", "ball_holder": passer, "side_in_possession": "home",
+                    "players": [], "pass_options": [], "pressers": [], "recent": [], "missed_option": None},
+        "what_if": {"intervention": {"kind": "pass_to", "player_id": passer, "receiver_id": receiver}, "fork_frame": at - 40,
+                    "verdict": "better_option_found", "seeds": 20, "shots": {"played": 2, "alt": 5}, "goals": {"played": 0, "alt": 1},
+                    "gain": {"mean": 0.042, "se": 0.011}},
+    }
+    names: list[str] = []
+    async with httpx.AsyncClient(timeout=120) as http:
+        card = await A2ACardResolver(http, server).get_agent_card()
+        client = ClientFactory(ClientConfig(httpx_client=http, streaming=True)).create(card)
+        msg = Message(role=Role.ROLE_USER, parts=[new_data_part(req, "application/json")], message_id=str(uuid.uuid4()))
+        state, arts = None, {}
+        async for item in client.send_message(SendMessageRequest(message=msg)):
+            kind = item.WhichOneof("payload")
+            if kind == "status_update":
+                state = item.status_update.status.state
+            elif kind == "artifact_update":
+                a = item.artifact_update.artifact
+                names.append(a.name)
+                arts.setdefault(a.name, []).extend(get_data_parts(a.parts))
+    assert state == TaskState.TASK_STATE_COMPLETED
+    assert names == ["ask_stage"] * 3 + ["ask_reply"]
+    assert [AskStage.model_validate(s).stage for s in arts["ask_stage"]] == ["analyst", "factcheck", "personalise"]
+    assert AskReply.model_validate(arts["ask_reply"][0]).verified
