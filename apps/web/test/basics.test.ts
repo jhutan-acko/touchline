@@ -55,6 +55,13 @@ describe("pane", () => {
     expect(s.feed.map((c) => c.cue_id)).toEqual(["next", cue.cue_id])
   })
 
+  it("draws pitch markers but keeps them out of the feed", () => {
+    const marker: Cue = { ...cue, cue_id: "pm1", text: null, display: { ...cue.display, slot: "pitch_marker", template: "pressure_ring" }, data: { "at:p-1": 1, count: 2 } }
+    const s = reduce(reduce(EMPTY, tick(cue), 10), tick(marker), 10)
+    expect(s.feed.map((c) => c.cue_id)).toEqual([cue.cue_id])
+    expect(inSlot(s, "pitch_marker", cue.anchor.frame_to).map((c) => c.cue_id)).toEqual(["pm1"])
+  })
+
   it("keeps a bounded feed", () => {
     let s = EMPTY
     for (let i = 0; i < FEED_SIZE + 10; i++) s = reduce(s, tick({ ...cue, cue_id: `c${i}` }), 10)

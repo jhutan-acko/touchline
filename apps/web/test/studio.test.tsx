@@ -20,6 +20,16 @@ const item = (id: string, headline: string, status: QueueItem["status"] = "pendi
 const row = (headline: string) => within(screen.getByRole("list", { name: "Queue" })).getByText(headline).closest("li") as HTMLElement
 
 describe("studio console", () => {
+  it("pauses and resumes the session for everyone through the server", async () => {
+    const client = fakeClient()
+    render(<Studio client={client} session="s1" segment={segment} />)
+    act(() => client.pushStudio({ kind: "playback", playback: { state: "playing", frame: 10, speed: 4, live: false } }))
+    await userEvent.click(screen.getByRole("button", { name: "Pause for everyone" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Resume for everyone" }))
+    await screen.findByRole("button", { name: "Pause for everyone" })
+    expect(client.calls).toEqual(["control pause", "control play"])
+  })
+
   it("lists queued moments as they arrive and sends the producer's decisions", async () => {
     const client = fakeClient()
     render(<Studio client={client} session="s1" segment={segment} />)

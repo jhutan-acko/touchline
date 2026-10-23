@@ -1,19 +1,20 @@
 /**
  * Pitch markers on the 3D stage (pause and ask): a pressure ring with its presser count, a raised pass arc between two
  * players, or a dashed ghost circle at a point or a player. They are drawn into the world's scene (the stage draws its
- * scenes itself) and placed every animation frame from where the players stand. Taps are found by the stage, which
- * projects each marker's anchor into the viewport clicked (see `MarkerTaps`). What to draw is decided in `markers.ts`,
+ * scenes itself). Each registers in `MarkerTaps`; the stage places them every animation frame right after posing the
+ * world (so they keep up with the bodies), and on a click projects their anchors with the players' to find the nearest. What to draw is decided in `markers.ts`,
  * which is tested; this file only builds the three.js objects.
  */
-import { createPortal, useFrame } from "@react-three/fiber"
+import { createPortal } from "@react-three/fiber"
 import { createContext, useContext, useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
 import type { Cue } from "@touchline/schema"
 import { arcPoint, GHOST_RADIUS, LIFT, parseMarker, RING_RADIUS, type Marker } from "../markers.js"
 import { labelTexture, type World } from "./world.js"
 
-/** A marker the stage can hit with a tap: where it is now (world), and what tapping it does. */
+/** A marker on the stage: place it for this frame (after the world is posed), where it is now (world), and what tapping it does. */
 export interface TapTarget {
+  readonly place: () => void
   readonly anchor: () => THREE.Vector3 | null
   readonly tap: () => void
 }
@@ -124,12 +125,9 @@ const MarkerObject = ({ cue, marker, world, onTap }: { cue: Cue; marker: Marker;
   useEffect(() => {
     if (!taps) return
     const l = latest.current
-    taps.set(cue.cue_id, { anchor: () => l.anchor, tap: () => l.onTap(l.marker, l.cue) })
+    taps.set(cue.cue_id, { place: () => void (l.anchor = built.place(world, l.marker)), anchor: () => l.anchor, tap: () => l.onTap(l.marker, l.cue) })
     return () => void taps.delete(cue.cue_id)
-  }, [taps, cue.cue_id])
-  useFrame(() => {
-    latest.current.anchor = built.place(world, latest.current.marker)
-  })
+  }, [taps, cue.cue_id, built, world])
   return <primitive object={built.object} />
 }
 

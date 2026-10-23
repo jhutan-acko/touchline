@@ -30,7 +30,7 @@ export interface PaneState {
   readonly board: Board | null
   /** Newest first. */
   readonly onScreen: ReadonlyArray<OnScreen>
-  /** Every agent cue received, newest first. */
+  /** Every agent cue received (but pitch markers), newest first. */
   readonly feed: ReadonlyArray<Cue>
 }
 
@@ -74,7 +74,9 @@ export const reduce = (s: PaneState, tick: Tick, fps: number): PaneState => {
       const arrival = s.head ?? cue.anchor.frame_to
       const untilFrame = Math.max(cue.anchor.frame_to, arrival) + Math.round((cue.display.ttl_ms * fps) / 1000)
       const onScreen = [{ cue, untilFrame }, ...s.onScreen.filter((o) => o.cue.cue_id !== cue.cue_id)].slice(0, ONSCREEN_SIZE)
-      return { ...s, head, onScreen, feed: [cue, ...s.feed.filter((c) => c.cue_id !== cue.cue_id)].slice(0, FEED_SIZE) }
+      // Pitch markers are drawn on the pitch, not listed (they carry no text to explain).
+      const feed = cue.display.slot === "pitch_marker" ? s.feed : [cue, ...s.feed.filter((c) => c.cue_id !== cue.cue_id)].slice(0, FEED_SIZE)
+      return { ...s, head, onScreen, feed }
     }
   }
 }

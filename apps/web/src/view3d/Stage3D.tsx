@@ -65,12 +65,15 @@ const Scene = ({ props, vps, onReady, onFail, pickRef }: { props: Stage3DProps; 
       if (!alive) return
       const worlds = { real: new World(assets, props.match) }
       live.current = { multi, assets, worlds }
-      // A tap on a marker (on the match's own world) wins over the player under it.
+      // A click picks whichever is nearest on screen: a player, or a marker (on the match's own world).
       pickRef.current = (x, y) => {
-        const marker = multi.pickAmong(x, y, worlds, (world) => (world === worlds.real ? [...taps].flatMap(([id, t]) => { const at = t.anchor(); return at ? [{ id, at }] : [] }) : []))
-        if (marker) return () => taps.get(marker)?.tap()
-        const id = multi.pick(x, y, worlds)
-        return id ? () => latest.current.props.onPick?.(id) : null
+        const hit = multi.pickAmong(x, y, worlds, (world) => [
+          ...world.onPitch.map((id) => ({ id: `p:${id}`, at: world.positionOf(id)!.clone().setY(1) })),
+          ...(world === worlds.real ? [...taps].flatMap(([id, t]) => { const at = t.anchor(); return at ? [{ id: `m:${id}`, at }] : [] }) : [])
+        ])
+        if (!hit) return null
+        const id = hit.slice(2)
+        return hit.startsWith("m:") ? () => taps.get(id)?.tap() : () => latest.current.props.onPick?.(id)
       }
       setReal(worlds.real)
       onReady()
@@ -101,6 +104,7 @@ const Scene = ({ props, vps, onReady, onFail, pickRef }: { props: Stage3DProps; 
       world.update(s, play.kicks(), p.match.fps, Math.min(0.05, dt) * play.rate())
       const line = p.lines?.[key] ?? null
       world.passLine(line?.from ?? null, line?.to ?? null, line?.colour)
+      if (key === "real") for (const t of taps.values()) t.place() // the markers, where the bodies now stand
     }
     l.multi.render(views, { worlds: l.worlds, samples, followed: p.followed, dt: Math.min(0.05, dt), time: state.clock.elapsedTime })
   }, 1)
