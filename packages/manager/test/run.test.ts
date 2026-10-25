@@ -10,7 +10,7 @@ import { rulesManager, rulesOption } from "../src/rules.js"
 import { runManaged } from "../src/run.js"
 import { leagueConfig, models, xt } from "./helpers.js"
 
-const golden = JSON.parse(readFileSync(join(import.meta.dirname, "golden/situation-m-13-minute_60.json"), "utf8")) as Situation
+const golden = JSON.parse(readFileSync(join(import.meta.dirname, "golden/situation-m-11-minute_60.json"), "utf8")) as Situation
 /** The reviewed situation with some fields changed. */
 const sit = (over: { score?: [number, number]; minute?: number; energy?: number; windows?: number; halfTime?: boolean }): Situation => ({
   ...golden,
@@ -64,12 +64,13 @@ describe("the rule-based manager", () => {
   })
 })
 
-// Seed 11: the first from 11 on (12 is the mismatching log below) where the home side substitutes before a later decision
+// Seed 14: the first from 11 on (12 is the mismatching log below) where the home side substitutes before a later decision
 // and both teams decide at half time, minute 60 and minute 75 (P2: on seed 11 its only substitution came at its last
 // decision, minute 75; P5 Task 14: seed 13 lost a minute-60 decision, seed 11 still fails; P6 Task 8: seed 11 has no home
 // substitution, 13 qualifies again and 14 has none before a later decision; P6 pre-merge fixes: 13 lost a minute-60
-// decision, 11 qualifies).
-const cfg = leagueConfig(11)
+// decision, 11 qualifies; P6 off-ball fix, movement.accelRule 1: 11 has no home substitution, 13's comes at its last
+// decision, 14 qualifies).
+const cfg = leagueConfig(14)
 const seen: DecideInput[] = []
 /** The rules manager, keeping every input it was given. */
 const spy: Manager = { kind: "rules", decide: (input) => (seen.push(input), rulesManager.decide(input)) }

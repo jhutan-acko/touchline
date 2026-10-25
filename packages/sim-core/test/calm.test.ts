@@ -62,8 +62,10 @@ describe("calm repositioning (movement.accelRule)", () => {
     expect(calmMotion(m, withMove(DEFAULT_PARAMS, 1, 0.5).movement)).toEqual({ a0: 4, s0: 9, brake: 3, lateral: 2 })
   })
 
-  it("ships off in DEFAULT_PARAMS; the switch is 0 or 1 and the share in (0, 1]", () => {
+  it("ships off in DEFAULT_PARAMS and on in the calibrated file; the switch is 0 or 1 and the share in (0, 1]", () => {
     expect(DEFAULT_PARAMS.movement.accelRule).toBe(0)
+    expect(calibrated.movement.accelRule).toBe(1)
+    expect(calibrated.movement.accelShare).toBe(0.35)
     expect(() => paramsFromJson({ provenance: prov, movement: { accelRule: 0.5 } })).toThrow(/movement\.accelRule must be 0 or 1/)
     expect(() => paramsFromJson({ provenance: prov, movement: { accelShare: 1.2 } })).toThrow(/between 0 and 1/)
     expect(() => paramsFromJson({ provenance: prov, movement: { accelShare: 0 } })).toThrow(/movement\.accelShare must be positive/)

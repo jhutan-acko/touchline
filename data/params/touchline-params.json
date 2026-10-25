@@ -484,7 +484,9 @@
   "relaxed": 1,
   "relaxCap": 0.55,
   "relaxArriveS": 2,
-  "relaxMarks": 1
+  "relaxMarks": 1,
+  "accelRule": 1,
+  "accelShare": 0.35
  },
  "shape": {
   "width": 1.5,

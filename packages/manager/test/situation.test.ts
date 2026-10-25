@@ -88,7 +88,7 @@ describe("the situation sent to the manager agent", () => {
     expect(s11.players.on_pitch.reduce((a, p) => a + p.shots, 0)).toBe(s11.team.stats.shots)
   })
   it("matches the reviewed example (UPDATE_GOLDEN=1 rewrites it after a deliberate change)", () => {
-    const file = join(import.meta.dirname, "golden/situation-m-13-minute_60.json")
+    const file = join(import.meta.dirname, "golden/situation-m-11-minute_60.json")
     const text = JSON.stringify(sit, null, 1) + "\n"
     if (process.env.UPDATE_GOLDEN === "1") writeFileSync(file, text)
     expect(text).toBe(readFileSync(file, "utf8"))
