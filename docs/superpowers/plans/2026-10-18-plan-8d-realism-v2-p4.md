@@ -44,7 +44,7 @@ The evidence is in `touchline-worktrees/analysis-positioning/`, outside the repo
 Branch from `main` (95f2a5f or later, with this plan committed):
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline
+cd <repo>
 git worktree add ../touchline-worktrees/realism-v2-p4 -b realism-v2-p4 main
 cd ../touchline-worktrees/realism-v2-p4 && pnpm install
 ```
@@ -110,7 +110,7 @@ A task creates or modifies only the files listed for it. `step.ts`, `params.ts` 
 For each task in the wave, from the integration worktree:
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline-worktrees/realism-v2-p4
+cd <worktrees>/realism-v2-p4
 git worktree add ../p4-task<N> -b p4-task<N> realism-v2-p4
 cd ../p4-task<N> && pnpm install
 ```

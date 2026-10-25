@@ -30,7 +30,7 @@ The evidence is in `touchline-worktrees/analysis-positioning/`, outside the repo
 The worktree exists at `touchline-worktrees/realism-v2-p5` (branch `realism-v2-p5`, base 79d6088: P4 Tasks 1–9 merged, switches off). **Wave 0 code starts once P4 is merged to `main`:**
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline-worktrees/realism-v2-p5
+cd <worktrees>/realism-v2-p5
 git fetch . main:main 2>/dev/null; git rebase main   # the plan commit rides along
 pnpm install
 ```

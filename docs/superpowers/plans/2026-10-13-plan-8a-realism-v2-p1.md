@@ -17,7 +17,7 @@
 ## Setup (before Task 1)
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline
+cd <repo>
 git worktree add ../touchline-worktrees/realism-v2-p1 -b realism-v2-p1
 cd ../touchline-worktrees/realism-v2-p1 && pnpm install
 ```
