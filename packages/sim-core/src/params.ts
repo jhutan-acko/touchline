@@ -330,7 +330,16 @@ export interface Params {
    * heads for the spot at the speed that arrives in relaxArriveS, never above relaxCap of top speed, so a player near his
    * spot walks; relaxMarks 1 does the same for marking.
    */
-  readonly movement: { readonly shapeSpeedShare: number; readonly relaxed: number; readonly relaxCap: number; readonly relaxArriveS: number; readonly relaxMarks: number }
+  readonly movement: {
+    readonly shapeSpeedShare: number; readonly relaxed: number; readonly relaxCap: number; readonly relaxArriveS: number; readonly relaxMarks: number
+    /**
+     * Calm repositioning (realism v2, P6 off-ball fix): accelRule 1 moves an off-ball player to a positioning target (shape,
+     * marking, support and spacing, rotation; also after the transition pause) at accelShare of his fitted acceleration, braking and
+     * turning, which are sprint limits; chases, presses, runs, recoveries and the carrier keep the full limits. rule 0: the
+     * old behaviour (full limits for every move: off-ball players reversed at 15-20x the real rate).
+     */
+    readonly accelRule: number; readonly accelShare: number
+  }
   /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball an extra depth squeeze. */
   readonly shape: { readonly width: number; readonly depth: number; readonly defDepth: number }
   /**
@@ -827,7 +836,7 @@ export const DEFAULT_PARAMS: Params = {
     // P5 landing-spot marking and reaction (plan 8e ruling 18; rule 0: the old behaviour).
     landingRule: 1, landingGoalSideM: 1, landingReactM: 10
   },
-  movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
+  movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1, accelRule: 0, accelShare: 0.35 },
   shape: { width: 1, depth: 1, defDepth: 1 },
   // Real fits (IDSSE, 7 matches; fit-report.md, offball-report.md, transitions-report.md, gk-report.md, 2026-10-13).
   // in / out rows: the spec's table (a, b) and fit-report section 4 (lateral); gk rows: the build-up shape (gk-report).
@@ -1058,7 +1067,7 @@ const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.s
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
-  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare", "movement.relaxCap", "fatigue.loadFloor",
+  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare", "movement.relaxCap", "movement.accelShare", "fatigue.loadFloor",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
@@ -1122,7 +1131,9 @@ const checkRuleSwitches = (v: Params): void => {
     ["release.freeRule", v.release.freeRule],
     // P6 (plan 8f)
     ["firstTime.rule", v.firstTime.rule], ["firstTime.setPieces", v.firstTime.setPieces], ["header.rule", v.header.rule], ["saveGeo.rule", v.saveGeo.rule],
-    ["execFatigue.rule", v.execFatigue.rule], ["shotModel.rule", v.shotModel.rule]
+    ["execFatigue.rule", v.execFatigue.rule], ["shotModel.rule", v.shotModel.rule],
+    // P6 off-ball fix
+    ["movement.accelRule", v.movement.accelRule]
   ]
   for (const [path, x] of switches) if (x !== 0 && x !== 1) throw new ParamsError(`params field ${path} must be 0 or 1 (got ${x})`)
 }
@@ -1140,6 +1151,7 @@ const checkP6 = (v: Params): void => {
   if (!(v.header.zMin < v.header.zMax)) throw new ParamsError(`params field header.zMin must be below header.zMax (got ${v.header.zMin} >= ${v.header.zMax})`)
   if (!(v.execFatigue.ref >= 0 && v.execFatigue.ref < 1)) throw new ParamsError(`params field execFatigue.ref must be at least 0 and below 1 (got ${v.execFatigue.ref})`)
   if (!(v.execFatigue.power > 0)) throw new ParamsError(`params field execFatigue.power must be positive (got ${v.execFatigue.power})`)
+  if (!(v.movement.accelShare > 0)) throw new ParamsError(`params field movement.accelShare must be positive (got ${v.movement.accelShare})`)
 }
 
 /** P5 (plan 8e) [lo, hi] ranges: lo must not exceed hi (a reversed range would draw outside the stated bounds). */
