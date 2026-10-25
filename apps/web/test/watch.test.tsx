@@ -106,6 +106,21 @@ describe("watching a match", () => {
     expect(client.asks[0]!.req).toEqual({ frame: 20, question: "Who has the ball?", chip_id: null, segment: { mode: "casual", lang: "en", club: null } })
   })
 
+  it("freezes by itself, once, on the frame named by ?freezeAt= (for recording a demo on a cached moment)", async () => {
+    window.history.replaceState(null, "", "/?freezeAt=12")
+    try {
+      const client = await watching()
+      expect(await screen.findByRole("region", { name: "Ask" })).toBeTruthy()
+      expect(shown()).toBe("12")
+      expect(client.calls).toContain("suggest 12 en")
+      await userEvent.click(screen.getByRole("button", { name: "Play" }))
+      act(() => client.push({ kind: "frame", frame: frame(21) }))
+      expect(screen.queryByRole("region", { name: "Ask" })).toBeNull()
+    } finally {
+      window.history.replaceState(null, "", "/")
+    }
+  })
+
   it("resume closes Ask", async () => {
     const client = await watching()
     await userEvent.click(screen.getByRole("button", { name: "Pause" }))
