@@ -145,7 +145,7 @@ describe("the watch layout", () => {
     const client = fakeClient()
     const seen: StageView[] = []
     render(
-      <Watch client={client} sessionId="s1" match={INFO} profile={{ mode: "casual", lang: "en", clubs: [] }} onProfile={() => {}} onBack={() => {}}
+      <Watch client={client} sessionId="s1" match={INFO} profile={{ mode: "casual", lang: "en", clubs: [], player: null }} onProfile={() => {}} onBack={() => {}}
         overlay={(s) => (seen.push(s), <span>card at {s.at}</span>)} under={(s) => <span>strip {s.frozen ?? "live"}</span>} />
     )
     act(() => client.push({ kind: "frame", frame: frame(5) }))
@@ -173,7 +173,7 @@ describe("the first-visit hint", () => {
   it("dismisses itself after a few seconds", () => {
     localStorage.removeItem(HINT_KEY)
     vi.useFakeTimers()
-    render(<Watch client={fakeClient()} sessionId="s1" match={INFO} profile={{ mode: "casual", lang: "hi", clubs: [] }} onProfile={() => {}} onBack={() => {}} />)
+    render(<Watch client={fakeClient()} sessionId="s1" match={INFO} profile={{ mode: "casual", lang: "hi", clubs: [], player: null }} onProfile={() => {}} onBack={() => {}} />)
     expect(screen.getByRole("note").textContent).toMatch(/Space/)
     act(() => void vi.advanceTimersByTime(HINT_MS))
     expect(screen.queryByRole("note")).toBeNull()

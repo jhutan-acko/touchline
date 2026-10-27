@@ -4,12 +4,16 @@ import type { TouchlineClient } from "./client.js"
 import { withTeamColours } from "./colours.js"
 import { LANG_NAMES, t, type Lang } from "./i18n.js"
 import { MatchList } from "./MatchList.js"
-import type { Profile } from "./profile.js"
+import { loadPlayer, savePlayer, type Profile } from "./profile.js"
 import { Watch } from "./Watch.js"
 
 /** The fan app: pick a match from the library, then watch it. */
 export const App = ({ client }: { client: TouchlineClient }) => {
-  const [profile, setProfile] = useState<Profile>({ mode: "casual", lang: "en", clubs: [] })
+  const [profile, setProfile0] = useState<Profile>(() => ({ mode: "casual", lang: "en", clubs: [], player: loadPlayer() }))
+  const setProfile = (p: Profile) => {
+    if (p.player !== profile.player) savePlayer(p.player)
+    setProfile0(p)
+  }
   const lang = profile.lang
   const setLang = (l: Lang) => setProfile({ ...profile, lang: l })
   const [matches, setMatches] = useState<ReadonlyArray<MatchSummary> | null>(null)

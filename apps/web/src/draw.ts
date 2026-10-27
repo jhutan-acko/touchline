@@ -105,3 +105,42 @@ export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: 
   ctx.lineWidth = Math.max(1, r / 5)
   ctx.stroke()
 }
+
+/** The followed player and the name shown by them. */
+export interface Focus {
+  readonly id: string
+  readonly label: string
+}
+
+type FocusCtx = Pick<CanvasRenderingContext2D, "beginPath" | "arc" | "stroke" | "fillText" | "strokeText" | "measureText"> & {
+  fillStyle: CanvasRenderingContext2D["fillStyle"]
+  strokeStyle: CanvasRenderingContext2D["strokeStyle"]
+  lineWidth: number
+  font: string
+  textAlign: CanvasTextAlign
+}
+
+export const FOCUS = "#f2c14e"
+
+/** A ring round the followed player and their name above them, whenever they are on the pitch in the frame. */
+export const drawFocus = (ctx: FocusCtx, size: Size, frame: PitchFrame | null, focus: Focus | null): void => {
+  const p = focus && frame ? [...frame.home, ...frame.away].find((x) => x.id === focus.id) : undefined
+  if (!p || !focus) return
+  const [x, y] = toPx(size, p.x, p.y)
+  const r = (1.8 / LENGTH) * size.w
+  ctx.strokeStyle = FOCUS
+  ctx.lineWidth = Math.max(2, size.w / 350)
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.stroke()
+  const px = Math.round(size.w / 70)
+  ctx.font = `700 ${px}px system-ui, sans-serif`
+  ctx.textAlign = "center"
+  // Above the player, or below near the top touchline, so the name stays on the canvas.
+  const ty = y - r - px * 0.4 < px ? y + r + px : y - r - px * 0.4
+  ctx.lineWidth = Math.max(2, px / 4)
+  ctx.strokeStyle = "rgba(13,20,18,.85)"
+  ctx.strokeText(focus.label, x, ty)
+  ctx.fillStyle = FOCUS
+  ctx.fillText(focus.label, x, ty)
+}
