@@ -38,10 +38,11 @@ describe("an A/B match", () => {
     expect({ ...a, xg_diff: Math.round(a.xg_diff * 1e9) / 1e9 }).toEqual({ score: { for: 1, against: 0 }, xg_diff: 0.5, goal_diff: 1, points: 3 })
     expect(resultOf(events, "b").points).toBe(0)
   })
-  // Fixture seed 5001: the first from 5000 whose managed team's first decision comes after at least 100 events, so the
-  // equality below is not vacuous (P6 Task 8: on 5000 the first decision comes after 33 events).
+  // Fixture seed 5000: the first from 5000 whose managed team's first decision comes after at least 100 events, so the
+  // equality below is not vacuous (P6 Task 8: on 5000 the first decision comes after 33 events, so 5001; P6 off-ball
+  // re-tune: 5000 has 2280. Note: 5001 and 5003 now differ by one event at the decision tick itself; see the off-ball report).
   it("is the same match in every arm until the managed team's first decision", () => {
-    const f = fixtures(5001, 1, setup.clubs)[0]!
+    const f = fixtures(5000, 1, setup.clubs)[0]!
     const cfg = setup.config(f)
     const none = Effect.runSync(runManaged(cfg, {}, setup.stats))
     const rules = Effect.runSync(runManaged(cfg, { [f.managedSide]: rulesManager }, setup.stats))

@@ -3,8 +3,8 @@
   "dataset": "calibrated by simulated moments against IDSSE / Sportec Open DFL dataset (2022/23 Bundesliga and 2. Bundesliga)",
   "licence": "CC-BY-4.0",
   "attribution": "Deutsche Fussball Liga (DFL); Bassek et al., Scientific Data (2025), doi:10.1038/s41597-025-04505-y",
-  "fitted_at": "2026-10-21",
-  "version": "calib-2026-10-21"
+  "fitted_at": "2026-10-26",
+  "version": "calib-2026-10-26"
  },
  "kinematics": {
   "accelMax": 4.5,
@@ -120,12 +120,12 @@
   "decisionMaxS": 1.7600000000000002,
   "keeperHoldS": 4,
   "restartDelayS": {
-   "kickoff": 47.25,
-   "throw_in": 18.900000000000002,
-   "corner": 38.85,
-   "goal_kick": 31.5,
-   "free_kick": 26.25,
-   "penalty": 63
+   "kickoff": 42.75,
+   "throw_in": 17.099999999999998,
+   "corner": 35.15,
+   "goal_kick": 28.5,
+   "free_kick": 23.75,
+   "penalty": 57
   },
   "addedTimeMinS": [
    60,
@@ -301,7 +301,7 @@
   "blockPerDefender": 0.23,
   "blockWidthM": 3.5,
   "blockPressure": 0.2,
-  "blockBehind": 0.625,
+  "blockBehind": 0.5,
   "save": {
    "b0": 1.8,
    "bWide": -1.6,
@@ -353,7 +353,7 @@
   "tackleRadiusM": 1.6,
   "tackleBase": 0,
   "foulPerTackle": 0.6,
-  "yellowPerFoul": 0.15,
+  "yellowPerFoul": 0.2,
   "redPerFoul": 0.004,
   "cautionPerMatch": 1.7,
   "bookedFoulFactor": 0.5,
@@ -365,11 +365,11 @@
   "keeperRushM": 12,
   "crossBlock": 0.6,
   "crossBlockM": 4,
-  "crossBlockBehind": 0.75,
+  "crossBlockBehind": 0.6,
   "headClearShare": 0.85,
-  "headBehind": 0.4375,
+  "headBehind": 0.35,
   "clearToTouch": 0,
-  "clearSliceBehind": 0.25
+  "clearSliceBehind": 0.2
  },
  "cross": {
   "rule": 1,
@@ -484,7 +484,9 @@
   "relaxed": 1,
   "relaxCap": 0.55,
   "relaxArriveS": 2,
-  "relaxMarks": 1
+  "relaxMarks": 1,
+  "accelRule": 1,
+  "accelShare": 0.35
  },
  "shape": {
   "width": 1.5,
@@ -806,8 +808,8 @@
   }
  },
  "fatigue": {
-  "drainBase": 4e-05,
-  "drainSpeed2": 1.2e-05,
+  "drainBase": 0.00004,
+  "drainSpeed2": 0.000012,
   "staminaSlope": 0.8,
   "halfTimeRecovery": 0.1,
   "executionK": 0.25,
@@ -853,7 +855,7 @@
   "box": 0.12,
   "side": 1.6,
   "behind": 2.4,
-  "attackerShare": 0.0625,
+  "attackerShare": 0.05,
   "shieldSpeedMax": 2,
   "takeOnShare": 0.15
  },
@@ -1231,12 +1233,12 @@
  "deadBall": {
   "rule": 1,
   "medianS": {
-   "throw_in": 14.175,
-   "goal_kick": 23.1,
-   "corner": 34.65,
-   "free_kick_att": 44.1,
-   "free_kick": 29.400000000000002,
-   "kickoff": 73.5
+   "throw_in": 12.825,
+   "goal_kick": 20.9,
+   "corner": 31.349999999999998,
+   "free_kick_att": 39.9,
+   "free_kick": 26.599999999999998,
+   "kickoff": 66.5
   },
   "sigma": {
    "throw_in": 0.68,
@@ -1468,8 +1470,8 @@
   "targets": "targets-2026-10-07",
   "matches": 24,
   "rounds": 1,
-  "evals": 90,
-  "loss": 18.077,
+  "evals": 92,
+  "loss": 19.943,
   "knobs": {
    "decision_scale": 0.8,
    "shot_bias": -0.3,
@@ -1484,14 +1486,14 @@
    "reach_margin": 0.625,
    "tackle_rate": 0.1,
    "foul_per_tackle": 0.6,
-   "yellow_per_foul": 0.15,
+   "yellow_per_foul": 0.2,
    "box_intensity": 1,
    "box_carry": 0.25,
    "loose_share": 0.4,
-   "restart_scale": 1.05,
+   "restart_scale": 0.95,
    "shape_width": 1.5,
    "shape_depth": 1,
-   "deflect_behind": 1.25,
+   "deflect_behind": 1,
    "save_b0": 1.8,
    "pass_arrive": 8,
    "clear_to_touch": 0,
@@ -1505,7 +1507,7 @@
    "support_dist": 16,
    "support_space": 20,
    "support_space_att": 13,
-   "attacker_foul": 1.25,
+   "attacker_foul": 1,
    "aerial_contest": 2.25,
    "aerial_foul": 1.5,
    "counter_join": 1.25,
@@ -1520,32 +1522,32 @@
    "shot_xg_slope": 3.5
   },
   "simulated": {
-   "passes": 964.75,
-   "completion": 0.7066,
-   "long_share": 0.1313,
-   "pass_len_median": 16.6027,
-   "shots": 25.1667,
-   "on_target_share": 0.3251,
-   "blocked_share": 0.1864,
-   "save_rate": 0.6677,
-   "goals": 2.9167,
+   "passes": 996.8333,
+   "completion": 0.7163,
+   "long_share": 0.1237,
+   "pass_len_median": 15.1427,
+   "shots": 27.7917,
+   "on_target_share": 0.3244,
+   "blocked_share": 0.1729,
+   "save_rate": 0.6065,
+   "goals": 3.625,
    "penalties": 0.25,
-   "corners": 7.7917,
-   "throw_ins": 45.125,
-   "goal_kicks": 16.9583,
-   "free_kicks": 24.2083,
-   "fouls": 18.4167,
-   "cards": 4.7917,
-   "in_play_share": 0.5242,
-   "distance_km_median": 10.3143,
-   "peak_speed_kmh_median": 25.9804,
-   "width_poss_m": 50.6048,
-   "width_def_m": 37.5827,
-   "length_def_m": 29.761,
-   "line_height_def_m": 30.4969,
-   "ball_pressure_m": 5.9069,
-   "support_15m": 2.031,
-   "free_space_m": 7.7322
+   "corners": 7,
+   "throw_ins": 43.7083,
+   "goal_kicks": 19.1667,
+   "free_kicks": 27.2083,
+   "fouls": 19.75,
+   "cards": 5.625,
+   "in_play_share": 0.5366,
+   "distance_km_median": 9.9585,
+   "peak_speed_kmh_median": 26.127,
+   "width_poss_m": 50.2335,
+   "width_def_m": 38.1444,
+   "length_def_m": 29.1396,
+   "line_height_def_m": 33.1923,
+   "ball_pressure_m": 5.574,
+   "support_15m": 2.173,
+   "free_space_m": 7.0905
   },
   "real": {
    "passes": 866,
@@ -1574,7 +1576,6 @@
    "ball_pressure_m": 5.1217,
    "support_15m": 2.1009,
    "free_space_m": 6.0338
-  },
-  "note": "Tuner loss 18.08 (90 evals) with pos_out_shift -3 and marking_weight 1; shipped with pos_out_shift 0 and marking_weight 0.75 after the gate probe (controller ruling 2026-10-21: free_space_m z +3.65 with the tuner's values; probe b passes with loss 20.95). 'simulated' is the tuner's."
+  }
  }
 }

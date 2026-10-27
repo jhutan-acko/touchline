@@ -26,7 +26,7 @@ import {
   type Vec3
 } from "./geometry.js"
 import { assignMarks, laneMarkTarget, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, stepsOut, supportersWanted, supportGate, supportSpot } from "./offball.js"
-import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
+import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor, type Motion } from "./kinematics.js"
 import type { Action, Params } from "./params.js"
 import { aerialWinShare, goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight, type Resolution } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
@@ -2022,6 +2022,11 @@ export interface MoveTarget {
   readonly target: Vec2
   readonly speedCap: number
   readonly timeLeft?: number
+  /**
+   * An off-ball positioning target (shape, marking, support and spacing, rotation): with
+   * movement.accelRule 1 the player moves to it at movement.accelShare of his acceleration, braking and turning (calmMotion).
+   */
+  readonly positional?: boolean
 }
 
 // ================================================================ P4 transition seam (plan 8d Task 6 owns this block)
@@ -2484,7 +2489,7 @@ const moveTarget = (
   const vmax = vmaxFor(pl, pl.energy, w.p)
   const shape = () => {
     const target = shapeTarget(w, pl, ballFlat, possSide === pl.side)
-    return { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+    return { target, speedCap: shapeSpeedCap(w, pl, target, vmax), positional: true }
   }
   const ph = w.phase
   if (ph.kind === "restart") {
@@ -2552,14 +2557,14 @@ const moveTarget = (
     }
   }
   const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
-  if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax) }
+  if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax), positional: true }
   // A6 (P5): runs in behind and overlaps (role-run seam), then rotations (rotation seam).
   if (pos.kind === "owned" && possSide === pl.side) {
     const owner = w.player(pos.playerId)
     const rm = runMove(w, pl, owner)
     if (rm) return rm
     const ro = rotateMove(w, pl, owner, shape)
-    if (ro) return ro
+    if (ro) return { ...ro, positional: true }
   }
   const sp = w.p.support
   // Rule 1 (P3 Task 10d): supporters come short only while the carrier is pressed, onto a ring distM out; everyone else
@@ -2567,12 +2572,12 @@ const moveTarget = (
   // the supporters and the forward-line cap are judged once per tick before anyone moves (supportTick).
   if (sup && possSide === pl.side) {
     if (sup.supporters.has(pl.id))
-      return { target: supportSpot(sup.owner.pos, shape().target, pl.side, w.period, sup.opps, sp.distM, true), speedCap: vmax * sp.speedShare }
+      return { target: supportSpot(sup.owner.pos, shape().target, pl.side, w.period, sup.opps, sp.distM, true), speedCap: vmax * sp.speedShare, positional: true }
     const s = shape()
     const spaceM = spacingFor(sup.owner.pos, pl.side, w.period, sp)
     if (spaceM <= 0 || sup.owner.role === "GK") return s
     const target = spacedTarget(sup.owner.pos, s.target, pl.side, w.period, spaceM, sup.capU)
-    return target === s.target ? s : { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+    return target === s.target ? s : { target, speedCap: shapeSpeedCap(w, pl, target, vmax), positional: true }
   }
   if (pos.kind === "owned" && possSide === pl.side && sp.count > 0) {
     const owner = w.player(pos.playerId)
@@ -2582,7 +2587,7 @@ const moveTarget = (
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
       .slice(0, sp.count)
     if (supporters.some((x) => x.id === pl.id))
-      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), sp.distM), speedCap: vmax * sp.speedShare }
+      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), sp.distM), speedCap: vmax * sp.speedShare, positional: true }
   }
   return shape()
 }
@@ -2647,13 +2652,17 @@ const moveAll = (w: Work): void => {
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap, timeLeft } = transitionMove(w, pl, moveTarget(w, pl, ballFlat, possSide, marks, sup), possSide)
+    const base = moveTarget(w, pl, ballFlat, possSide, marks, sup)
+    const { target, speedCap, timeLeft } = transitionMove(w, pl, base, possSide)
+    // Calm repositioning: a positioning target that the transition seam passes on (itself, or its target at a ramped cap)
+    // stays positional; the seam's own targets (the pause, counter-press, recovery runs) keep the full limits.
+    const positional = base.positional === true && target === base.target
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)
     const sep = separation(cur.pos, mates)
     // Chasing a ball that will arrive at a known tick uses on-time steering (matches resolveFlight's reach model).
-    const m = motionFor(cur, w.p)
+    const m = positional === true ? calmMotion(motionFor(cur, w.p), w.p.movement) : motionFor(cur, w.p)
     const v = Math.max(0.5, vmax)
     const next =
       timeLeft !== undefined
@@ -2671,6 +2680,14 @@ const moveAll = (w: Work): void => {
 /** Speed cap moving into shape: relaxed (A0) arrives in relaxArriveS at up to relaxCap of top speed; else shapeSpeedShare. */
 const shapeSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>
   w.p.movement.relaxed > 0 ? relaxedSpeed(dist(pl.pos, target), vmax, w.p.movement.relaxCap, w.p.movement.relaxArriveS) : vmax * w.p.movement.shapeSpeedShare
+
+/**
+ * Off-ball positioning moves (realism v2, P6 off-ball fix): with accelRule 1 the player uses accelShare of his acceleration,
+ * braking and turning limits; rule 0 (the old behaviour): his full limits, fitted to sprints, for every reposition.
+ * @internal
+ */
+export const calmMotion = (m: Motion, mv: Params["movement"]): Motion =>
+  mv.accelRule === 1 ? { a0: m.a0 * mv.accelShare, s0: m.s0, brake: m.brake * mv.accelShare, lateral: m.lateral * mv.accelShare } : m
 
 /** Speed cap moving to a marking spot: relaxed only with relaxMarks (the spec keeps marking speeds). */
 const markSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>

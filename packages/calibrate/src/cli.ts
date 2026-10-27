@@ -3,10 +3,11 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { League } from "@touchline/league"
 import { CliError, cliOptions, exitOnUserError, positiveInteger } from "@touchline/sim"
-import { DEFAULT_PARAMS } from "@touchline/sim-core"
+import { DEFAULT_PARAMS, paramsFromJson, type Params } from "@touchline/sim-core"
 import type { Targets } from "./evaluate.js"
 import { applyKnobs, KNOBS } from "./knobs.js"
 import { GATE_KEYS } from "./gate.js"
+import { applySets, parseSets } from "./overrides.js"
 import { withPhysics, type PhysicsFile } from "./physics.js"
 import { createPool, defaultWorkers } from "./pool.js"
 import { tune } from "./tune.js"
@@ -23,7 +24,10 @@ const o = cliOptions("calibrate: tune engine knobs to real-match targets (method
   from: { default: "", help: "start from the calibration.knobs of this file" },
   workers: { default: String(defaultWorkers()), check: positiveInteger, help: "worker threads evaluating matches in parallel (1 = serial, in-process)" },
   // The fitted physics is fixed: the tuner calibrates behaviour on top of it.
-  physics: { default: join(root, "data/params/physics.json"), help: "physics fit (physics.json), or \"none\" for the literature defaults" }
+  physics: { default: join(root, "data/params/physics.json"), help: "physics fit (physics.json), or \"none\" for the literature defaults" },
+  // A rule switched on in the calibrated file but off in DEFAULT_PARAMS (e.g. movement.accelRule=1) must be set here, or
+  // the tuner tunes, and writes, the engine without it.
+  set: { default: "", help: "comma-separated key=value overrides on the base parameters before tuning, e.g. movement.accelRule=1" }
 })
 const outPath = here(o.out)
 // Make the output folder now: a tuning chunk runs for most of an hour and must not fail when it writes its result.
@@ -49,7 +53,9 @@ const start = o.from ? (readJson("start", o.from) as { calibration?: { knobs?: R
 
 const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "utf8")) as League
 const targets = readJson("targets", o.targets) as Targets
-const base = o.physics === "none" ? DEFAULT_PARAMS : withPhysics(DEFAULT_PARAMS, readJson("physics", o.physics) as PhysicsFile)
+const sets = exitOnUserError(() => parseSets(o.set))
+const physical = o.physics === "none" ? DEFAULT_PARAMS : withPhysics(DEFAULT_PARAMS, readJson("physics", o.physics) as PhysicsFile)
+const base: Params = sets.length === 0 ? physical : exitOnUserError(() => paramsFromJson(applySets(physical, sets)))
 const t0 = Date.now()
 const pool = createPool(league, Number(o.workers))
 let res: Awaited<ReturnType<typeof tune>>
