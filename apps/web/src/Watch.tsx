@@ -118,6 +118,13 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   )
 }
 
+/** The frame named by a `freezeAt` query parameter, or null. */
+const freezeAtParam = (search: string): number | null => {
+  const raw = new URLSearchParams(search).get("freezeAt")
+  const v = raw ? Number(raw) : NaN
+  return Number.isInteger(v) && v >= 0 ? v : null
+}
+
 /**
  * Watching a session: the pane and the controls. Pause (or the space bar) freezes this viewer's picture on the latest
  * frame while the match plays on underneath and opens the Ask panel for that frame (tapping a pitch marker does too,
@@ -182,11 +189,21 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
   const [askOpen, setAskOpen] = useState(false)
   const [prefill, setPrefill] = useState<string | undefined>(undefined)
   const [askClip, setAskClip] = useState<string | null>(null)
-  const freeze = () => {
-    const f = head.current ?? 0
+  const freeze = (at?: number) => {
+    const f = at ?? head.current ?? 0
     setFrozen(f)
     setAskOpen(true)
     onFreeze?.(f)
+  }
+  // Recording a demo: ?freezeAt=<frame> freezes on exactly that frame (one a cached answer was built for) once it arrives.
+  const freezeAt = useRef(freezeAtParam(window.location.search))
+  const onHead = (f: number | null) => {
+    head.current = f
+    const at = freezeAt.current
+    if (at !== null && f !== null && f >= at) {
+      freezeAt.current = null
+      freeze(at)
+    }
   }
   const toggleFreeze = () => {
     if (frozen === null) freeze()
@@ -257,7 +274,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
       {askClip && !whatIf && <AskSplit client={client} sessionId={sessionId} clipId={askClip} match={match} lang={lang} onClose={() => setAskClip(null)} />}
       <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf || askClip ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={(f) => void (head.current = f)} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
         {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
