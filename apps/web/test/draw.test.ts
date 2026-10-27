@@ -51,6 +51,19 @@ describe("pitch drawing", () => {
     expect(high.dots.at(-1)!.r).toBeGreaterThan(ball.r)
   })
 
+  it("puts shirt numbers on the dots, in black or white to read on the kit, when given them", () => {
+    const { ctx, dots } = recorder()
+    const texts: Array<{ text: string; x: number; y: number; colour: string }> = []
+    Object.assign(ctx, { font: "", textAlign: "start", textBaseline: "alphabetic", fillText: (text: string, x: number, y: number) => texts.push({ text, x, y, colour: String(ctx.fillStyle) }) })
+    const numbers = new Map([["h0", 1], ["a3", 9]])
+    drawFrame(ctx, { w: 1050, h: 680 }, frame(), { home: "#1d4ed8", away: "#f8fafc" }, numbers)
+    expect(texts.map((t) => [t.text, t.colour])).toEqual([["1", "#ffffff"], ["9", "#0b1120"]])
+    const [x, y] = toPx({ w: 1050, h: 680 }, -40, -5)
+    expect(texts[0]!.x).toBe(x)
+    expect(Math.abs(texts[0]!.y - y)).toBeLessThan(2)
+    expect(dots.filter((d) => d.colour === "#1d4ed8")).toHaveLength(11)
+  })
+
   it("draws only the markings before the first frame", () => {
     const { ctx, dots } = recorder()
     drawFrame(ctx, { w: 1050, h: 680 }, null, { home: "#000", away: "#fff" })

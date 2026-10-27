@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import type { MatchInfo, MatchSummary } from "@touchline/rpc"
 import type { TouchlineClient } from "./client.js"
+import { withTeamColours } from "./colours.js"
 import { LANG_NAMES, t, type Lang } from "./i18n.js"
 import { MatchList } from "./MatchList.js"
 import type { Profile } from "./profile.js"
@@ -20,7 +21,7 @@ export const App = ({ client }: { client: TouchlineClient }) => {
     client.startSession(m.match_id, { speed: 4, fromMinute, live }).then(
       (s) => {
         setFailed(false)
-        setSession({ id: s.session_id, match: s.match })
+        setSession({ id: s.session_id, match: withTeamColours(s.match) })
       },
       () => setFailed(true)
     )
@@ -28,18 +29,18 @@ export const App = ({ client }: { client: TouchlineClient }) => {
     client.listMatches().then(setMatches, () => setMatches([]))
   }, [client])
   return (
-    <main className="mx-auto max-w-6xl p-6 font-sans">
-      <header className="mb-6 flex items-center justify-between">
+    <main className="mx-auto max-w-7xl p-4 font-sans sm:p-6">
+      <header className={`${session ? "mb-3" : "mb-6"} flex items-center justify-between gap-4`}>
         <div>
-          <h1 className="text-2xl font-bold">{t(lang, "title")}</h1>
-          <p className="text-slate-400">{t(lang, "tagline")}</p>
+          <h1 className={`${session ? "text-xl" : "text-2xl"} font-bold`}>{t(lang, "title")}</h1>
+          {!session && <p className="text-slate-400">{t(lang, "tagline")}</p>}
         </div>
-        <label className="text-sm">
+        {!session && <label className="text-sm">
           <span className="sr-only">{t(lang, "language")}</span>
           <select aria-label={t(lang, "language")} className="rounded bg-slate-800 px-2 py-1" value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
             {(Object.keys(LANG_NAMES) as Lang[]).map((l) => <option key={l} value={l}>{LANG_NAMES[l]}</option>)}
           </select>
-        </label>
+        </label>}
       </header>
       {failed && <p role="alert" className="mb-4 rounded bg-red-900/60 px-3 py-2">{t(lang, "startFailed")}</p>}
       {session ? (

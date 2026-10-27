@@ -9,6 +9,9 @@ describe("app shell", () => {
     render(<App client={fakeClient()} />)
     const card = await screen.findByRole("listitem")
     expect(within(card).getByText("Northwick Mariners")).toBeTruthy()
+    // No spoilers: the final score shows only once asked for.
+    expect(within(card).queryByText("1–2")).toBeNull()
+    await userEvent.click(screen.getByLabelText("Show results"))
     expect(within(card).getByText("1–2")).toBeTruthy()
     await userEvent.selectOptions(screen.getByLabelText("Language"), "hi")
     expect(screen.getByText("मैच")).toBeTruthy()

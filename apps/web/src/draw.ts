@@ -3,6 +3,7 @@
  * y across. Pure: everything goes through the 2D context it is given, so tests can record the calls.
  */
 import type { PitchFrame } from "@touchline/rpc"
+import { inkOn } from "./colours.js"
 
 export const LENGTH = 105
 export const WIDTH = 68
@@ -24,7 +25,7 @@ type Ctx = Pick<CanvasRenderingContext2D, "fillRect" | "strokeRect" | "beginPath
   fillStyle: CanvasRenderingContext2D["fillStyle"]
   strokeStyle: CanvasRenderingContext2D["strokeStyle"]
   lineWidth: number
-}
+} & Partial<Pick<CanvasRenderingContext2D, "fillText" | "font" | "textAlign" | "textBaseline">>
 
 const PITCH = "#1f6b3a"
 const LINE = "#e8f5ec"
@@ -64,18 +65,34 @@ export const drawMarkings = (ctx: Ctx, size: Size, stripes = 0) => {
   }
 }
 
-/** The pitch with the frame's players in their kit colours and the ball (bigger when it is in the air). */
-export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: Kits) => {
+/**
+ * The pitch with the frame's players in their kit colours and the ball (bigger when it is in the air). Given shirt
+ * numbers (player id to number), the dots are a little bigger, outlined, and carry the number in black or white,
+ * whichever reads on the kit.
+ */
+export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: Kits, numbers?: ReadonlyMap<string, number>) => {
   drawMarkings(ctx, size)
   if (!frame) return
-  const r = (0.9 / LENGTH) * size.w
+  const labelled = numbers !== undefined && numbers.size > 0 && typeof ctx.fillText === "function"
+  const r = ((labelled ? 1.3 : 0.9) / LENGTH) * size.w
   for (const [side, colour] of [["home", kits.home], ["away", kits.away]] as const) {
-    ctx.fillStyle = colour
+    const ink = inkOn(colour)
     for (const p of frame[side]) {
       const [x, y] = toPx(size, p.x, p.y)
+      ctx.fillStyle = colour
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
       ctx.fill()
+      const n = labelled ? numbers.get(p.id) : undefined
+      if (n === undefined) continue
+      ctx.strokeStyle = ink === "#ffffff" ? "rgba(255,255,255,0.55)" : "rgba(11,17,32,0.55)"
+      ctx.lineWidth = Math.max(1, r / 7)
+      ctx.stroke()
+      ctx.fillStyle = ink
+      ctx.font = `700 ${Math.round(r * 1.05)}px Inter, system-ui, sans-serif`
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText!(String(n), x, y + r * 0.06)
     }
   }
   const [bx, by] = toPx(size, frame.ball.x, frame.ball.y)

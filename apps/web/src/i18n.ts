@@ -148,7 +148,20 @@ const en = {
   askSomeone: "a teammate",
   askMoved: "{name} in a new spot",
   pausedHere: "You paused here",
-  keysHint: "Click a player to follow them · keys 1–4 switch camera · [ ] step through players"
+  keysHint: "Click a player to follow them · keys 1–4 switch camera · [ ] step through players",
+  matchControls: "Match controls",
+  view: "View",
+  broadcastTools: "Broadcast tools",
+  showResults: "Show results",
+  pauseHint: "Press Space or tap Pause to ask about any moment",
+  dismiss: "Dismiss",
+  versus: "v",
+  scEvenContest: "Even contest",
+  scLateComeback: "Late comeback",
+  scRedCard: "Red card drama",
+  scKeeperHeroics: "Keeper heroics",
+  scCostlyError: "Costly error",
+  scHighPress: "High press vs low block"
 } as const
 
 export type Key = keyof typeof en
@@ -302,7 +315,20 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     askSomeone: "un compañero",
     askMoved: "{name} en otra posición",
     pausedHere: "Aquí pausaste",
-    keysHint: "Haz clic en un jugador para seguirlo · teclas 1–4 cambian la cámara · [ ] recorren los jugadores"
+    keysHint: "Haz clic en un jugador para seguirlo · teclas 1–4 cambian la cámara · [ ] recorren los jugadores",
+    matchControls: "Controles del partido",
+    view: "Vista",
+    broadcastTools: "Herramientas de emisión",
+    showResults: "Mostrar resultados",
+    pauseHint: "Pulsa Espacio o toca Pausa para preguntar sobre cualquier momento",
+    dismiss: "Cerrar aviso",
+    versus: "vs",
+    scEvenContest: "Partido igualado",
+    scLateComeback: "Remontada final",
+    scRedCard: "Drama de la roja",
+    scKeeperHeroics: "Exhibición del portero",
+    scCostlyError: "Error costoso",
+    scHighPress: "Presión alta contra bloque bajo"
   },
   hi: {
     title: "Touchline",
@@ -451,7 +477,20 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     askSomeone: "कोई साथी",
     askMoved: "{name} नई जगह पर",
     pausedHere: "आपने यहाँ रोका",
-    keysHint: "किसी खिलाड़ी पर क्लिक करें · 1–4 कैमरा बदलें · [ ] खिलाड़ी बदलें"
+    keysHint: "किसी खिलाड़ी पर क्लिक करें · 1–4 कैमरा बदलें · [ ] खिलाड़ी बदलें",
+    matchControls: "मैच नियंत्रण",
+    view: "दृश्य",
+    broadcastTools: "ब्रॉडकास्ट टूल्स",
+    showResults: "नतीजे दिखाएँ",
+    pauseHint: "किसी भी पल के बारे में पूछने के लिए Space दबाएँ या रोकें पर टैप करें",
+    dismiss: "संकेत हटाएँ",
+    versus: "बनाम",
+    scEvenContest: "बराबरी का मुकाबला",
+    scLateComeback: "आख़िरी पलों में वापसी",
+    scRedCard: "रेड कार्ड का ड्रामा",
+    scKeeperHeroics: "गोलकीपर का कमाल",
+    scCostlyError: "महँगी गलती",
+    scHighPress: "हाई प्रेस बनाम लो ब्लॉक"
   }
 }
 

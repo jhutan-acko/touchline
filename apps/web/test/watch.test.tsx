@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PitchFrame } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 import { App } from "../src/App.js"
+import { VIEW_KEY } from "../src/Watch.js"
 import { parseMarker } from "../src/markers.js"
 import type { Stage3DProps } from "../src/view3d/Stage3D.js"
 import { fakeClient } from "./fake-client.js"
@@ -17,7 +18,12 @@ vi.mock("../src/view3d/Stage3D.js", () => ({
     </div>
   )
 }))
-beforeEach(() => localStorage.clear())
+// These tests watch on the 2D pitch: with WebGL (mocked on) and nothing saved the page now opens in 3D, so the viewer's
+// saved choice, which always wins, is 2D. The 3D default itself is tested below.
+beforeEach(() => {
+  localStorage.clear()
+  localStorage.setItem(VIEW_KEY, "2d")
+})
 
 const board = (home: number, away: number, clock: string): Cue => ({
   cue_id: `b-${clock}`, schema: "touchline.cue/1", match_id: "m", moment_id: null, anchor: { frame_from: 0, frame_to: 0, clock },
@@ -187,6 +193,7 @@ describe("watching a match", () => {
 
   it("does not pop up a better pass or a manager's decision while frozen", async () => {
     const client = await watching()
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" }))
     await userEvent.click(screen.getByLabelText("Auto-show better passes"))
     await pauseAndPlayOn(client)
     act(() => client.push({ kind: "cue", cue: textCue("bp", "A better pass was on", "better_pass", ["e-1"]) }))
