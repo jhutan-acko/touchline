@@ -3,8 +3,9 @@
  * (a frozen view shows one of them), the scoreboard, the cues on screen (each anchored to match frames, so a frozen view
  * keeps the overlays it had) and every agent cue so far (for "Why?").
  */
-import type { BallEvent, PitchFrame, Playback, Tick } from "@touchline/rpc"
+import type { PitchFrame, Playback, Tick } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
+import { EMPTY_PULSE, pulseReduce, type PulseLog } from "./pulse.js"
 
 export type Slot = Cue["display"]["slot"]
 
@@ -18,13 +19,6 @@ export interface OnScreen {
   readonly cue: Cue
   /** The last match frame it shows on: its ttl counted (in frames) from the end of its anchor, or from its arrival if later. */
   readonly untilFrame: number
-  /** The latest match frame known when it arrived: a view frozen before then never shows it (no spoilers). */
-  readonly arrivedAt: number
-}
-
-/** An on-ball event as it reached this pane. */
-export interface ArrivedEvent {
-  readonly event: BallEvent
   /** The latest match frame known when it arrived: a view frozen before then never shows it (no spoilers). */
   readonly arrivedAt: number
 }
@@ -43,14 +37,11 @@ export interface PaneState {
   readonly feed: ReadonlyArray<Cue>
   /** When each cue in the feed arrived (the latest match frame known then), by cue id. */
   readonly feedArrivedAt: Readonly<Record<string, number>>
-  /** The latest on-ball events (stat tags, follow my player), newest first. */
-  readonly events: ReadonlyArray<ArrivedEvent>
+  /** The match so far as the pulse strip shows it (momentum, who had the ball, goals, key moments); see pulse.ts. */
+  readonly pulse: PulseLog
 }
 
-export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {}, events: [] }
-
-/** At most this many on-ball events are kept (a minute or so of play). */
-export const EVENTS_SIZE = 120
+export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {}, pulse: EMPTY_PULSE }
 
 /** At most this many agent cues stay in the feed. */
 export const FEED_SIZE = 50
@@ -78,16 +69,19 @@ const ringWith = (ring: ReadonlyArray<PitchFrame>, f: PitchFrame, fps: number): 
 }
 
 export const reduce = (s: PaneState, tick: Tick, fps: number): PaneState => {
+  const next = reduceView(s, tick, fps)
+  return tick.kind === "playback" ? next : { ...next, pulse: pulseReduce(s.pulse, tick, fps) }
+}
+
+const reduceView = (s: PaneState, tick: Tick, fps: number): PaneState => {
   switch (tick.kind) {
     case "frame":
       return { ...s, frame: tick.frame, ring: ringWith(s.ring, tick.frame, fps), head: tick.frame.frame }
     case "playback":
       return { ...s, playback: tick.playback }
-    case "event": {
-      const e = tick.event
-      const arrivedAt = Math.max(s.head ?? e.frame, e.frame)
-      return { ...s, events: [{ event: e, arrivedAt }, ...s.events.filter((x) => x.event.id !== e.id)].slice(0, EVENTS_SIZE) }
-    }
+    case "event":
+      // On-ball events are kept once, by follow.ts (usePane); the pane's own state does not change.
+      return s
     case "cue": {
       const cue = tick.cue
       const head = s.frame ? s.head : Math.max(s.head ?? 0, cue.anchor.frame_to)

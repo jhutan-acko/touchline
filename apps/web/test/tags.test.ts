@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { BallEvent, PitchFrame } from "@touchline/rpc"
-import { EMPTY, reduce, type ArrivedEvent } from "../src/pane.js"
+import { FOLLOW_EMPTY, followReduce } from "../src/follow.js"
+import { EMPTY, reduce } from "../src/pane.js"
 import { eventTags, MAX_TAGS, passText, selectTags, shotText, speedsAt, sprintTags, statTags, type StatTag } from "../src/tags.js"
 
 const FPS = 10
@@ -21,7 +22,6 @@ const ev = (o: Partial<BallEvent>): BallEvent => ({
   id: "e1", frame: 100, clock: "10:00", type: "pass", team: "home", player_id: "p-9", receiver_id: "p-4", outcome: "success",
   x: 0, y: 0, x_end: 20, y_end: 3, length_m: 23.2, xpass: 0.18, speed_kmh: 55, xg: null, ...o
 })
-const arrived = (e: BallEvent, arrivedAt = e.frame): ArrivedEvent => ({ event: e, arrivedAt })
 
 describe("player speed", () => {
   it("is measured over half a second", () => {
@@ -89,7 +89,7 @@ describe("event tags", () => {
   })
 
   it("show from the event's frame for three seconds, never before it", () => {
-    const evs = [arrived(ev({ type: "shot", xg: 0.1, frame: 100 }))]
+    const evs = [(ev({ type: "shot", xg: 0.1, frame: 100 }))]
     expect(eventTags(evs, 99, FPS, "analyst", "en")).toEqual([])
     expect(eventTags(evs, 100, FPS, "analyst", "en")).toHaveLength(1)
     expect(eventTags(evs, 129, FPS, "analyst", "en")).toHaveLength(1)
@@ -97,10 +97,10 @@ describe("event tags", () => {
   })
 
   it("stay up longer in match time at a faster speed, so they last as long on screen", () => {
-    const evs = [arrived(ev({ type: "shot", xg: 0.1, frame: 100 }))]
-    expect(eventTags(evs, 140, FPS, "analyst", "en", null, 1)).toEqual([])
-    expect(eventTags(evs, 140, FPS, "analyst", "en", null, 4)).toHaveLength(1) // 3 s × 4 = 120 frames
-    expect(eventTags(evs, 99, FPS, "analyst", "en", null, 4)).toEqual([]) // still never early
+    const evs = [(ev({ type: "shot", xg: 0.1, frame: 100 }))]
+    expect(eventTags(evs, 140, FPS, "analyst", "en", 1)).toEqual([])
+    expect(eventTags(evs, 140, FPS, "analyst", "en", 4)).toHaveLength(1) // 3 s × 4 = 120 frames
+    expect(eventTags(evs, 99, FPS, "analyst", "en", 4)).toEqual([]) // still never early
     const frames = run(0, 80, (n) => (n <= 20 ? 29.1 : 10))
     expect(sprintTags(frames, 50, FPS, names, 1)).toEqual([])
     expect(sprintTags(frames, 50, FPS, names, 4)).toHaveLength(1)
@@ -111,16 +111,15 @@ describe("event tags", () => {
     expect(passText(ev({ length_m: 1, xpass: 0.2 }), "casual", "en")).toBeNull()
   })
 
-  it("keep a frozen view to the events that had arrived by its freeze", () => {
-    const evs = [arrived(ev({ type: "shot", frame: 100 }), 104)]
-    expect(eventTags(evs, 103, FPS, "analyst", "en", 103)).toEqual([])
-    expect(eventTags(evs, 104, FPS, "analyst", "en", 104)).toHaveLength(1)
+  it("never show an event after the frame shown, among many in frame order", () => {
+    const evs = [100, 105, 110, 200].map((frame) => ev({ id: `s${frame}`, type: "shot", frame }))
+    expect(eventTags(evs, 106, FPS, "analyst", "en").map((t) => t.key)).toEqual(["event-s105", "event-s100"])
   })
 
   it("put a completed pass's tag on its receiver, a missed one where the ball went", () => {
-    const [ok] = eventTags([arrived(ev({}))], 100, FPS, "analyst", "en")
+    const [ok] = eventTags([(ev({}))], 100, FPS, "analyst", "en")
     expect(ok).toMatchObject({ player_id: "p-4", x: 20, y: 3, ok: true })
-    const [miss] = eventTags([arrived(ev({ outcome: "fail" }))], 100, FPS, "analyst", "en")
+    const [miss] = eventTags([(ev({ outcome: "fail" }))], 100, FPS, "analyst", "en")
     expect(miss).toMatchObject({ player_id: null, x: 20, y: 3, ok: false })
   })
 })
@@ -138,11 +137,11 @@ describe("choosing tags", () => {
 
   it("put it together for a pane's state, analyst and casual alike", () => {
     let s = EMPTY
+    let follow = FOLLOW_EMPTY
     for (const f of run(0, 100, () => 8)) s = reduce(s, { kind: "frame", frame: f }, FPS)
-    s = reduce(s, { kind: "event", event: ev({ id: "easy", xpass: 0.9, length_m: 30, frame: 98 }) }, FPS)
-    s = reduce(s, { kind: "event", event: ev({ id: "hard", frame: 99 }) }, FPS)
-    expect(s.events.map((e) => e.event.id)).toEqual(["hard", "easy"])
-    const o = { ring: s.ring, events: s.events, at: 100, frozen: null, fps: FPS, lang: "en" as const, names }
+    for (const event of [ev({ id: "hard", frame: 99 }), ev({ id: "easy", xpass: 0.9, length_m: 30, frame: 98 })]) follow = followReduce(follow, { kind: "event", event }, FPS)
+    expect(follow.events.map((e) => e.id)).toEqual(["easy", "hard"]) // one store, in frame order
+    const o = { ring: s.ring, events: follow.events, at: 100, fps: FPS, lang: "en" as const, names }
     expect(statTags({ ...o, mode: "analyst" }).map((t) => t.text)).toEqual(["Hard pass · 23 m · 18% xPass ✓", "Pass · 30 m · 90% xPass ✓"])
     expect(statTags({ ...o, mode: "casual" }).map((t) => t.text)).toEqual(["Tough pass!"])
   })

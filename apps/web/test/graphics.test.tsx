@@ -33,6 +33,7 @@ describe("graphics output", () => {
     const client = fakeClient()
     render(<App client={client} />)
     await userEvent.click(await screen.findByRole("button", { name: "Watch" }))
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" }))
     expect(screen.getByRole("link", { name: "Graphics output" }).getAttribute("href")).toBe("#/graphics/s1?seg=casual.en.neutral&match=lib-costly_error-1")
   })
 })

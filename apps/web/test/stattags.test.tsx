@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest"
 import type { BallEvent, PitchFrame } from "@touchline/rpc"
 import { App } from "../src/App.js"
 import { StatTags } from "../src/StatTags.js"
+import { VIEW_KEY } from "../src/Watch.js"
 import { fakeClient } from "./fake-client.js"
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => (localStorage.clear(), localStorage.setItem(VIEW_KEY, "2d")))
 
 const frame = (n: number): PitchFrame => ({ frame: n, period: "first_half", clock: "10:00.00", ball: { x: 0, y: 0, z: 0 }, home: [{ id: "p-nor-01", x: -40, y: 0 }], away: [{ id: "p-lar-09", x: 30, y: 4 }] })
 const shot = (n: number): BallEvent => ({
@@ -28,6 +29,7 @@ describe("stat tags", () => {
     const client = await watching()
     act(() => client.push({ kind: "event", event: shot(20) }))
     expect(tags()).toEqual(["96 km/h rocket!"]) // casual: no xG
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" })) // the toggle is in this menu
     await userEvent.click(screen.getByLabelText("Stat tags"))
     expect(screen.getByLabelText("stat tags").children).toHaveLength(0)
     await userEvent.click(screen.getByLabelText("Stat tags"))

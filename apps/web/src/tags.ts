@@ -6,7 +6,6 @@
  */
 import type { BallEvent, PitchFrame } from "@touchline/rpc"
 import { t, type Lang } from "./i18n.js"
-import type { ArrivedEvent } from "./pane.js"
 
 /** A player faster than this (km/h, smoothed) gets a sprint tag. */
 export const SPRINT_KMH = 25
@@ -148,14 +147,17 @@ export const shotText = (e: BallEvent, mode: "casual" | "analyst", lang: Lang): 
 }
 
 /**
- * Event tags at frame `at`: shots, and the passes the mode cares about, from the last EVENT_TAG_S. `frozen`: the frame
- * this view froze on, so an event that arrived after it stays off (no spoilers). Newest first.
+ * Event tags at frame `at`: shots, and the passes the mode cares about, from the last EVENT_TAG_S (× `stretch`), never
+ * one after `at`. `events` are in frame order (follow.ts keeps them so); a frozen view passes the events it held at
+ * the freeze, so nothing that arrived since shows (no spoilers). Newest first.
  */
-export const eventTags = (events: ReadonlyArray<ArrivedEvent>, at: number, fps: number, mode: "casual" | "analyst", lang: Lang, frozen: number | null = null, stretch = 1): StatTag[] => {
+export const eventTags = (events: ReadonlyArray<BallEvent>, at: number, fps: number, mode: "casual" | "analyst", lang: Lang, stretch = 1): StatTag[] => {
   const ttl = EVENT_TAG_S * fps * Math.max(1, stretch)
   const out: StatTag[] = []
-  for (const { event: e, arrivedAt } of events) {
-    if (e.frame > at || e.frame <= at - ttl || (frozen !== null && arrivedAt > frozen)) continue
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.frame <= at - ttl) break
+    if (e.frame > at) continue
     const text = e.type === "shot" ? shotText(e, mode, lang) : e.type === "pass" ? passText(e, mode, lang) : null
     if (text === null) continue
     const end = e.type === "pass" && e.x_end !== null && e.y_end !== null
@@ -174,13 +176,13 @@ export const selectTags = (events: ReadonlyArray<StatTag>, sprints: ReadonlyArra
 /** Every tag a pane shows at frame `at` (the frozen frame when frozen). */
 export const statTags = (o: {
   readonly ring: ReadonlyArray<PitchFrame>
-  readonly events: ReadonlyArray<ArrivedEvent>
+  /** The on-ball events so far, in frame order (frozen: those held at the freeze). */
+  readonly events: ReadonlyArray<BallEvent>
   readonly at: number
-  readonly frozen: number | null
   readonly fps: number
   readonly mode: "casual" | "analyst"
   readonly lang: Lang
   readonly names: Readonly<Record<string, string>>
   /** The playback speed: tags stay up this many times longer in match time, so they last as long on screen at ×4 as at ×1. */
   readonly speed?: number
-}): StatTag[] => selectTags(eventTags(o.events, o.at, o.fps, o.mode, o.lang, o.frozen, o.speed), sprintTags(o.ring, o.at, o.fps, o.names, o.speed))
+}): StatTag[] => selectTags(eventTags(o.events, o.at, o.fps, o.mode, o.lang, o.speed), sprintTags(o.ring, o.at, o.fps, o.names, o.speed))

@@ -129,6 +129,7 @@ describe("the 3D view", () => {
 
   it("shows both demo profiles in 3D", async () => {
     await watch3d()
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" }))
     await userEvent.click(screen.getByRole("button", { name: "Split screen" }))
     expect(screen.getAllByTestId("stage")).toHaveLength(2)
   })
