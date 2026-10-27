@@ -257,6 +257,8 @@ export const makeSessions = (
           return [{ kind: "cue", cue: boardCue(s.match.info.match_id, b.board, segment) }]
         case "cues":
           return pickCues(b.cues, segment).map((cue) => ({ kind: "cue" as const, cue }))
+        case "event":
+          return [{ kind: "event", event: b.event }]
         case "signals":
         case "queue":
         case "air":

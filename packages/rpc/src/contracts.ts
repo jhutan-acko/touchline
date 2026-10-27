@@ -71,11 +71,42 @@ export const Playback = Schema.Struct({
 })
 export type Playback = typeof Playback.Type
 
-/** What a watcher receives, in match order: frames, cues for its segment (stats cues and agent cues) and playback state. */
+/**
+ * An on-ball event as play reaches it (live stat tags, follow my player): sent on the Watch stream once playback has
+ * reached `frame` (never earlier; no spoilers). `frame` is the frame the event is complete on (a pass on its arrival, a
+ * shot on its resolution), so its outcome is known by then. Positions are in PitchFrame coordinates.
+ */
+export const BallEvent = Schema.Struct({
+  id: Id,
+  frame: Count,
+  clock: Schema.String,
+  type: Schema.Literals(["pass", "shot", "carry", "tackle", "interception", "clearance", "save"]),
+  team: Schema.Literals(["home", "away"]),
+  player_id: Id,
+  /** A pass's intended or actual receiver, when known. */
+  receiver_id: Schema.NullOr(Schema.String),
+  outcome: Schema.NullOr(Schema.Literals(["success", "fail", "goal", "saved", "blocked", "off_target"])),
+  x: Schema.Finite,
+  y: Schema.Finite,
+  x_end: Schema.NullOr(Schema.Finite),
+  y_end: Schema.NullOr(Schema.Finite),
+  /** A pass's or carry's length (m). */
+  length_m: Schema.NullOr(Schema.Finite),
+  /** A pass's modelled completion probability (packages/stats xPass); its difficulty is 1 − xpass. */
+  xpass: Schema.NullOr(Schema.Finite),
+  /** A shot's or pass's ball speed at release (km/h). */
+  speed_kmh: Schema.NullOr(Schema.Finite),
+  /** A shot's expected goals. */
+  xg: Schema.NullOr(Schema.Finite)
+})
+export type BallEvent = typeof BallEvent.Type
+
+/** What a watcher receives, in match order: frames, cues for its segment (stats cues and agent cues), on-ball events and playback state. */
 export const Tick = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("frame"), frame: PitchFrame }),
   Schema.Struct({ kind: Schema.Literal("cue"), cue: Cue }),
-  Schema.Struct({ kind: Schema.Literal("playback"), playback: Playback })
+  Schema.Struct({ kind: Schema.Literal("playback"), playback: Playback }),
+  Schema.Struct({ kind: Schema.Literal("event"), event: BallEvent })
 ])
 export type Tick = typeof Tick.Type
 

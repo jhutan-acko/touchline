@@ -130,6 +130,23 @@ describe("sessions", () => {
       })
     ), 120_000)
 
+  it("send on-ball events to every viewer once play has reached them, never before", () =>
+    run(
+      Effect.gen(function* () {
+        const sessions = yield* makeSessions(library())
+        const s = yield* sessions.start(match, { speed: 64, fromMinute: 10, live: false })
+        const w = yield* sessions.watch(s.id, home).pipe(Stream.filter((t: Tick) => t.kind === "frame" || t.kind === "event"), Stream.take(400), Stream.runCollect, Effect.forkChild)
+        const ticks: Tick[] = [...(yield* settle(w))]
+        const evs = ticks.flatMap((t, i) => (t.kind === "event" ? [{ e: t.event, next: ticks.slice(i + 1).find((x) => x.kind === "frame") }] : []))
+        expect(evs.length).toBeGreaterThan(5)
+        for (const { e, next } of evs) {
+          expect(e.frame).toBeGreaterThanOrEqual(startFrame(match, 10))
+          // Frames go out every 25th at ×64: the next one sent is at or after the event, never before it.
+          if (next?.kind === "frame") expect(next.frame.frame).toBeGreaterThanOrEqual(e.frame)
+        }
+      })
+    ), 120_000)
+
   it("end at once the stream of a viewer who joins after the match is over", () =>
     run(
       Effect.gen(function* () {

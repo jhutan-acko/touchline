@@ -6,10 +6,11 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Duration, Effect, Stream, SubscriptionRef } from "effect"
-import type { PitchFrame } from "@touchline/rpc"
-import type { Cue, Signal } from "@touchline/schema"
+import type { BallEvent, PitchFrame } from "@touchline/rpc"
+import type { Cue, DomainEvent, Signal } from "@touchline/schema"
 import { paramsFromJson } from "@touchline/sim-core"
-import { modelsFromJson, readRun, StatsEngine, xtGridFromJson, type ReplayError, type Roster, type StatsInput, type TrackFrame } from "@touchline/stats"
+import { emittedAt, modelsFromJson, readRun, StatsEngine, xtGridFromJson, type ReplayError, type Roster, type StatsInput, type TrackFrame } from "@touchline/stats"
+import { releaseSpeed, toBallEvent, type BallAt } from "./events.js"
 import type { LibraryMatch } from "./library.js"
 
 export const root = join(import.meta.dirname, "../../..")
@@ -29,6 +30,8 @@ export type Beat =
   /** The variants of one moment or recap, all segments: each watcher picks its own. */
   | { readonly kind: "cues"; readonly frame: number; readonly cues: ReadonlyArray<Cue> }
   | { readonly kind: "signals"; readonly frame: number; readonly signals: ReadonlyArray<Signal> }
+  /** An on-ball event, right after the frame it is complete on (never before: its outcome would show early). */
+  | { readonly kind: "event"; readonly frame: number; readonly event: BallEvent }
   | { readonly kind: "end"; readonly frame: number }
 
 const params = (f: string) => JSON.parse(readFileSync(join(root, "data/params", f), "utf8"))
@@ -66,6 +69,25 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
       let next = 0
       let last = -1
       let goal: number | null = null // a goal not yet on a scoreboard: its frame
+      // On-ball events wait for the frame they are complete on; the ball's recent positions give their release speed.
+      let held: DomainEvent[] = []
+      const balls = new Map<number, BallAt>()
+      const RELEASE_TICKS = Math.max(1, Math.round(0.3 / run.info.dt))
+      const ballEvent = (e: DomainEvent): Beat[] => {
+        const at = emittedAt(e)
+        const event = toBallEvent(e, {
+          homeId: home.id, clock: engine.clockAt(at), derived: engine.derived.get(e.id),
+          speed: releaseSpeed(balls, e.frame_id, Math.min(e.frame_id + RELEASE_TICKS, Math.max(e.frame_id + 1, at)), run.info.dt)
+        })
+        return event && at >= fromFrame ? [{ kind: "event", frame: at, event }] : []
+      }
+      /** The held events complete by `frame`, in order. */
+      const released = (frame: number): Beat[] => {
+        if (!held.length) return []
+        const ready = held.filter((e) => emittedAt(e) <= frame)
+        held = held.filter((e) => emittedAt(e) > frame)
+        return ready.flatMap(ballEvent)
+      }
       const board = (tick: number, clock: string): Beat => {
         const mom = engine.value("team.mom", home.id, { at: tick })
         const b: Beat = { kind: "board", board: { frame: tick, clock, score: { ...score }, momentum: mom === null ? null : { home: r3(mom), away: r3(1 - mom) } }, ...(goal !== null ? { goal } : {}) }
@@ -93,10 +115,14 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
           }
           const at = signals[0]?.frame_id ?? 0
           if (signals.length && at >= fromFrame) out.push({ kind: "signals", frame: at, signals })
-          return out
+          held.push(input.event)
+          // An event emitted just after its frame (a period's end) goes out at once: play has reached it.
+          return [...out, ...(last >= emittedAt(input.event) ? released(last) : [])]
         }
         const f = input.frame
         last = f.tick
+        balls.set(f.tick, { tick: f.tick, x: f.ball.x, y: f.ball.y, z: f.ball.z })
+        balls.delete(f.tick - 10 * RELEASE_TICKS - 100)
         const out: Beat[] = []
         if (f.tick >= fromFrame) {
           const clock = engine.clockAt(f.tick)
@@ -104,7 +130,7 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
           if (signals.length) out.push({ kind: "signals", frame: f.tick, signals })
           if (f.tick % every === 0) out.push(board(f.tick, clock))
         }
-        return [...out, ...due(f.tick)]
+        return [...out, ...due(f.tick), ...released(f.tick)]
       }
       return run.inputs.pipe(
         Stream.map(step),
@@ -114,7 +140,7 @@ export const beats = (m: LibraryMatch, fromFrame = 0): Stream.Stream<Beat, Repla
             const signals = engine.finish()
             const end = Math.max(0, last)
             const tail: Beat[] = signals.length && end >= fromFrame ? [{ kind: "signals", frame: end, signals }] : []
-            return Stream.fromIterable([...tail, ...due(Number.MAX_SAFE_INTEGER), { kind: "end", frame: end } as Beat])
+            return Stream.fromIterable([...tail, ...due(Number.MAX_SAFE_INTEGER), ...released(end), { kind: "end", frame: end } as Beat])
           })
         )
       )
