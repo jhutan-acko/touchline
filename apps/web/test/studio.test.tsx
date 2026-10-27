@@ -85,6 +85,7 @@ describe("studio console", () => {
     const client = fakeClient()
     render(<App client={client} />)
     await userEvent.click(await screen.findByRole("button", { name: "Watch" }))
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" })) // now in the broadcast tools menu
     expect(screen.getByRole("link", { name: "Studio console" }).getAttribute("href")).toBe("#/studio/s1?seg=casual.en.neutral")
   })
 })

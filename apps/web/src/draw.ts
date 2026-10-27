@@ -100,4 +100,8 @@ export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: 
   ctx.beginPath()
   ctx.arc(bx, by, r * (0.5 + Math.min(1, frame.ball.z / 3) * 0.5), 0, Math.PI * 2)
   ctx.fill()
+  // A dark rim, so the ball reads against a white kit too.
+  ctx.strokeStyle = "#0b1120"
+  ctx.lineWidth = Math.max(1, r / 5)
+  ctx.stroke()
 }

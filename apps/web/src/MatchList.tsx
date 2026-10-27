@@ -56,7 +56,7 @@ export const MatchList = ({ matches, lang, onWatch }: { matches: ReadonlyArray<M
                 <Team name={m.away.name} colour={m.away.kit.primary} end />
               </div>
               <div className="flex items-center justify-between gap-2 text-sm text-slate-400">
-                <span className="truncate">{m.managers ? `${t(lang, "managed")}: ${m.managers.home ?? "—"} v ${m.managers.away ?? "—"}` : (m.model ?? t(lang, "stats"))}</span>
+                <span className="truncate">{m.managers ? `${t(lang, "managed")}: ${m.managers.home ?? "—"} v ${m.managers.away ?? "—"}` : (m.model ?? t(lang, "stats"))} · #{m.seed}</span>
                 <button type="button" className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-500" onClick={() => onWatch(raw)}>{t(lang, "watch")}</button>
               </div>
             </li>

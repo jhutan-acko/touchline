@@ -6,6 +6,7 @@
 import * as THREE from "three"
 import { clone as cloneRig } from "three/addons/utils/SkeletonUtils.js"
 import type { MatchInfo } from "@touchline/rpc"
+import { inkOn } from "../colours.js"
 import { drawMarkings, LENGTH, WIDTH } from "../draw.js"
 import { kickAt, kickPose, type Kick, type KickPart } from "./kick.js"
 import { blendGaits, GAITS, gaitOf, gaitRate, turnToward, wantedYaw, type Gait, type Sample } from "./motion.js"
@@ -38,13 +39,13 @@ export const pitchTexture = (): THREE.Texture => {
 }
 
 /** A number on a dark rounded tag, as a texture (the jersey numbers, the markers' counts). */
-export const labelTexture = (text: string, colour: string): THREE.Texture => {
+export const labelTexture = (text: string, colour: string, tag = "rgba(13,20,18,.8)"): THREE.Texture => {
   const c = document.createElement("canvas")
   c.width = 128
   c.height = 64
   const g = c.getContext("2d")
   if (g) {
-    g.fillStyle = "rgba(13,20,18,.8)"
+    g.fillStyle = tag
     g.beginPath()
     g.roundRect(4, 4, 120, 56, 14)
     g.fill()
@@ -202,7 +203,7 @@ export class World {
     })
     const holder = new THREE.Group()
     holder.add(model)
-    const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(k.jersey, k.kit), depthTest: false, sizeAttenuation: false }))
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(k.jersey, inkOn(k.kit), k.kit), depthTest: false, sizeAttenuation: false }))
     tag.scale.set(0.05, 0.025, 1)
     tag.position.y = 2.2
     tag.renderOrder = 10
