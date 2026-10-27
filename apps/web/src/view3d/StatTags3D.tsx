@@ -3,7 +3,7 @@
  * receiver) or over its pitch spot, placed every animation frame, fading as the tag does. What to show is decided in
  * `tags.ts`, which is tested; this file only builds the three.js objects.
  */
-import { createPortal, useFrame } from "@react-three/fiber"
+import { useFrame } from "@react-three/fiber"
 import { useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
 import type { StatTag } from "../tags.js"
@@ -45,33 +45,64 @@ const tagTexture = (text: string, kind: StatTag["kind"]): { texture: THREE.Textu
 }
 
 /** Screen height of a tag (a fraction of the viewport, as the jersey numbers are sized). */
-const HEIGHT = 0.03
+const HEIGHT = 0.024
 
-const TagSprite = ({ tag, world }: { tag: StatTag; world: World }) => {
-  const sprite = useMemo(() => {
-    const { texture, aspect } = tagTexture(tag.text, tag.kind)
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true, sizeAttenuation: false }))
-    s.scale.set(HEIGHT * aspect, HEIGHT, 1)
-    s.center.set(0.5, 0)
-    s.renderOrder = 11
-    return s
-  }, [tag.text, tag.kind])
-  useEffect(() => () => {
-    sprite.material.map?.dispose()
-    sprite.material.dispose()
-  }, [sprite])
-  const latest = useRef(tag)
-  latest.current = tag
-  useFrame(() => {
-    const t = latest.current
-    const p = t.player_id ? world.positionOf(t.player_id) : null
-    if (p) sprite.position.set(p.x, 3.4, p.z)
-    else sprite.position.set(t.x, 2.5, -t.y)
-    sprite.material.opacity = t.opacity
-  })
-  return <primitive object={sprite} />
+interface Shown {
+  readonly sprite: THREE.Sprite
+  readonly text: string
 }
 
-/** The stat tags drawn into a world's scene. */
-export const StatTags3D = ({ tags, world }: { tags: ReadonlyArray<StatTag>; world: World }) =>
-  createPortal(<>{tags.map((tag) => <TagSprite key={tag.key} tag={tag} world={world} />)}</>, world.scene)
+const spriteOf = (tag: StatTag): THREE.Sprite => {
+  const { texture, aspect } = tagTexture(tag.text, tag.kind)
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true, sizeAttenuation: false }))
+  s.scale.set(HEIGHT * aspect, HEIGHT, 1)
+  s.center.set(0.5, 0)
+  s.renderOrder = 11
+  return s
+}
+
+const free = (s: THREE.Sprite) => {
+  s.material.map?.dispose()
+  s.material.dispose()
+}
+
+/**
+ * The stat tags drawn into a world's scene: a group of label sprites kept in step with `tags` (a sprite is rebuilt when
+ * its text changes) and placed every animation frame.
+ */
+export const StatTags3D = ({ tags, world }: { tags: ReadonlyArray<StatTag>; world: World }) => {
+  const group = useMemo(() => new THREE.Group(), [])
+  const shown = useRef(new Map<string, Shown>())
+  const latest = useRef(tags)
+  latest.current = tags
+  useEffect(() => {
+    world.scene.add(group)
+    const map = shown.current
+    return () => {
+      world.scene.remove(group)
+      for (const s of map.values()) free(s.sprite)
+      map.clear()
+      group.clear()
+    }
+  }, [world, group])
+  useFrame(() => {
+    const map = shown.current
+    const keep = new Set<string>()
+    for (const t of latest.current) {
+      keep.add(t.key)
+      let s = map.get(t.key)
+      if (!s || s.text !== t.text) {
+        if (s) (group.remove(s.sprite), free(s.sprite))
+        s = { sprite: spriteOf(t), text: t.text }
+        map.set(t.key, s)
+        group.add(s.sprite)
+      }
+      const p = t.player_id ? world.positionOf(t.player_id) : null
+      if (p) s.sprite.position.set(p.x, 3.4, p.z)
+      else s.sprite.position.set(t.x, 2.5, -t.y)
+      s.sprite.material.opacity = t.opacity
+    }
+    for (const [key, s] of map) if (!keep.has(key)) (group.remove(s.sprite), free(s.sprite), map.delete(key))
+  })
+  return null
+}

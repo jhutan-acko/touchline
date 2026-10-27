@@ -85,7 +85,9 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   const feed = frozen === null ? pane.feed : feedAt(pane, frozen)
   const newest = pane.feed[0]
   const names = useMemo(() => Object.fromEntries(match.players.map((p) => [p.id, `#${p.jersey} ${p.name}`])), [match])
-  const tags = showTags ? statTags({ ring: pane.ring, events: pane.events, at, frozen, fps: match.fps, mode: profile.mode, lang, names }) : []
+  // Frozen, the tags come from what this pane held at the freeze (the ring moves on underneath and would lose it).
+  const held = useMemo(() => (frozen === null ? null : { ring: pane.ring, events: pane.events }), [frozen])
+  const tags = showTags ? statTags({ ring: held?.ring ?? pane.ring, events: held?.events ?? pane.events, at, frozen, fps: match.fps, mode: profile.mode, lang, names, speed: pane.playback?.speed ?? 1 }) : []
   useEffect(() => {
     if (frozen !== null) return
     if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])

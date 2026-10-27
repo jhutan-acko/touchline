@@ -96,6 +96,21 @@ describe("event tags", () => {
     expect(eventTags(evs, 130, FPS, "analyst", "en")).toEqual([])
   })
 
+  it("stay up longer in match time at a faster speed, so they last as long on screen", () => {
+    const evs = [arrived(ev({ type: "shot", xg: 0.1, frame: 100 }))]
+    expect(eventTags(evs, 140, FPS, "analyst", "en", null, 1)).toEqual([])
+    expect(eventTags(evs, 140, FPS, "analyst", "en", null, 4)).toHaveLength(1) // 3 s × 4 = 120 frames
+    expect(eventTags(evs, 99, FPS, "analyst", "en", null, 4)).toEqual([]) // still never early
+    const frames = run(0, 80, (n) => (n <= 20 ? 29.1 : 10))
+    expect(sprintTags(frames, 50, FPS, names, 1)).toEqual([])
+    expect(sprintTags(frames, 50, FPS, names, 4)).toHaveLength(1)
+  })
+
+  it("never tag a pass of a few metres", () => {
+    expect(passText(ev({ length_m: 1, xpass: 0.2 }), "analyst", "en")).toBeNull()
+    expect(passText(ev({ length_m: 1, xpass: 0.2 }), "casual", "en")).toBeNull()
+  })
+
   it("keep a frozen view to the events that had arrived by its freeze", () => {
     const evs = [arrived(ev({ type: "shot", frame: 100 }), 104)]
     expect(eventTags(evs, 103, FPS, "analyst", "en", 103)).toEqual([])

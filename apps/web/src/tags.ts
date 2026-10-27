@@ -14,9 +14,9 @@ export const SPRINT_KMH = 25
 export const SMOOTH_S = 0.5
 /** Faster than this is a jump in the data (a substitution, a restart), not running. */
 export const MAX_RUN_KMH = 45
-/** How long a sprint tag stays after the sprint's fastest moment (s of match time). */
+/** How long a sprint tag stays after the runner was last over the threshold (s of match time at ×1; longer when faster, see `statTags`). */
 export const SPRINT_TAG_S = 2
-/** How long an event tag stays (s of match time). */
+/** How long an event tag stays (s of match time at ×1). */
 export const EVENT_TAG_S = 3
 /** At most this many tags at once; at most one of them a sprint. */
 export const MAX_TAGS = 3
@@ -96,20 +96,22 @@ const where = (f: PitchFrame, id: string): { x: number; y: number; team: "home" 
 }
 
 /**
- * Sprint tags at frame `at`: every player who ran faster than SPRINT_KMH in the last SPRINT_TAG_S, with their top speed
- * then, anchored on that moment and placed where they are at `at`. Fastest first.
+ * Sprint tags at frame `at`: every player who ran faster than SPRINT_KMH in the last SPRINT_TAG_S (× `stretch`), with
+ * their top speed then, anchored on the last moment they were over it and placed where they are at `at`. Fastest first.
  */
-export const sprintTags = (ring: ReadonlyArray<PitchFrame>, at: number, fps: number, names: Readonly<Record<string, string>>): StatTag[] => {
+export const sprintTags = (ring: ReadonlyArray<PitchFrame>, at: number, fps: number, names: Readonly<Record<string, string>>, stretch = 1): StatTag[] => {
   const frames = upTo(ring, at)
   const now = frames.at(-1)
   if (!now) return []
-  const ttl = SPRINT_TAG_S * fps
+  const ttl = SPRINT_TAG_S * fps * Math.max(1, stretch)
+  // Per runner: the top speed, and the last moment over the threshold (the tag stays while they keep sprinting).
   const peak = new Map<string, { v: number; frame: number }>()
   for (let i = frames.length - 1; i >= 0 && frames[i]!.frame > at - ttl; i--) {
     for (const [id, v] of speedsAt(frames, i, fps)) {
       if (v < SPRINT_KMH) continue
       const seen = peak.get(id)
-      if (!seen || v > seen.v) peak.set(id, { v, frame: frames[i]!.frame })
+      if (!seen) peak.set(id, { v, frame: frames[i]!.frame })
+      else if (v > seen.v) peak.set(id, { v, frame: seen.frame })
     }
   }
   return [...peak]
@@ -124,8 +126,12 @@ export const sprintTags = (ring: ReadonlyArray<PitchFrame>, at: number, fps: num
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
+/** Shorter passes never get a tag (a touch on, a scramble). */
+export const MIN_PASS_M = 5
+
 /** A pass's tag text for a mode, or null when the pass is not worth a tag for it. */
 export const passText = (e: BallEvent, mode: "casual" | "analyst", lang: Lang): string | null => {
+  if (e.length_m !== null && e.length_m < MIN_PASS_M) return null
   const ok = e.outcome === "success"
   if (mode === "casual") return ok && e.xpass !== null && e.xpass < DIFFICULT_XPASS ? t(lang, "tagToughPass") : null
   const notable = (e.xpass !== null && e.xpass < NOTABLE_XPASS) || (e.length_m !== null && e.length_m >= NOTABLE_LENGTH_M)
@@ -145,8 +151,8 @@ export const shotText = (e: BallEvent, mode: "casual" | "analyst", lang: Lang): 
  * Event tags at frame `at`: shots, and the passes the mode cares about, from the last EVENT_TAG_S. `frozen`: the frame
  * this view froze on, so an event that arrived after it stays off (no spoilers). Newest first.
  */
-export const eventTags = (events: ReadonlyArray<ArrivedEvent>, at: number, fps: number, mode: "casual" | "analyst", lang: Lang, frozen: number | null = null): StatTag[] => {
-  const ttl = EVENT_TAG_S * fps
+export const eventTags = (events: ReadonlyArray<ArrivedEvent>, at: number, fps: number, mode: "casual" | "analyst", lang: Lang, frozen: number | null = null, stretch = 1): StatTag[] => {
+  const ttl = EVENT_TAG_S * fps * Math.max(1, stretch)
   const out: StatTag[] = []
   for (const { event: e, arrivedAt } of events) {
     if (e.frame > at || e.frame <= at - ttl || (frozen !== null && arrivedAt > frozen)) continue
@@ -175,4 +181,6 @@ export const statTags = (o: {
   readonly mode: "casual" | "analyst"
   readonly lang: Lang
   readonly names: Readonly<Record<string, string>>
-}): StatTag[] => selectTags(eventTags(o.events, o.at, o.fps, o.mode, o.lang, o.frozen), sprintTags(o.ring, o.at, o.fps, o.names))
+  /** The playback speed: tags stay up this many times longer in match time, so they last as long on screen at ×4 as at ×1. */
+  readonly speed?: number
+}): StatTag[] => selectTags(eventTags(o.events, o.at, o.fps, o.mode, o.lang, o.frozen, o.speed), sprintTags(o.ring, o.at, o.fps, o.names, o.speed))

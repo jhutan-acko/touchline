@@ -120,7 +120,7 @@ const Scene = ({ props, vps, onReady, onFail, pickRef }: { props: Stage3DProps; 
           <PitchMarkers cues={props.markers.cues} world={real} onTap={props.markers.onTap} />
         </MarkerTaps.Provider>
       )}
-      {props.tags && props.tags.length > 0 && <StatTags3D tags={props.tags} world={real} />}
+      {props.tags && <StatTags3D tags={props.tags} world={real} />}
     </>
   )
 }
