@@ -2,6 +2,8 @@ import { useEffect, useReducer, useState } from "react"
 import type { Tick } from "@touchline/rpc"
 import type { Segment } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
+import { isEventTick, type WatchTick } from "./events.js"
+import { FOLLOW_EMPTY, followReduce, type FollowState } from "./follow.js"
 import { EMPTY, reduce, type PaneState } from "./pane.js"
 
 /** How a pane's watch stands: fine, lost and being retried, or over because the session is gone. */
@@ -15,8 +17,15 @@ export const RETRIES = 5
  * `fps` is the match's frame rate (cue ttls are counted in frames). `source` picks the stream: the fan view (`watch`) or
  * the broadcast graphics output (`graphics`).
  */
-export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, fps: number, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection } => {
-  const [state, dispatch] = useReducer((s: PaneState, t: Tick) => reduce(s, t, fps), EMPTY)
+export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, fps: number, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection; readonly follow: FollowState } => {
+  // On-ball event ticks only feed the players' numbers (follow.ts); an unknown tick changes nothing.
+  const [state, dispatch] = useReducer(
+    (s: { pane: PaneState; follow: FollowState }, t: WatchTick) => ({
+      pane: isEventTick(t) ? s.pane : (reduce(s.pane, t as Tick, fps) ?? s.pane),
+      follow: followReduce(s.follow, t, fps)
+    }),
+    { pane: EMPTY, follow: FOLLOW_EMPTY }
+  )
   const [connection, setConnection] = useState<Connection>("ok")
   const key = `${segment.mode}.${segment.lang}.${segment.club ?? ""}`
   useEffect(() => {
@@ -48,5 +57,5 @@ export const usePane = (client: TouchlineClient, sessionId: string, segment: Seg
       stop()
     }
   }, [client, sessionId, key, source])
-  return { ...state, connection }
+  return { ...state.pane, follow: state.follow, connection }
 }

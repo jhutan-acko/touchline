@@ -59,6 +59,31 @@ export const labelTexture = (text: string, colour: string): THREE.Texture => {
   return t
 }
 
+/** A name on a wide dark tag, as a texture (the followed player's name, shown above them). */
+export const nameTexture = (text: string, colour: string): THREE.Texture => {
+  const c = document.createElement("canvas")
+  c.width = 512
+  c.height = 64
+  const g = c.getContext("2d")
+  if (g) {
+    g.fillStyle = "rgba(13,20,18,.85)"
+    g.beginPath()
+    g.roundRect(4, 4, 504, 56, 14)
+    g.fill()
+    g.strokeStyle = colour
+    g.lineWidth = 4
+    g.stroke()
+    g.fillStyle = colour
+    g.font = "700 34px system-ui, sans-serif"
+    g.textAlign = "center"
+    g.textBaseline = "middle"
+    g.fillText(text, 256, 34, 480)
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
 /** A bone by its glTF name (three.js drops the dots from node names: "DEF-thigh.L" is "DEF-thighL"). */
 const bone = (root: THREE.Object3D, name: string) => root.getObjectByName(name) ?? root.getObjectByName(name.replace(/\./g, ""))
 
@@ -67,6 +92,8 @@ interface Body {
   readonly holder: THREE.Group
   readonly model: THREE.Object3D
   readonly tag: THREE.Sprite
+  /** The name over the followed player. */
+  readonly name: THREE.Sprite
   readonly ring: THREE.Mesh
   readonly mixer: THREE.AnimationMixer
   readonly actions: Partial<Record<Gait, THREE.AnimationAction>>
@@ -85,7 +112,7 @@ export class World {
   private readonly shadow: THREE.Mesh
   private readonly line: THREE.Line
   private readonly bodies = new Map<string, Body>()
-  private readonly kitOf: (id: string) => { kit: string; joints: string; jersey: string; foot: "left" | "right" }
+  private readonly kitOf: (id: string) => { kit: string; joints: string; jersey: string; foot: "left" | "right"; label: string }
 
   constructor(
     private readonly assets: Assets,
@@ -126,7 +153,7 @@ export class World {
       const p = byId.get(id)
       const side = p?.team_id === home ? "home" : "away"
       const kit = p?.role === "GK" ? KEEPER_KITS[side] : side === "home" ? match.home.kit.primary : match.away.kit.primary
-      return { kit, joints: side === "home" ? "#f2f2f2" : "#1d2420", jersey: p ? String(p.jersey) : "", foot: p?.foot ?? "right" }
+      return { kit, joints: side === "home" ? "#f2f2f2" : "#1d2420", jersey: p ? String(p.jersey) : "", foot: p?.foot ?? "right", label: p ? `#${p.jersey} ${p.name}` : id }
     }
     this.ball = new THREE.Mesh(new THREE.IcosahedronGeometry(BALL_R, 2), new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.4, flatShading: true }))
     this.ball.castShadow = true
@@ -207,6 +234,12 @@ export class World {
     tag.position.y = 2.2
     tag.renderOrder = 10
     holder.add(tag)
+    const name = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(k.label, "#f2c14e"), depthTest: false, sizeAttenuation: false }))
+    name.scale.set(0.2, 0.025, 1)
+    name.position.y = 2.75
+    name.renderOrder = 11
+    name.visible = false
+    holder.add(name)
     const disc = new THREE.Mesh(new THREE.CircleGeometry(1.1, 20), new THREE.MeshBasicMaterial({ color: k.kit }))
     disc.rotation.x = -Math.PI / 2
     disc.position.y = 0.05
@@ -236,7 +269,7 @@ export class World {
       const b = bone(model, want[part])
       if (b) bones[part] = b
     }
-    const b: Body = { id, holder, model, tag, ring, mixer, actions, bones, weights: { Idle_Loop: 1, Walk_Loop: 0, Jog_Fwd_Loop: 0, Sprint_Loop: 0 }, yaw: 0, saved: null }
+    const b: Body = { id, holder, model, tag, name, ring, mixer, actions, bones, weights: { Idle_Loop: 1, Walk_Loop: 0, Jog_Fwd_Loop: 0, Sprint_Loop: 0 }, yaw: 0, saved: null }
     this.bodies.set(id, b)
     return b
   }
@@ -295,10 +328,11 @@ export class World {
     return [...this.bodies.values()].filter((b) => b.holder.visible).map((b) => b.id)
   }
 
-  /** Mark the followed player (a ring at their feet), hide one body (the first-person view's own), show or hide the numbers. */
+  /** Mark the followed player (a ring at their feet and their name over them, always), hide one body (the first-person view's own), show or hide the numbers. */
   dress(o: { readonly followed: string | null; readonly hidden: string | null; readonly tags: boolean }): void {
     for (const b of this.bodies.values()) {
       b.ring.visible = b.id === o.followed && b.id !== o.hidden
+      b.name.visible = b.id === o.followed && b.id !== o.hidden
       b.model.visible = b.id !== o.hidden
       b.tag.visible = o.tags && b.id !== o.hidden
     }

@@ -37,9 +37,10 @@ export const Choice = <A extends string>({ label, options, value, onChange, name
  * The live match in 3D (Plan 7): the session's frames played a little behind on the 3D stage, with the camera, the
  * layout and the player followed chosen here (click a player, keys 1–4 and [ ]). `children` (the cue overlays) go on top.
  * While this viewer is `frozen` (on a match frame), `frame` is the frame frozen on and the bodies stand still. Pitch
- * markers (cues in the `pitch_marker` slot) are drawn on the pitch; tapping one calls `onMarkerTap`.
+ * markers (cues in the `pitch_marker` slot) are drawn on the pitch; tapping one calls `onMarkerTap`. The viewer's
+ * `favourite` player, when on the pitch, is the one followed (and is again whenever the favourite changes).
  */
-export const Live3D = ({ match, frame, playback = null, lang, children, frozen = null, markers = [], onMarkerTap }: {
+export const Live3D = ({ match, frame, playback = null, lang, children, frozen = null, markers = [], onMarkerTap, favourite = null }: {
   match: MatchInfo
   frame: PitchFrame | null
   playback?: Playback | null
@@ -48,6 +49,7 @@ export const Live3D = ({ match, frame, playback = null, lang, children, frozen =
   frozen?: number | null
   markers?: ReadonlyArray<Cue>
   onMarkerTap?: (m: Marker, cue: Cue) => void
+  favourite?: string | null
 }) => {
   const [camera, setCamera] = useState<CameraKind>("follow")
   const [layout, setLayout] = useState<Layout>("pip")
@@ -67,7 +69,7 @@ export const Live3D = ({ match, frame, playback = null, lang, children, frozen =
     wasFrozen.current = frozen !== null
     if (!frame) return
     buffer.push(frame, performance.now())
-    if (followed === null) setFollowed(nearestBall(frame))
+    if (followed === null) setFollowed(favourite && onPitch(frame).includes(favourite) ? favourite : nearestBall(frame))
     else if (!onPitch(frame).includes(followed)) {
       // Substituted or sent off: the viewer is told why, the player nearest the ball is followed instead, and a camera
       // that was on the player hands over to the broadcast camera.
@@ -76,6 +78,13 @@ export const Live3D = ({ match, frame, playback = null, lang, children, frozen =
       if (camera === "follow" || camera === "fp") setCamera("broadcast")
     }
   }, [frame, frozen])
+  // A new favourite is followed at once (when on the pitch).
+  useEffect(() => {
+    if (favourite && onPitch(frame).includes(favourite)) {
+      setFollowed(favourite)
+      setNotice(null)
+    }
+  }, [favourite])
   const ids = onPitch(frame)
   const step = (d: number) => {
     if (!ids.length) return

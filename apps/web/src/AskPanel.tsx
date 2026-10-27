@@ -35,12 +35,14 @@ type Ask = {
  * numbers, "Fact-checked ✓" when every claim passed, the what-if verdict, and Show me when there is a clip. A new
  * question stops the one before it.
  */
-export const AskPanel = ({ client, sessionId, frame, segment, prefill, onShowMe, onClose }: {
+export const AskPanel = ({ client, sessionId, frame, segment, prefill, extra = [], onShowMe, onClose }: {
   client: TouchlineClient
   sessionId: string
   frame: number
   segment: Segment
   prefill?: string
+  /** Questions of the viewer's own to offer first (e.g. about their favourite player), asked as typed questions. */
+  extra?: ReadonlyArray<string>
   onShowMe: (clipId: string) => void
   onClose: () => void
 }) => {
@@ -108,8 +110,11 @@ export const AskPanel = ({ client, sessionId, frame, segment, prefill, onShowMe,
         <h2 className="font-semibold">{t(lang, "ask")}</h2>
         <button type="button" className="rounded px-2 text-slate-400 hover:text-white" aria-label={t(lang, "close")} onClick={onClose}>×</button>
       </div>
-      {chips.length > 0 && (
+      {chips.length + extra.length > 0 && (
         <div role="group" aria-label={t(lang, "askSuggested")} className="flex flex-wrap gap-1.5">
+          {extra.map((q) => (
+            <button key={`extra-${q}`} type="button" className="rounded-full bg-amber-400/20 px-3 py-1 text-left ring-1 ring-amber-400/60 hover:bg-amber-400/30" onClick={() => start(q, null)}>{q}</button>
+          ))}
           {chips.map((c) => (
             <button key={c.chip_id} type="button" className="rounded-full bg-slate-800 px-3 py-1 text-left hover:bg-slate-700" onClick={() => start(c.text, c.chip_id)}>{c.text}</button>
           ))}

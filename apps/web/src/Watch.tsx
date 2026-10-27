@@ -19,6 +19,8 @@ import { TopBar } from "./TopBar.js"
 import { routeHash } from "./route.js"
 import { usePane } from "./usePane.js"
 import { DecisionCard, DecisionStrip } from "./Decisions.js"
+import { playerStats } from "./follow.js"
+import { PlayerCard } from "./PlayerCard.js"
 import { hasWebGL } from "./view3d/webgl.js"
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32]
@@ -44,7 +46,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask, onFreezeAt }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -66,6 +68,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   onMarkerTap?: (m: Marker, cue: Cue) => void
   /** The Ask panel: over the picture on the right in 3D, under it in 2D. */
   ask?: ReactNode
+  /** Freeze this viewer on a match frame (a moment tapped on the player card). */
+  onFreezeAt?: (frame: number) => void
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile), match.fps)
@@ -80,6 +84,17 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   const board = frozen === null ? pane.board : frozenBoard
   const feed = frozen === null ? pane.feed : feedAt(pane, frozen)
   const newest = pane.feed[0]
+  // Follow my player: the favourite's card, as of the frame shown (frozen: as of the frozen frame, taken once).
+  const fav = useMemo(() => match.players.find((p) => p.id === profile.player) ?? null, [match, profile.player])
+  const liveStats = fav && frozen === null ? playerStats(pane.follow, fav.id, at, match.fps) : null
+  const frozenStats = useMemo(() => (fav && frozen !== null ? playerStats(pane.follow, fav.id, frozen, match.fps) : null), [frozen, fav])
+  const stats = frozen === null ? liveStats : frozenStats
+  const focus = useMemo(() => (fav ? { id: fav.id, label: `#${fav.jersey} ${fav.name}` } : null), [fav])
+  const card = (where: string) =>
+    fav && stats && (
+      <PlayerCard player={fav} team={fav.team_id === match.home.id ? match.home : match.away} stats={stats} mode={profile.mode} lang={lang} className={`absolute z-10 ${where}`}
+        canShow={(f) => frameAt(pane, f) !== null && f <= (pane.head ?? 0)} {...(onFreezeAt ? { onMoment: onFreezeAt } : {})} />
+    )
   useEffect(() => {
     if (frozen !== null) return
     if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])
@@ -90,14 +105,16 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
       <TopBar match={match} board={board} lang={lang} />
       {view === "3d" ? (
-        <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} {...(onMarkerTap ? { onMarkerTap } : {})}>
+        <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} favourite={fav?.id ?? null} {...(onMarkerTap ? { onMarkerTap } : {})}>
           <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
+          {card("left-2 top-10")}
           {ask && <div className="pointer-events-none absolute inset-y-2 right-2 z-10 flex w-[min(22rem,calc(100%-1rem))] flex-col">{ask}</div>}
         </Live3D>
       ) : (
         <div className="relative">
-          <Pitch frame={shown} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
+          <Pitch frame={shown} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} focus={focus} />
           <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
+          {card("left-3 top-3")}
         </div>
       )}
       {view !== "3d" && ask}
@@ -152,7 +169,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
   const [autoWhatIf, setAutoWhatIf] = useState(false)
   // Demo mode (spec §5.6): a second profile on the same session, side by side; by default the other mode, in Spanish.
   const [second, setSecond] = useState<Profile | null>(null)
-  const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [] })
+  const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [], player: profile.player })
   const [view, setView] = useState<"2d" | "3d">(savedView)
   const webgl = hasWebGL()
   const toggleView = () => {
@@ -222,8 +239,10 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
     setAskOpen(true)
     onMarkerTap?.(m, c)
   }
+  // A question about the favourite player, offered alongside the suggested ones.
+  const favName = match.players.find((p) => p.id === profile.player)?.name
   const ask = frozen !== null && askOpen
-    ? <AskPanel client={client} sessionId={sessionId} frame={frozen} segment={segmentOf(profile)} {...(prefill !== undefined ? { prefill } : {})} onShowMe={setAskClip} onClose={() => setAskOpen(false)} />
+    ? <AskPanel client={client} sessionId={sessionId} frame={frozen} segment={segmentOf(profile)} {...(prefill !== undefined ? { prefill } : {})} extra={favName ? [t(lang, "askPlayer").replace("{name}", favName)] : []} onShowMe={setAskClip} onClose={() => setAskOpen(false)} />
     : null
   const toggle = useRef(toggleFreeze)
   toggle.current = toggleFreeze
@@ -274,7 +293,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
       {askClip && !whatIf && <AskSplit client={client} sessionId={sessionId} clipId={askClip} match={match} lang={lang} onClose={() => setAskClip(null)} />}
       <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf || askClip ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} ask={ask} onFreezeAt={freeze} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
         {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
