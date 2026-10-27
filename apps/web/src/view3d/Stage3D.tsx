@@ -10,6 +10,8 @@ import { viewports, type Layout, type Viewport } from "./layout.js"
 import type { Sample } from "./motion.js"
 import { MarkerTaps, PitchMarkers, type TapTarget } from "./PitchMarkers.js"
 import { MultiView, setUpRenderer } from "./render.js"
+import { StatTags3D } from "./StatTags3D.js"
+import type { StatTag } from "../tags.js"
 import { World, type Assets } from "./world.js"
 
 /** One play the stage shows: the match as it streams, or a what-if clip. */
@@ -38,6 +40,8 @@ export interface Stage3DProps {
   readonly lines?: Readonly<Partial<Record<Viewport["world"], PassLine>>>
   /** Pitch markers to draw on the match (not the what-if variant), and what tapping one does. */
   readonly markers?: { readonly cues: ReadonlyArray<Cue>; readonly onTap: (m: Marker, cue: Cue) => void }
+  /** Live stat tags to draw over the match (not the what-if variant). */
+  readonly tags?: ReadonlyArray<StatTag>
   /** Each viewport's caption. */
   readonly label: (v: Viewport) => string
   readonly loading: string
@@ -108,11 +112,17 @@ const Scene = ({ props, vps, onReady, onFail, pickRef }: { props: Stage3DProps; 
     }
     l.multi.render(views, { worlds: l.worlds, samples, followed: p.followed, dt: Math.min(0.05, dt), time: state.clock.elapsedTime })
   }, 1)
-  return real && props.markers ? (
-    <MarkerTaps.Provider value={taps}>
-      <PitchMarkers cues={props.markers.cues} world={real} onTap={props.markers.onTap} />
-    </MarkerTaps.Provider>
-  ) : null
+  if (!real) return null
+  return (
+    <>
+      {props.markers && (
+        <MarkerTaps.Provider value={taps}>
+          <PitchMarkers cues={props.markers.cues} world={real} onTap={props.markers.onTap} />
+        </MarkerTaps.Provider>
+      )}
+      {props.tags && props.tags.length > 0 && <StatTags3D tags={props.tags} world={real} />}
+    </>
+  )
 }
 
 /** Catches the canvas failing to start (no WebGL, a lost GPU), so the page keeps working and says so. */

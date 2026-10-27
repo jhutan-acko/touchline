@@ -12,6 +12,8 @@ import { feedAt, frameAt, inSlot } from "./pane.js"
 import { Pitch } from "./Pitch.js"
 import { ProfileBar } from "./ProfileBar.js"
 import { RecapPanel } from "./RecapPanel.js"
+import { StatTags } from "./StatTags.js"
+import { statTags } from "./tags.js"
 import { WhatIfSplit } from "./WhatIfSplit.js"
 import { WhyDrawer } from "./WhyDrawer.js"
 import { segmentOf, type Profile } from "./profile.js"
@@ -44,7 +46,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask, tags: showTags = true }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -66,6 +68,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   onMarkerTap?: (m: Marker, cue: Cue) => void
   /** The Ask panel: over the picture on the right in 3D, under it in 2D. */
   ask?: ReactNode
+  /** Live stat tags on the pitch (sprints, shots, passes). */
+  tags?: boolean
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile), match.fps)
@@ -80,6 +84,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   const board = frozen === null ? pane.board : frozenBoard
   const feed = frozen === null ? pane.feed : feedAt(pane, frozen)
   const newest = pane.feed[0]
+  const names = useMemo(() => Object.fromEntries(match.players.map((p) => [p.id, `#${p.jersey} ${p.name}`])), [match])
+  const tags = showTags ? statTags({ ring: pane.ring, events: pane.events, at, frozen, fps: match.fps, mode: profile.mode, lang, names }) : []
   useEffect(() => {
     if (frozen !== null) return
     if (newest?.display.template === "better_pass" && newest.evidence[0]) onBetterPass?.(newest.evidence[0])
@@ -90,13 +96,14 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
       <ProfileBar match={match} profile={profile} onChange={onProfile} {...(label ? { label } : {})} />
       <TopBar match={match} board={board} lang={lang} />
       {view === "3d" ? (
-        <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} {...(onMarkerTap ? { onMarkerTap } : {})}>
+        <Live3D match={match} frame={shown} playback={pane.playback} lang={lang} frozen={frozen} markers={pitchMarkers} tags={tags} {...(onMarkerTap ? { onMarkerTap } : {})}>
           <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
           {ask && <div className="pointer-events-none absolute inset-y-2 right-2 z-10 flex w-[min(22rem,calc(100%-1rem))] flex-col">{ask}</div>}
         </Live3D>
       ) : (
         <div className="relative">
           <Pitch frame={shown} kits={{ home: match.home.kit.primary, away: match.away.kit.primary }} label={`${match.home.name} – ${match.away.name}`} />
+          <StatTags tags={tags} />
           <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </div>
       )}
@@ -150,6 +157,7 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
   // The what-if split on a pass: only this viewer leaves the live match (the panes keep receiving it, hidden).
   const [whatIf, setWhatIf] = useState<string | null>(null)
   const [autoWhatIf, setAutoWhatIf] = useState(false)
+  const [tags, setTags] = useState(true)
   // Demo mode (spec §5.6): a second profile on the same session, side by side; by default the other mode, in Spanish.
   const [second, setSecond] = useState<Profile | null>(null)
   const toggleSplit = () => setSecond(second ? null : { mode: profile.mode === "casual" ? "analyst" : "casual", lang: profile.lang === "es" ? "hi" : "es", clubs: [] })
@@ -255,6 +263,10 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "graphics", session: sessionId, segment: segmentOf(profile), match: match.match_id })}>{t(lang, "graphicsOut")}</a>
         <a className="rounded bg-slate-800 px-3 py-1" target="_blank" rel="noreferrer" href={routeHash({ page: "ops", session: sessionId, lang })}>{t(lang, "opsView")}</a>
         <label className="text-sm">
+          <input type="checkbox" className="mr-1" checked={tags} onChange={(e) => setTags(e.target.checked)} />
+          {t(lang, "statTags")}
+        </label>
+        <label className="text-sm">
           <input type="checkbox" className="mr-1" checked={autoWhatIf} onChange={(e) => setAutoWhatIf(e.target.checked)} />
           {t(lang, "autoWhatIf")}
         </label>
@@ -274,8 +286,8 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
       {askClip && !whatIf && <AskSplit client={client} sessionId={sessionId} clipId={askClip} match={match} lang={lang} onClose={() => setAskClip(null)} />}
       <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf || askClip ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
-        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} />}
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} tags={tags} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} tags={tags} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} onShowMe={(id) => (setWhy(null), setWhatIf(id))} />}

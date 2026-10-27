@@ -8,6 +8,7 @@ import { findKicks, type Kick } from "./view3d/kick.js"
 import { LAYOUTS, type Layout, type Viewport } from "./view3d/layout.js"
 import { LiveBuffer } from "./view3d/motion.js"
 import { Stage3D, type Play } from "./view3d/Stage3D.js"
+import type { StatTag } from "./tags.js"
 
 export const CAMERA_KEY: Record<CameraKind, Key> = { follow: "camFollow", fp: "camFp", broadcast: "camBroadcast", tactical: "camTactical" }
 const LAYOUT_KEY: Record<Layout, Key> = { pip: "layoutPip", grid: "layoutGrid", single: "layoutSingle" }
@@ -39,7 +40,7 @@ export const Choice = <A extends string>({ label, options, value, onChange, name
  * While this viewer is `frozen` (on a match frame), `frame` is the frame frozen on and the bodies stand still. Pitch
  * markers (cues in the `pitch_marker` slot) are drawn on the pitch; tapping one calls `onMarkerTap`.
  */
-export const Live3D = ({ match, frame, playback = null, lang, children, frozen = null, markers = [], onMarkerTap }: {
+export const Live3D = ({ match, frame, playback = null, lang, children, frozen = null, markers = [], onMarkerTap, tags = [] }: {
   match: MatchInfo
   frame: PitchFrame | null
   playback?: Playback | null
@@ -48,6 +49,8 @@ export const Live3D = ({ match, frame, playback = null, lang, children, frozen =
   frozen?: number | null
   markers?: ReadonlyArray<Cue>
   onMarkerTap?: (m: Marker, cue: Cue) => void
+  /** Live stat tags over the players. */
+  tags?: ReadonlyArray<StatTag>
 }) => {
   const [camera, setCamera] = useState<CameraKind>("follow")
   const [layout, setLayout] = useState<Layout>("pip")
@@ -125,7 +128,7 @@ export const Live3D = ({ match, frame, playback = null, lang, children, frozen =
       </div>
       {notice && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-sm">{notice}</p>}
       <div className="relative aspect-[16/9] w-full">
-        <Stage3D match={match} plays={{ real: play }} mode="multi" layout={layout} camera={camera} followed={followed} onPick={(id) => (setFollowed(id), setNotice(null))} markers={{ cues: markers, onTap: (m, c) => onMarkerTap?.(m, c) }} label={label} loading={t(lang, "loading3d")} failed={t(lang, "failed3d")} />
+        <Stage3D match={match} plays={{ real: play }} mode="multi" layout={layout} camera={camera} followed={followed} onPick={(id) => (setFollowed(id), setNotice(null))} markers={{ cues: markers, onTap: (m, c) => onMarkerTap?.(m, c) }} tags={tags} label={label} loading={t(lang, "loading3d")} failed={t(lang, "failed3d")} />
         {children}
       </div>
       <p className="text-xs text-slate-400">{t(lang, "keysHint")}</p>

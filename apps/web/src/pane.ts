@@ -3,7 +3,7 @@
  * (a frozen view shows one of them), the scoreboard, the cues on screen (each anchored to match frames, so a frozen view
  * keeps the overlays it had) and every agent cue so far (for "Why?").
  */
-import type { PitchFrame, Playback, Tick } from "@touchline/rpc"
+import type { BallEvent, PitchFrame, Playback, Tick } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 
 export type Slot = Cue["display"]["slot"]
@@ -22,6 +22,13 @@ export interface OnScreen {
   readonly arrivedAt: number
 }
 
+/** An on-ball event as it reached this pane. */
+export interface ArrivedEvent {
+  readonly event: BallEvent
+  /** The latest match frame known when it arrived: a view frozen before then never shows it (no spoilers). */
+  readonly arrivedAt: number
+}
+
 export interface PaneState {
   readonly frame: PitchFrame | null
   /** The frames of the last RING_S seconds, oldest first. */
@@ -36,9 +43,14 @@ export interface PaneState {
   readonly feed: ReadonlyArray<Cue>
   /** When each cue in the feed arrived (the latest match frame known then), by cue id. */
   readonly feedArrivedAt: Readonly<Record<string, number>>
+  /** The latest on-ball events (stat tags, follow my player), newest first. */
+  readonly events: ReadonlyArray<ArrivedEvent>
 }
 
-export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {} }
+export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {}, events: [] }
+
+/** At most this many on-ball events are kept (a minute or so of play). */
+export const EVENTS_SIZE = 120
 
 /** At most this many agent cues stay in the feed. */
 export const FEED_SIZE = 50
@@ -71,6 +83,11 @@ export const reduce = (s: PaneState, tick: Tick, fps: number): PaneState => {
       return { ...s, frame: tick.frame, ring: ringWith(s.ring, tick.frame, fps), head: tick.frame.frame }
     case "playback":
       return { ...s, playback: tick.playback }
+    case "event": {
+      const e = tick.event
+      const arrivedAt = Math.max(s.head ?? e.frame, e.frame)
+      return { ...s, events: [{ event: e, arrivedAt }, ...s.events.filter((x) => x.event.id !== e.id)].slice(0, EVENTS_SIZE) }
+    }
     case "cue": {
       const cue = tick.cue
       const head = s.frame ? s.head : Math.max(s.head ?? 0, cue.anchor.frame_to)

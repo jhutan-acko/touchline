@@ -148,7 +148,14 @@ const en = {
   askSomeone: "a teammate",
   askMoved: "{name} in a new spot",
   pausedHere: "You paused here",
-  keysHint: "Click a player to follow them · keys 1–4 switch camera · [ ] step through players"
+  keysHint: "Click a player to follow them · keys 1–4 switch camera · [ ] step through players",
+  statTags: "Stat tags",
+  tagShot: "Shot",
+  tagRocket: "{kmh} km/h rocket!",
+  tagHardPass: "Hard pass",
+  tagTrickyPass: "Tricky pass",
+  tagPass: "Pass",
+  tagToughPass: "Tough pass!"
 } as const
 
 export type Key = keyof typeof en
@@ -302,7 +309,14 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     askSomeone: "un compañero",
     askMoved: "{name} en otra posición",
     pausedHere: "Aquí pausaste",
-    keysHint: "Haz clic en un jugador para seguirlo · teclas 1–4 cambian la cámara · [ ] recorren los jugadores"
+    keysHint: "Haz clic en un jugador para seguirlo · teclas 1–4 cambian la cámara · [ ] recorren los jugadores",
+    statTags: "Datos en vivo",
+    tagShot: "Disparo",
+    tagRocket: "¡Cañonazo a {kmh} km/h!",
+    tagHardPass: "Pase difícil",
+    tagTrickyPass: "Pase complicado",
+    tagPass: "Pase",
+    tagToughPass: "¡Pasazo!"
   },
   hi: {
     title: "Touchline",
@@ -451,7 +465,14 @@ export const STRINGS: Record<Lang, Record<Key, string>> = {
     askSomeone: "कोई साथी",
     askMoved: "{name} नई जगह पर",
     pausedHere: "आपने यहाँ रोका",
-    keysHint: "किसी खिलाड़ी पर क्लिक करें · 1–4 कैमरा बदलें · [ ] खिलाड़ी बदलें"
+    keysHint: "किसी खिलाड़ी पर क्लिक करें · 1–4 कैमरा बदलें · [ ] खिलाड़ी बदलें",
+    statTags: "लाइव आँकड़े",
+    tagShot: "शॉट",
+    tagRocket: "{kmh} km/h का तूफ़ानी शॉट!",
+    tagHardPass: "मुश्किल पास",
+    tagTrickyPass: "पेचीदा पास",
+    tagPass: "पास",
+    tagToughPass: "शानदार पास!"
   }
 }
 
