@@ -5,6 +5,7 @@
  */
 import type { PitchFrame, Playback, Tick } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
+import { EMPTY_PULSE, pulseReduce, type PulseLog } from "./pulse.js"
 
 export type Slot = Cue["display"]["slot"]
 
@@ -36,9 +37,11 @@ export interface PaneState {
   readonly feed: ReadonlyArray<Cue>
   /** When each cue in the feed arrived (the latest match frame known then), by cue id. */
   readonly feedArrivedAt: Readonly<Record<string, number>>
+  /** The match so far as the pulse strip shows it (momentum, who had the ball, goals, key moments); see pulse.ts. */
+  readonly pulse: PulseLog
 }
 
-export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {} }
+export const EMPTY: PaneState = { frame: null, ring: [], head: null, playback: null, board: null, onScreen: [], feed: [], feedArrivedAt: {}, pulse: EMPTY_PULSE }
 
 /** At most this many agent cues stay in the feed. */
 export const FEED_SIZE = 50
@@ -66,6 +69,11 @@ const ringWith = (ring: ReadonlyArray<PitchFrame>, f: PitchFrame, fps: number): 
 }
 
 export const reduce = (s: PaneState, tick: Tick, fps: number): PaneState => {
+  const next = reduceView(s, tick, fps)
+  return tick.kind === "playback" ? next : { ...next, pulse: pulseReduce(s.pulse, tick, fps) }
+}
+
+const reduceView = (s: PaneState, tick: Tick, fps: number): PaneState => {
   switch (tick.kind) {
     case "frame":
       return { ...s, frame: tick.frame, ring: ringWith(s.ring, tick.frame, fps), head: tick.frame.frame }

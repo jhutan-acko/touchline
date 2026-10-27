@@ -10,6 +10,7 @@ import { Overlays } from "./Overlays.js"
 import type { Marker } from "./markers.js"
 import { feedAt, frameAt, inSlot } from "./pane.js"
 import { Pitch } from "./Pitch.js"
+import { PulseStrip } from "./PulseStrip.js"
 import { ProfileBar } from "./ProfileBar.js"
 import { RecapPanel } from "./RecapPanel.js"
 import { WhatIfSplit } from "./WhatIfSplit.js"
@@ -44,7 +45,7 @@ const saveView = (v: "2d" | "3d") => {
 }
 
 /** One profile's view of a session: its profile bar, scoreboard, pitch and the cues for its segment over the pitch. */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, ask, onPulseFreeze }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -66,6 +67,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   onMarkerTap?: (m: Marker, cue: Cue) => void
   /** The Ask panel: over the picture on the right in 3D, under it in 2D. */
   ask?: ReactNode
+  /** A pulse-strip moment still in the ring buffer was clicked: freeze there and open Ask. */
+  onPulseFreeze?: (frame: number) => void
 }) => {
   const lang = profile.lang
   const pane = usePane(client, sessionId, segmentOf(profile), match.fps)
@@ -100,6 +103,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
           <Overlays state={pane} frame={at} frozen={frozen} lang={lang} {...(onWhy ? { onWhy } : {})} />
         </div>
       )}
+      <PulseStrip state={pane} match={match} mode={profile.mode} lang={lang} frozen={frozen} {...(onPulseFreeze ? { onFreeze: onPulseFreeze } : {})} {...(onWhy ? { onWhy } : {})} />
       {view !== "3d" && ask}
       {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
       {pane.playback?.state === "ended" && <p className="text-center font-semibold">{t(lang, "ended")}</p>}
@@ -274,8 +278,8 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
       {whatIf && <WhatIfSplit client={client} sessionId={sessionId} eventId={whatIf} match={match} lang={lang} onClose={() => setWhatIf(null)} />}
       {askClip && !whatIf && <AskSplit client={client} sessionId={sessionId} clipId={askClip} match={match} lang={lang} onClose={() => setAskClip(null)} />}
       <div className={`${second ? "grid gap-4 lg:grid-cols-2" : ""} ${whatIf || askClip ? "hidden" : ""}`}>
-        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
-        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} />}
+        <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} onPulseFreeze={freeze} ask={ask} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} />
+        {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" view={view} frozen={frozen} onMarkerTap={tapMarker} onPulseFreeze={freeze} />}
       </div>
       <RecapPanel client={client} sessionId={sessionId} segment={segmentOf(profile)} lang={lang} />
       {why && <WhyDrawer client={client} sessionId={sessionId} cue={why} lang={lang} onClose={() => setWhy(null)} onShowMe={(id) => (setWhy(null), setWhatIf(id))} />}
