@@ -10,6 +10,7 @@ import { Overlays } from "./Overlays.js"
 import type { Marker } from "./markers.js"
 import { feedAt, frameAt, inSlot } from "./pane.js"
 import { Pitch } from "./Pitch.js"
+import { PulseStrip } from "./PulseStrip.js"
 import { ProfileBar } from "./ProfileBar.js"
 import { RecapPanel } from "./RecapPanel.js"
 import { WhatIfSplit } from "./WhatIfSplit.js"
@@ -76,7 +77,7 @@ const STAGE_MAX_W = { "2d": "max(24rem, calc((100svh - 13rem) * 105 / 68))", "3d
  * `pointer-events-auto` on anything clickable) and a slot right under it (`under`). The profile bar is shown here only
  * when asked (`showProfile`): the first pane's sits in the fan bar.
  */
-export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, showProfile = false, overlay, under, hint }: {
+export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, label, view = "2d", onBetterPass, onDecision, frozen = null, onHead, markers = [], onMarkerTap, showProfile = false, overlay, under, hint, onPulseFreeze }: {
   client: TouchlineClient
   sessionId: string
   match: MatchInfo
@@ -102,6 +103,8 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
   overlay?: (s: StageView) => ReactNode
   /** Right under the stage. */
   under?: (s: StageView) => ReactNode
+  /** A pulse-strip moment still in the ring buffer was clicked: freeze there and open Ask. */
+  onPulseFreeze?: (frame: number) => void
   /** Shown over the top of the stage (the first-visit hint). */
   hint?: ReactNode
 }) => {
@@ -148,6 +151,7 @@ export const Pane = ({ client, sessionId, match, profile, onProfile, onWhy, labe
             {layer}
           </div>
         )}
+        <PulseStrip state={pane} match={match} mode={profile.mode} lang={lang} frozen={frozen} {...(onPulseFreeze ? { onFreeze: onPulseFreeze } : {})} {...(onWhy ? { onWhy } : {})} />
         {under && <div data-testid="under-stage">{under(stage)}</div>}
       </div>
       {pane.connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm">{t(lang, pane.connection === "gone" ? "gone" : "lost")}</p>}
@@ -341,8 +345,8 @@ export const Watch = ({ client, sessionId, match, profile, onProfile, onBack, on
       {/* The panes, and the Ask drawer beside them (right on wide screens, a bottom sheet on phones). */}
       <div className={`flex flex-col gap-4 lg:flex-row lg:items-start ${whatIf || askClip ? "hidden" : ""}`}>
         <div className={`min-w-0 flex-1 ${second ? "grid gap-4 xl:grid-cols-2" : ""}`}>
-          <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} showProfile={second !== null} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} hint={<PauseHint lang={lang} frozen={frozen !== null} />} {...(overlay ? { overlay } : {})} {...(under ? { under } : {})} />
-          {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" showProfile view={view} frozen={frozen} onMarkerTap={tapMarker} />}
+          <Pane client={client} sessionId={sessionId} match={match} profile={profile} onProfile={onProfile} onWhy={onWhyCue} label={second ? "A" : undefined} showProfile={second !== null} view={view} frozen={frozen} onHead={onHead} onMarkerTap={tapMarker} onPulseFreeze={freeze} onBetterPass={(id) => autoWhatIf && !whatIf && setWhatIf(id)} onDecision={(key) => void showDecision(key, true)} hint={<PauseHint lang={lang} frozen={frozen !== null} />} {...(overlay ? { overlay } : {})} {...(under ? { under } : {})} />
+          {second && <Pane client={client} sessionId={sessionId} match={match} profile={second} onProfile={setSecond} onWhy={onWhyCue} label="B" showProfile view={view} frozen={frozen} onMarkerTap={tapMarker} onPulseFreeze={freeze} />}
         </div>
         {ask && (
           <aside {...{ [ASK_DRAWER_ATTR]: "" }} className="fixed inset-x-0 bottom-0 z-30 flex max-h-[60svh] flex-col p-2 lg:sticky lg:inset-x-auto lg:top-4 lg:z-auto lg:max-h-[calc(100svh-2rem)] lg:w-[22rem] lg:shrink-0 lg:p-0">
