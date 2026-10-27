@@ -162,6 +162,38 @@ describe("realism v2 P4 params", () => {
   })
 })
 
+describe("realism v2 P6 params", () => {
+  const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
+  it("ship switched on (Task 8), with the spec's header band, first-time finishes at set pieces and the contact stream", () => {
+    const P = DEFAULT_PARAMS
+    for (const r of [P.firstTime.rule, P.header.rule, P.saveGeo.rule, P.execFatigue.rule, P.shotModel.rule]) expect(r).toBe(1)
+    // User Q1 (a) put corners and free-kick deliveries on; the pre-merge fix (2026-10-21) switched them off again, for
+    // first-time finishes and headers together (corner shots within 10 s 53.1 per 100 against P5's 36.7).
+    expect(P.firstTime.setPieces).toBe(0)
+    expect([P.firstTime.maxGoalM, P.header.zMin, P.header.zMax]).toEqual([25, 1, 2.4])
+    // The keys only: Task 7 commits the refit values.
+    expect(Object.keys(P.shotModel.xg).sort()).toEqual(Object.keys(P.shot.xg).sort())
+    expect(CONCERNS).toContain("contact")
+  })
+  it("reject a P6 switch other than 0 or 1 and a header band out of order", () => {
+    expect(() => paramsFromJson({ provenance: cc, firstTime: { rule: 2 } })).toThrow(/firstTime\.rule must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, firstTime: { setPieces: 0.5 } })).toThrow(/firstTime\.setPieces must be 0 or 1/)
+    expect(() => paramsFromJson({ provenance: cc, header: { zMin: 2.5 } })).toThrow(/header\.zMin/)
+    expect(paramsFromJson({ provenance: cc, shotModel: { xg: { b0: -2 } } }).shotModel.xg.b0).toBe(-2)
+  })
+  it.each(["header", "saveGeo", "execFatigue", "shotModel"])("reject %s.rule other than 0 or 1", (block) => {
+    expect(() => paramsFromJson({ provenance: cc, [block]: { rule: 0.5 } })).toThrow(new RegExp(`${block}\\.rule must be 0 or 1`))
+    expect(paramsFromJson({ provenance: cc, [block]: { rule: 1 } })[block as "header"].rule).toBe(1)
+  })
+  it("reject an execution-fatigue threshold outside 0..1 and an exponent not above 0", () => {
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: 1 } })).toThrow(/execFatigue\.ref/)
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: 1.5 } })).toThrow(/execFatigue\.ref/)
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { ref: -0.1 } })).toThrow(ParamsError)
+    expect(() => paramsFromJson({ provenance: cc, execFatigue: { power: 0 } })).toThrow(/execFatigue\.power/)
+    expect(paramsFromJson({ provenance: cc, execFatigue: { ref: 0.5, power: 2 } }).execFatigue.ref).toBe(0.5)
+  })
+})
+
 describe("realism v2 P5 params", () => {
   const cc = { dataset: "open data", licence: "CC-BY-4.0", attribution: "Some League; Someone et al.", fitted_at: "2026-10-04", version: "v1" }
   it("ship switched on (Task 14) with zonal marking, the real role tables, delay medians and three new RNG streams", () => {

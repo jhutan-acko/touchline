@@ -7,8 +7,9 @@ import { join } from "node:path"
 import type { League } from "@touchline/league"
 import { readCueCache } from "@touchline/agent-gateway"
 import { PREDATES_END_SWITCH, predatesEndSwitch } from "@touchline/stats"
-import type { MatchInfo, MatchSummary, Player, TeamBrief, WhatIfClip } from "@touchline/rpc"
-import { segmentKey, type Cue, type Decision } from "@touchline/schema"
+import { Schema } from "effect"
+import { AskAnswer, AskClip, type MatchInfo, type MatchSummary, type Player, type TeamBrief, type WhatIfClip } from "@touchline/rpc"
+import { AskStage, Lang, Mode, segmentKey, type Cue, type Decision, type Segment } from "@touchline/schema"
 import { betterPassCues } from "./betterpass.js"
 import { decisionCues, readDecisionLog } from "./decisions.js"
 import { readWhatIfs } from "./whatif.js"
@@ -27,6 +28,34 @@ export interface LibraryMatch {
   readonly clips: ReadonlyMap<string, WhatIfClip>
   /** A managed match's decisions (`pnpm manage`), in order; empty for a match without managers. */
   readonly decisions: ReadonlyArray<Decision>
+  /** Pause-and-ask answers worked out ahead (`pnpm ask-cache`), by askCacheKey; empty without a cache. */
+  readonly askCache: ReadonlyMap<string, AskCacheEntry>
+}
+
+/** The demo answers of a run, in its folder. */
+export const ASK_CACHE_FILE = "ask-cache.json"
+
+/** The viewer a cached answer was written for: its language and mode (the club does not change an Ask answer). */
+export const AskCacheSegment = Schema.Struct({ lang: Lang, mode: Mode })
+/** One cached answer: the stages it went through, the answer, its what-if clip and the viewer it was written for. */
+export const AskCacheEntry = Schema.Struct({ stages: Schema.Array(AskStage), answer: AskAnswer, clip: Schema.NullOr(AskClip), segment: AskCacheSegment })
+export type AskCacheEntry = typeof AskCacheEntry.Type
+/** Version 2: entries keyed by segment too (version 1 had one unrecorded segment per file and is ignored). */
+export const ASK_CACHE_VERSION = 2
+export const AskCacheFile = Schema.Struct({ version: Schema.Literal(ASK_CACHE_VERSION), entries: Schema.Record(Schema.String, AskCacheEntry) })
+
+/** The key of a cached answer, shared by the writer and the API: the frame, the chip id (which starts with the frame), the viewer's language and mode. */
+export const askCacheKey = (frame: number, chipId: string, segment: Pick<Segment, "lang" | "mode">): string => `${frame}:${chipId}:${segment.lang}:${segment.mode}`
+
+const decodeAskCache = Schema.decodeUnknownSync(AskCacheFile)
+
+/** A run's cached answers (none without the file, or in a file of an older version). */
+export const readAskCache = (dir: string): Map<string, AskCacheEntry> => {
+  const path = join(dir, ASK_CACHE_FILE)
+  if (!existsSync(path)) return new Map()
+  const raw = json(path)
+  if ((raw as { version?: unknown } | null)?.version !== ASK_CACHE_VERSION) return new Map()
+  return new Map(Object.entries(decodeAskCache(raw).entries))
 }
 
 interface Manifest {
@@ -70,7 +99,7 @@ export const readMatch = (dir: string, league: League): LibraryMatch => {
   const info = { ...summary, players: [...home.players, ...away.players] }
   const clips = readWhatIfs(dir)
   const decisions = readDecisionLog(dir)
-  return { dir, info, cues: [...cues, ...betterPassCues(info, clips.values()), ...decisionCues(info, decisions)], clips, decisions }
+  return { dir, info, cues: [...cues, ...betterPassCues(info, clips.values()), ...decisionCues(info, decisions)], clips, decisions, askCache: readAskCache(dir) }
 }
 
 /** Every run folder directly under `root`, by match id (folders that are not runs are skipped; stale runs with a warning). */

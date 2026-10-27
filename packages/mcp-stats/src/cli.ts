@@ -26,7 +26,8 @@ const o = cliOptions("touchline-mcp-stats: serve one match's stats to agents ove
 exitOnUserError(() => {
   if (o.run === "") throw new CliError("--run is required (a folder written by pnpm sim, e.g. out/m-1)")
 })
-const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")))
+// The stats engine's xG is the simulator's, on the committed parameters (P6 pre-merge fix 3).
+const models = modelsFromJson(JSON.parse(readFileSync(join(root, "data/params/stats-models.json"), "utf8")), paramsFromJson(JSON.parse(readFileSync(join(root, "data/params/touchline-params.json"), "utf8"))))
 const xt = xtGridFromJson(JSON.parse(readFileSync(join(root, "data/params/xt-grid.json"), "utf8")))
 const leaguePath = join(root, "data/league/league.json")
 const roster = existsSync(leaguePath) ? (JSON.parse(readFileSync(leaguePath, "utf8")) as Roster) : undefined

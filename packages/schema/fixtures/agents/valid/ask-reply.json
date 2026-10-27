@@ -1,0 +1,16 @@
+{
+  "contract": "ask_reply",
+  "value": {
+    "headline": "The striker was the better pass",
+    "body": "Passing to Teo Arden gave 58 shots against 41 over 200 replays.",
+    "chips": [
+      {
+        "label": "Shots",
+        "value": "58 vs 41",
+        "source": "what_if"
+      }
+    ],
+    "verified": true,
+    "model": null
+  }
+}

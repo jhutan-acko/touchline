@@ -26,7 +26,12 @@ export const league = JSON.parse(readFileSync(join(root, "data/league/league.jso
 // 1-30 that fits, first goal 33:48 (48 s into its minute), the second at 60:06, after the half-time recap. Seed 1 since
 // realism v2 P5 (2026-10-20: set pieces, restart timing, keeper restarts, role moves, zonal marking, recalibrated; on seed 4
 // the moments moved): the first of 1-30 for which the library's session, server, live and studio tests pass.
-const SEED = 1
+// Seed 6 since realism v2 P6 (2026-10-21: first-time finishes, headers, keeper-position saves, shot model, recalibrated;
+// on seed 1 the second goal moved into the first half): the first of 1-30 that fits, first goal 15:40, the second at 60:46.
+// Seed 3 since the P6 pre-merge fixes (2026-10-22: no set-piece first-time finishes or headers, marking_weight 0.75,
+// recalibrated; seed 6's first goal moved to 03:26, under five minutes in): the first of 1-30 that fits (seed 1's second
+// goal is in the first half, seed 2's first comes at 00:12), first goal 27:55, the second at 61:01.
+const SEED = 3
 export const MATCH_ID = `lib-err-${SEED}`
 const fixture = (f: string) => (JSON.parse(readFileSync(join(root, "packages/schema/fixtures/agents/valid", f), "utf8")) as { value: unknown }).value
 

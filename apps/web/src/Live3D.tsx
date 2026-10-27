@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { MatchInfo, PitchFrame, Playback } from "@touchline/rpc"
+import type { Cue } from "@touchline/schema"
 import { t, type Key, type Lang } from "./i18n.js"
+import type { Marker } from "./markers.js"
 import { CAMERAS, type CameraKind } from "./view3d/cameras.js"
 import { findKicks, type Kick } from "./view3d/kick.js"
 import { LAYOUTS, type Layout, type Viewport } from "./view3d/layout.js"
 import { LiveBuffer } from "./view3d/motion.js"
 import { Stage3D, type Play } from "./view3d/Stage3D.js"
+import type { StatTag } from "./tags.js"
 
 export const CAMERA_KEY: Record<CameraKind, Key> = { follow: "camFollow", fp: "camFp", broadcast: "camBroadcast", tactical: "camTactical" }
 const LAYOUT_KEY: Record<Layout, Key> = { pip: "layoutPip", grid: "layoutGrid", single: "layoutSingle" }
@@ -34,8 +37,23 @@ export const Choice = <A extends string>({ label, options, value, onChange, name
 /**
  * The live match in 3D (Plan 7): the session's frames played a little behind on the 3D stage, with the camera, the
  * layout and the player followed chosen here (click a player, keys 1–4 and [ ]). `children` (the cue overlays) go on top.
+ * While this viewer is `frozen` (on a match frame), `frame` is the frame frozen on and the bodies stand still. Pitch
+ * markers (cues in the `pitch_marker` slot) are drawn on the pitch; tapping one calls `onMarkerTap`. The viewer's
+ * `favourite` player, when on the pitch, is the one followed (and is again whenever the favourite changes).
  */
-export const Live3D = ({ match, frame, playback = null, lang, children }: { match: MatchInfo; frame: PitchFrame | null; playback?: Playback | null; lang: Lang; children?: ReactNode }) => {
+export const Live3D = ({ match, frame, playback = null, lang, children, frozen = null, markers = [], onMarkerTap, tags = [], favourite = null }: {
+  match: MatchInfo
+  frame: PitchFrame | null
+  playback?: Playback | null
+  lang: Lang
+  children?: ReactNode
+  frozen?: number | null
+  markers?: ReadonlyArray<Cue>
+  onMarkerTap?: (m: Marker, cue: Cue) => void
+  /** Live stat tags over the players. */
+  tags?: ReadonlyArray<StatTag>
+  favourite?: string | null
+}) => {
   const [camera, setCamera] = useState<CameraKind>("follow")
   const [layout, setLayout] = useState<Layout>("pip")
   const [followed, setFollowed] = useState<string | null>(null)
@@ -47,10 +65,14 @@ export const Live3D = ({ match, frame, playback = null, lang, children }: { matc
     const p = names.get(id)
     return p ? `#${p.jersey} ${p.name}` : id
   }
+  // Back to live from a freeze: start the buffer afresh, so motion (and kicks) do not run across the gap.
+  const wasFrozen = useRef(false)
   useEffect(() => {
+    if (wasFrozen.current && frozen === null) buffer.clear()
+    wasFrozen.current = frozen !== null
     if (!frame) return
     buffer.push(frame, performance.now())
-    if (followed === null) setFollowed(nearestBall(frame))
+    if (followed === null) setFollowed(favourite && onPitch(frame).includes(favourite) ? favourite : nearestBall(frame))
     else if (!onPitch(frame).includes(followed)) {
       // Substituted or sent off: the viewer is told why, the player nearest the ball is followed instead, and a camera
       // that was on the player hands over to the broadcast camera.
@@ -58,7 +80,14 @@ export const Live3D = ({ match, frame, playback = null, lang, children }: { matc
       setFollowed(nearestBall(frame))
       if (camera === "follow" || camera === "fp") setCamera("broadcast")
     }
-  }, [frame])
+  }, [frame, frozen])
+  // A new favourite is followed at once (when on the pitch).
+  useEffect(() => {
+    if (favourite && onPitch(frame).includes(favourite)) {
+      setFollowed(favourite)
+      setNotice(null)
+    }
+  }, [favourite])
   const ids = onPitch(frame)
   const step = (d: number) => {
     if (!ids.length) return
@@ -76,9 +105,10 @@ export const Live3D = ({ match, frame, playback = null, lang, children }: { matc
     window.addEventListener("keydown", key)
     return () => window.removeEventListener("keydown", key)
   })
-  // Bodies animate at the session's speed (still while it is paused), so their feet keep pace with the positions.
+  // Bodies animate at the session's speed (still while it is paused or this viewer is frozen), so their feet keep pace
+  // with the positions.
   const speed = useRef(1)
-  speed.current = playback ? (playback.state === "playing" ? playback.speed : 0) : 1
+  speed.current = frozen !== null ? 0 : playback ? (playback.state === "playing" ? playback.speed : 0) : 1
   const play: Play = useMemo(
     () => ({
       sample: (now) => buffer.sample(now),
@@ -107,7 +137,7 @@ export const Live3D = ({ match, frame, playback = null, lang, children }: { matc
       </div>
       {notice && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-sm">{notice}</p>}
       <div className="relative aspect-[16/9] w-full">
-        <Stage3D match={match} plays={{ real: play }} mode="multi" layout={layout} camera={camera} followed={followed} onPick={(id) => (setFollowed(id), setNotice(null))} label={label} loading={t(lang, "loading3d")} failed={t(lang, "failed3d")} />
+        <Stage3D match={match} plays={{ real: play }} mode="multi" layout={layout} camera={camera} followed={followed} onPick={(id) => (setFollowed(id), setNotice(null))} markers={{ cues: markers, onTap: (m, c) => onMarkerTap?.(m, c) }} tags={tags} label={label} loading={t(lang, "loading3d")} failed={t(lang, "failed3d")} />
         {children}
       </div>
       <p className="text-xs text-slate-400">{t(lang, "keysHint")}</p>

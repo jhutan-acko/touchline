@@ -108,6 +108,11 @@ class EvidenceCorrectness:
         return {"evidence_correctness": _share(hits), "evidence_correctness_n": len(hits)}
 
 
+def text_cues(cues: list[dict]) -> list[dict]:
+    """The cues that carry text: pitch markers (an overlay beside a text cue, no text) are not variants."""
+    return [c for c in cues if c.get("display", {}).get("slot") != "pitch_marker" and c.get("text") is not None]
+
+
 class Grounding:
     """Numeric claims verified by the Fact-Checker on the first draft, and in what was published (target 100 %)."""
 
@@ -115,7 +120,7 @@ class Grounding:
         first = [tr["verdicts"][0] for tr in row["traces"] if tr["verdicts"]]
         checked = sum(v["claims_checked"] for v in first)
         verified = sum(v["claims_verified"] for v in first)
-        published = [c["verified"] for c in row["cues"]]
+        published = [c["verified"] for c in text_cues(row["cues"])]
         return {
             "grounding_first_draft": round(verified / checked, 4) if checked else None,
             "grounding_published": _share(published),
@@ -149,7 +154,7 @@ class PersonaSeparation:
     def __call__(self, **row) -> dict:
         hits = []
         by_moment: dict[tuple[str, str], dict[str, dict]] = {}
-        for c in row["cues"]:
+        for c in text_cues(row["cues"]):
             by_moment.setdefault((c["moment_id"], c["segment"]["lang"]), {})[c["segment"]["mode"]] = c
         for pair in by_moment.values():
             if {"casual", "analyst"} <= set(pair):
@@ -166,7 +171,7 @@ EVALUATORS = {
 
 
 def score(row: dict, judgments: dict | None = None) -> dict:
-    out = {"match_id": row["match_id"], "scenario": row["scenario"], "moments": len(row["traces"]), "cues": len(row["cues"])}
+    out = {"match_id": row["match_id"], "scenario": row["scenario"], "moments": len(row["traces"]), "cues": len(text_cues(row["cues"]))}
     for name, ev in EVALUATORS.items():
         out |= ev(**row, **({"judgments": judgments} if name == "explanation" and judgments else {}))
     return out

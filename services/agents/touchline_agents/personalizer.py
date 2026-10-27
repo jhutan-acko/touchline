@@ -10,13 +10,13 @@ that fails, or a model that fails, gives the template variant for that language 
 
 import asyncio
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from agent_framework import Agent, BaseChatClient
 from pydantic import BaseModel, ConfigDict
 
 from .config import Settings
-from .contracts import Claim, Cue, Draft, Moment, Segment, segment_key
+from .contracts import Claim, Cue, Draft, Moment, Segment, Signal, segment_key
 from .llm import agent_options, run_structured, stub_responder
 from .factchecker import SUPERLATIVES, quoted
 from .numbers import format_metric, matches, numbers_in
@@ -60,6 +60,11 @@ class Story:
     contexts: dict[str, str]
     # Casual and analyst slots: moments go to the lower third and the side panel, recaps to recap cards.
     slots: tuple[str, str] = ("lower_third", "side_panel")
+    # What the pitch-marker cue (markers.py) draws from; empty unless the workflow fills them in.
+    claims: tuple[Claim, ...] = ()  # the claims that passed the Fact-Checker
+    signals: tuple[Signal, ...] = ()  # the moment's own signals
+    passes: tuple[tuple[str, str], ...] = ()  # (passer, receiver) of the moment's pass events, newest last
+    positions: dict[str, tuple[float, float]] = field(default_factory=dict)  # player id -> (x, y) pitch metres at frame_to
 
     @staticmethod
     def of_moment(m: Moment, cause: str, names: dict[str, str], explanation: str = "") -> "Story":

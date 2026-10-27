@@ -13,10 +13,10 @@
    "J03WR9"
   ],
   "fitted_at": "2026-10-06",
-  "method": "logistic regression (Newton, L2 penalty on coefficients); features from event locations and the nearest 5 Hz tracking frame",
+  "method": "xPass: logistic regression (Newton, L2 penalty on coefficients); features from event locations and the nearest 5 Hz tracking frame. xG: the simulator's model (xg.coefficients)",
   "note": "Coefficients and fit summaries only; no real event or tracking rows."
  },
- "version": "stats-models-1",
+ "version": "stats-models-2",
  "xpass": {
   "features": [
    "length_10m",
@@ -39,23 +39,12 @@
  },
  "xg": {
   "features": [
-   "distance_10m",
+   "distance_m",
    "angle_rad",
    "header",
-   "cone_defenders"
+   "line_defenders"
   ],
   "penalty": 0.76,
-  "intercept": -0.946439,
-  "coefficients": {
-   "distance_10m": -1.030085,
-   "angle_rad": 1.255561,
-   "header": -1.449105,
-   "cone_defenders": -0.161441
-  },
-  "l2": 0.1,
-  "n": 168,
-  "positives": 16,
-  "held_out_log_loss": 0.3156,
-  "base_rate_log_loss": 0.3196
+  "coefficients": "the simulator's: shotModel.xg in data/params/touchline-params.json under shotModel.rule 1 (the fractional logit on DFL model xG, touchline_analytics.shots.fit_xg), read through sim-core xgCoefs"
  }
 }

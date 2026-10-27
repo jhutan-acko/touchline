@@ -13,6 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 // Sections the report can write alone (--only); each phase appends its own.
 const ONLY = ["passing", "duels"]
 ONLY.push("setpieces") // P5 (plan 8e)
+ONLY.push("shots") // P6 (plan 8f)
 const here = (p: string) => resolve(process.env.INIT_CWD ?? process.cwd(), p)
 const o = cliOptions("realism: simulate held-out matches and write a realism report", {
   // Pass --out docs/realism/realism-report.md to update the committed report.

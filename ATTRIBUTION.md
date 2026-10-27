@@ -1,4 +1,6 @@
-# Attribution
+# Attribution and licences
+
+Touchline's code is released under the MIT licence (see `LICENSE`, © 2026 Jhutan Debnath). The data-derived files below keep the licence of the data they come from.
 
 Touchline's simulator is original code. These projects and papers shaped its design; no code was copied from them, except the pitch-control model, which is ported from LaurieOnTracking (MIT, below).
 
@@ -18,6 +20,12 @@ Touchline's simulator is original code. These projects and papers shaped its des
 | Dataset | Licence | How it is used |
 |---|---|---|
 | IDSSE / Sportec Open DFL dataset — © Deutsche Fussball Liga (DFL); Bassek et al., *Scientific Data* (2025), https://doi.org/10.1038/s41597-025-04505-y | CC-BY 4.0 | Downloaded locally into git-ignored `data/raw/`; only aggregate match statistics (`data/params/targets-idsse.json`), fitted model coefficients (`data/params/stats-models.json`) and the expected-threat grid (`data/params/xt-grid.json`) are committed. These are the targets the engine is tuned to and validated against (`docs/realism/realism-report.md`). |
+
+**Derived files and CC-BY 4.0.** The committed files `data/params/targets-idsse.json`, `data/params/stats-models.json`, `data/params/xt-grid.json`, `data/params/physics.json`, `data/params/still-carriers.json`, `data/params/touchline-params.json` (calibrated against the targets) and the figures in `docs/realism/` and `docs/physics-calibration.md` are aggregates or fitted coefficients derived from the IDSSE dataset. They are shared under CC-BY 4.0: reuse them with credit to the Deutsche Fussball Liga (DFL) and Bassek et al. (2025) as cited above, and say if you changed them. No raw tracking or event data, and no player or club identifiers from the dataset, are committed; each parameter file carries this provenance in its `provenance` block.
+
+## Real-player blocklist
+
+`data/blocklist/` holds SHA-256 hashes (first 16 hex digits) of normalised names of real association football players, built from Wikidata labels (CC0 1.0). The league generator uses it to refuse fictional names that match a real player. No real names are stored.
 
 The default xG prior (`packages/sim-core/src/params.ts`) is fitted to an approximate public reference xG curve by distance and angle, not to any dataset.
 

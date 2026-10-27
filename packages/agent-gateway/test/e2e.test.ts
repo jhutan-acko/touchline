@@ -29,11 +29,11 @@ let run: string
 let result: GatewayResult
 
 beforeAll(async () => {
-  // Seed 17: the test needs a costly error explained as a mis-hit clearance under pressure. It is the agents suite's error
+  // Seed 153: the test needs a costly error explained as a mis-hit clearance under pressure. It is the agents suite's error
   // match (services/agents/tests/conftest.py ERROR_SEED, found by services/agents/scripts/find_test_seed.py): its only
   // critical error is such a clearance. Re-pin both together when the engine or the params file changes.
-  run = join(mkdtempSync(join(tmpdir(), "gw-e2e-")), "e2e-err-17")
-  spawnSync("pnpm", ["-s", "sim", "--scenario", "costly_error", "--seed", "17", "--match-id", "e2e-err-17", "--out", run], { cwd: root, stdio: "ignore" })
+  run = join(mkdtempSync(join(tmpdir(), "gw-e2e-")), "e2e-err-153")
+  spawnSync("pnpm", ["-s", "sim", "--scenario", "costly_error", "--seed", "153", "--match-id", "e2e-err-153", "--out", run], { cwd: root, stdio: "ignore" })
   const port = await freePort()
   agents = spawn("uv", ["run", "--project", "services/agents", "touchline-agents", "--port", String(port)], { cwd: root, env: { ...process.env, TOUCHLINE_LLM: "stub" }, detached: true, stdio: "ignore" })
   const url = `http://127.0.0.1:${port}/`
@@ -63,7 +63,12 @@ describe("gateway and agent service", () => {
     expect(result.requests.reduce((n, r) => n + r.unverified + r.late, 0)).toBe(0)
     for (const t of result.traces) {
       const cues = result.cues.filter((c) => c.moment_id === t.moment.moment_id)
-      expect(cues.map((c) => c.segment)).toEqual(segments)
+      expect(cues.filter((c) => c.display.slot !== "pitch_marker").map((c) => c.segment)).toEqual(segments)
+      cues.forEach((c, i) => {
+        if (c.display.slot !== "pitch_marker") return
+        const text = cues[i - 1] // a pitch marker directly follows its text cue
+        expect(text && text.display.slot !== "pitch_marker" && text.moment_id === c.moment_id && JSON.stringify(text.segment) === JSON.stringify(c.segment) && text.verified === c.verified).toBe(true)
+      })
       for (const c of cues) expect([c.anchor.frame_from, c.anchor.frame_to]).toEqual([t.moment.frame_from, t.moment.frame_to])
     }
   })

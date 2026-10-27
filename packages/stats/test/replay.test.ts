@@ -34,7 +34,8 @@ const byTick = (a: Signal, b: Signal) => a.frame_id - b.frame_id || a.id.localeC
 describe("replay and streams", () => {
   // A scripted match (its last window runs to full time, so carries and flights are cut short by the whistle).
   const sc = SCENARIOS.late_comeback!
-  // Seed 4246 (P5 Task 14): the first from 4245 whose match raises a costly_error (4245 raised none with P5 on).
+  // Seed 4246: the first from 4245 whose match raises a costly_error (P5 Task 14: 4246, when 4245 raised none; P6 Task 8:
+  // 4245 raises one again; P6 pre-merge fixes: 4245 raises none, 4246 raises two).
   const cfg: MatchConfig = { matchId: "golden", seed: 4246, kickoffTime: "2026-10-18T14:00:00.000Z", home: club(sc.home), away: club(sc.away), params: DEFAULT_PARAMS, dt: 0.1, script: sc.script }
   const dir = mkdtempSync(join(tmpdir(), "touchline-stats-"))
   let live: StatsEngine

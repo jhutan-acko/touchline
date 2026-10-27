@@ -4,10 +4,12 @@
  */
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Effect, Layer, Ref } from "effect"
+import { Effect, Layer, Ref, Stream } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
+import { a2aSender } from "@touchline/agent-gateway"
 import { MatchNotFound, TouchlineRpcs, type MatchSummary } from "@touchline/rpc"
+import { makeAsk, OFFLINE_SENDER, type AskOptions } from "./ask.js"
 import { makeEvidence } from "./evidence.js"
 import type { LibraryMatch } from "./library.js"
 import { makeOps } from "./ops.js"
@@ -23,6 +25,10 @@ export interface ApiOptions {
   readonly companion?: Companion
   /** How what-if clips are computed on request (tests). */
   readonly whatIf?: WhatIfOptions
+  /** The agent service Ask uses; without it (and without `ask`), questions fail `offline` (cached answers still replay). */
+  readonly agentsUrl?: string
+  /** Ask's sender, workers and jobs (tests); overrides `agentsUrl`. */
+  readonly ask?: AskOptions
 }
 
 const summary = ({ players: _, ...s }: LibraryMatch["info"]): MatchSummary => s
@@ -35,7 +41,9 @@ export const handlersLayer = (o: ApiOptions) =>
       const ev = makeEvidence(o.library, whatIf)
       const studio = makeStudio(ev)
       const ops = makeOps()
-      const sessions = yield* makeSessions(o.library, { ...(o.companion ? { companion: o.companion } : {}), studio: studio.record })
+      const ask = makeAsk(o.ask ?? { send: o.agentsUrl ? a2aSender(o.agentsUrl) : OFFLINE_SENDER })
+      yield* Effect.addFinalizer(() => Effect.sync(() => ask.workers.close()))
+      const sessions = yield* makeSessions(o.library, { ...(o.companion ? { companion: o.companion } : {}), studio: studio.record, onClose: ask.close })
       const match = (id: string) => Effect.fromNullishOr(o.library.get(id)).pipe(Effect.mapError(() => new MatchNotFound({ match_id: id })))
       /** A session and what it has reached: answers never go past its frame. */
       const view = (id: string) =>
@@ -57,7 +65,10 @@ export const handlersLayer = (o: ApiOptions) =>
         StudioAct: ({ session_id, moment_id, action }) => sessions.get(session_id).pipe(Effect.flatMap((s) => studio.act(s, moment_id, action))),
         WatchGraphics: ({ session_id, segment }) => sessions.graphics(session_id, segment),
         GetOps: ({ session_id }) => sessions.get(session_id).pipe(Effect.flatMap((s) => Effect.map(Ref.get(s.playback), (p) => ops.report(s, p.frame)))),
-        GetDecisions: ({ session_id }) => view(session_id).pipe(Effect.map(({ s, v }) => s.match.decisions.filter((d) => d.tick <= v.frame)))
+        GetDecisions: ({ session_id }) => view(session_id).pipe(Effect.map(({ s, v }) => s.match.decisions.filter((d) => d.tick <= v.frame))),
+        SuggestQuestions: ({ session_id, frame, lang }) => sessions.get(session_id).pipe(Effect.flatMap((s) => ask.suggest(s, frame, lang))),
+        Ask: ({ session_id, ...req }) => Stream.unwrap(Effect.map(sessions.get(session_id), (s) => ask.ask(s, req))),
+        GetAskClip: ({ session_id, clip_id }) => sessions.get(session_id).pipe(Effect.flatMap((s) => ask.clip(s, clip_id)))
       })
     })
   )

@@ -1,9 +1,10 @@
 import { act, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Evidence, PitchFrame, WhatIfClip } from "@touchline/rpc"
 import type { Cue } from "@touchline/schema"
 import { App } from "../src/App.js"
+import { VIEW_KEY } from "../src/Watch.js"
 import type { Stage3DProps } from "../src/view3d/Stage3D.js"
 import { fakeClient } from "./fake-client.js"
 
@@ -41,6 +42,12 @@ const open = async (o: Parameters<typeof fakeClient>[0]) => {
   await userEvent.click(within(document.querySelector('[data-slot="lower_third"]') as HTMLElement).getByRole("button", { name: "Why?" }))
   return client
 }
+
+// The live match is checked on the 2D pitch: with WebGL (mocked on) the page now opens in 3D unless the viewer saved 2D.
+beforeEach(() => {
+  localStorage.clear()
+  localStorage.setItem(VIEW_KEY, "2d")
+})
 
 describe("the what-if split", () => {
   it("opens from a better pass's Why? drawer: both plays on one camera, the passer followed, the verified numbers, then back to live", async () => {
@@ -96,6 +103,7 @@ describe("the what-if split", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Watch" }))
     act(() => client.push({ kind: "cue", cue: { ...better, cue_id: "x", moment_id: "better-x" } }))
     expect(screen.queryByRole("region", { name: "What if" })).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" }))
     await userEvent.click(screen.getByLabelText("Auto-show better passes"))
     act(() => client.push({ kind: "cue", cue: better }))
     expect(await screen.findByRole("region", { name: "What if" })).toBeTruthy()

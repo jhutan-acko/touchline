@@ -13,7 +13,10 @@ export const preference = (s: Segment): string[] => [
   ])
 ]
 
-/** One cue per moment or recap for `segment` (the best variant the cache has), in anchor order. */
+/**
+ * One cue per moment or recap for `segment` (the best variant the cache has), in anchor order. A moment's pitch-marker
+ * cue (the overlay the agents draw with it) is picked on its own, so it does not compete with the text cue.
+ */
 export const pickCues = (cues: ReadonlyArray<Cue>, segment: Segment): Cue[] => {
   const order = preference(segment)
   const best = new Map<string, { cue: Cue; rank: number }>()
@@ -21,8 +24,9 @@ export const pickCues = (cues: ReadonlyArray<Cue>, segment: Segment): Cue[] => {
     if (cue.moment_id === null) continue
     const rank = order.indexOf(segmentKey(cue.segment))
     if (rank < 0) continue
-    const seen = best.get(cue.moment_id)
-    if (!seen || rank < seen.rank) best.set(cue.moment_id, { cue, rank })
+    const key = cue.display.slot === "pitch_marker" ? `${cue.moment_id}:marker` : cue.moment_id
+    const seen = best.get(key)
+    if (!seen || rank < seen.rank) best.set(key, { cue, rank })
   }
   return [...best.values()].map((b) => b.cue).sort((a, b) => a.anchor.frame_to - b.anchor.frame_to || a.cue_id.localeCompare(b.cue_id))
 }

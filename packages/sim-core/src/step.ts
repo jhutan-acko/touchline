@@ -26,7 +26,7 @@ import {
   type Vec3
 } from "./geometry.js"
 import { assignMarks, laneMarkTarget, markTarget, shieldTarget, spacedTarget, spacingFor, steerCarry, stepsOut, supportersWanted, supportGate, supportSpot } from "./offball.js"
-import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor } from "./kinematics.js"
+import { approach, approachBy, drainEnergy, interceptPoint, motionFor, separation, vmaxFor, type Motion } from "./kinematics.js"
 import type { Action, Params } from "./params.js"
 import { aerialWinShare, goalLineCrossing, keeperLetsRun, MAX_FLIGHT_S, resolveFlight, type Resolution } from "./resolve.js"
 import { hazard, Rng, substream } from "./rng.js"
@@ -87,6 +87,19 @@ import { joinChance, pauseCap, pauseEndCap, pauseTarget, recoverRate, windowTick
 
 // ---- P4 imports, team-press seam (plan 8d Task 7 inserts below this line)
 import { backToGoalHolds, inOwnThird, pressLift, presserScore, shadowSpot } from "./press.js"
+
+// ---- P6 imports, contact executor (plan 8f Task 1; no wave task inserts below this line)
+import { CONTROL, OPEN_SHOT, type ContactPlan, type ShotHow } from "./contact.js"
+
+// ---- P6 imports, first-time seam (plan 8f Task 3 inserts below this line)
+import { firstTimeChoice, firstTimeEligible, goalDistM } from "./firsttime.js"
+import type { DecisionInput } from "./decide.js"
+
+// ---- P6 imports, header seam (plan 8f Task 4 inserts below this line)
+import { coneCount, contactDecision } from "./contact.js"
+import { xgOf } from "./decide.js"
+import { actionZone } from "./geometry.js"
+import { headerEligible, headerHow, headShare } from "./header.js"
 
 // ---- P5 imports, attacking set-piece seam (plan 8e Task 3 inserts below this line)
 import { attackRoleSpot, attackTable, holdSpot, restKeepers, restKind, restSpots } from "./setpiece-attack.js"
@@ -1388,14 +1401,16 @@ const releaseKick = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   if (chaser && !offside) w.setPlayer({ ...w.player(chaser.id), intent: { kind: "chase", target: endAt }, intentUntil: tickAt })
 }
 
-const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null): void => {
+/** `how` (P6, plan 8f): a first-time shot or a header from the contact executor; OPEN_SHOT, the default, is the old shot. */
+const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartKind | null, how: ShotHow = OPEN_SHOT): void => {
   const side = owner.side
   const opps = w.active(other(side))
   const isPenalty = restart === "penalty"
   const xg = isPenalty ? 0.76 : (d.xg ?? 0.02)
   // The recorded xG is the model's; the chance of scoring also follows the game state (minute, red cards).
   const scoring = isPenalty ? 1 : scoringFactor(w.minute(), w.active(side).length, opps.length, w.p, w.period)
-  const weakFoot = !isPenalty && w.rng.execution.chance(0.2)
+  // A header has no weaker foot (and draws nothing for it).
+  const weakFoot = !isPenalty && !how.header && w.rng.execution.chance(0.2)
   // Scenario scripts: this team's scoring nudge; the defending keeper's save shift and fumbles; forced outcomes.
   const own = w.mods(side), def = w.mods(other(side))
   const force: ShotMods["force"] = w.takeForced(side, "goal")
@@ -1406,7 +1421,7 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
         ? "keeper_error"
         : undefined
   const mods: ShotMods = { scoring: scoring * (isPenalty ? 1 : own.scoring), saveLogit: def.saveLogit, fumble: def.fumble, aim: isPenalty ? 1 : own.aim, ...(force ? { force } : {}) }
-  const plan = planShot(owner, side, w.period, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, mods)
+  const plan = planShot(owner, side, w.period, opps, xg, d.pressure, isPenalty, w.p, w.dt, w.rng.execution, weakFoot, { ...mods, ...how.mods })
   // A forced save or keeper error is used up by the next shot that is not blocked.
   if (plan.forced && force === "save") w.takeForced(other(side), "keeper_heroics")
   if (plan.forced && force === "keeper_error") w.takeForced(other(side), "keeper_howler")
@@ -1416,12 +1431,13 @@ const releaseShot = (w: Work, owner: PlayerState, d: Decision, restart: RestartK
   const main = w.pending("shot", owner, owner.pos, {
     ...decisionAttrs(d),
     technique: isPenalty ? "penalty" : restart === "free_kick" ? "free_kick" : "normal",
-    body_part: footPart(owner, weakFoot),
+    body_part: how.header ? "head" : footPart(owner, weakFoot),
     execution: plan.execution,
     on_target: plan.onTarget,
     xg: Math.round(xg * 1000) / 1000,
     ...(plan.forced ? { scripted: true } : {}),
-    shot_speed_kmh: round2(w.p.shot.speed * 3.6 * (plan.execution === "scuffed" ? 0.5 : 1))
+    ...(how.firstTime ? { first_time: true } : {}),
+    shot_speed_kmh: round2(w.p.shot.speed * 3.6 * (plan.execution === "scuffed" ? 0.5 : 1) * (how.mods.speed ?? 1))
   }, end)
   const extra: PendingEvent[] = []
   let restartAfter: Flight["restartAfter"] = null
@@ -1580,12 +1596,119 @@ const ownedTick = (w: Work): void => {
 
 // ---------------------------------------------------------------- flights and loose ball
 
+// ===== P6 contact executor seam (plan 8f Task 1; no wave task edits this block)
+
+/**
+ * What the receiver of a clean pass does at contact (P6 SH1, SH2; planning rulings 2, 3): null (he controls it, the old
+ * behaviour) when firstTime.rule and header.rule are both 0, with no work and no draw, and whenever the shared
+ * eligibility fails: the winner is the passer's teammate, not a keeper, the flight carries no aerial foul, no what-if
+ * override waits for him, and the pass is from open play (or a corner or free-kick delivery when firstTime.setPieces is 1).
+ * Otherwise the header seam's plan, or the first-time seam's.
+ */
+export const contactPlan = (w: Work, f: Flight): { receiver: PlayerState; plan: ContactPlan } | null => {
+  const p = w.p
+  if (p.firstTime.rule === 0 && p.header.rule === 0) return null
+  if (!f.winnerId || f.foul) return null
+  const receiver = w.player(f.winnerId)
+  if (receiver.side !== f.side || receiver.id === f.fromId || receiver.role === "GK") return null
+  if (w.override?.playerId === receiver.id) return null
+  const restart = f.pending.attrs.restart ?? null
+  // firstTime.setPieces is one switch for both contact rules at restarts: it lets corner and free-kick deliveries reach
+  // the first-time seam (SH1) and the header seam (SH2) alike. The user switched it off (2026-10-21, pre-merge fix 1:
+  // corner shots within 10 s were 53.1 per 100 against P5's 36.7), so set-piece first-time finishes and set-piece
+  // headers are off together; open-play contacts are unchanged.
+  if (restart !== null && !((restart === "corner" || restart === "free_kick") && p.firstTime.setPieces === 1)) return null
+  return { receiver, plan: headerPlan(w, f, receiver) ?? firstTimePlan(w, f, receiver) }
+}
+
+/**
+ * Carry out a contact plan in the pass's resolve tick: a first-time shot or header through releaseShot, or a lay-off
+ * through releaseKick (unchanged) with first_time: true added to the new pass event. Nobody is pressing him any more.
+ */
+export const executeContact = (w: Work, _f: Flight, receiver: PlayerState, plan: ContactPlan): void => {
+  // He touched it: the shot or lay-off is his, whatever happens to the release.
+  w.lastTouch = { playerId: receiver.id, side: receiver.side }
+  if (plan.kind === "shot") releaseShot(w, receiver, plan.decision, null, plan.how)
+  else if (plan.kind === "layoff") {
+    releaseKick(w, receiver, plan.decision, null)
+    if (w.possession.kind === "in_flight") {
+      const fl = w.possession.flight
+      w.possession = { ...w.possession, flight: { ...fl, pending: { ...fl.pending, attrs: { ...fl.pending.attrs, first_time: true } } } }
+    }
+  }
+  w.pressedBy = []
+}
+
+// ===== end of P6 contact executor seam
+
+// ===== P6 header seam (plan 8f Task 4 owns this block)
+
+/**
+ * SH2: a header at goal by the winner of a high ball in the box he attacks, or null for the first-time path. Checks its
+ * own switch: contactPlan runs when either P6 contact rule is 1, so this returns null while header.rule is 0. rule 0: null.
+ * Eligible (ruling 8): the ball at the resolve tick is zMin..zMax up and he stands in the box he attacks. Then one draw
+ * on the contact stream: head it (U = b0 + bXg xg(header) + bHeading (heading - 0.6) + script shot bias) or control it
+ * (U = 0). The header goes through releaseShot with his pressure at contact; no headed lay-off.
+ */
+export const headerPlan = (w: Work, _f: Flight, receiver: PlayerState): ContactPlan | null => {
+  const h = w.p.header
+  if (h.rule === 0) return null
+  const contactZ = w.ball.pos.z
+  if (!headerEligible(contactZ, actionZone(receiver.side, w.period, receiver.pos) === "box", receiver.role === "GK", h)) return null
+  const opps = w.active(other(receiver.side))
+  const xg = xgOf(w.p, receiver.side, w.period, receiver.pos, true, coneCount(receiver.side, w.period, receiver.pos, opps))
+  const share = headShare(xg, receiver.attrs.heading, scriptBias(w, receiver.side).shot ?? 0, h)
+  if (!w.rng.contact.chance(share)) return CONTROL
+  const opp = nearestOpponent(receiver.pos, opps)
+  const pressure = pressureFrom(opp ? dist(opp.pos, receiver.pos) : 50)
+  return { kind: "shot", decision: contactDecision({ shot: share, hold: 1 - share }, "shot", null, [], xg, pressure), how: headerHow(receiver.attrs.heading, contactZ, h) }
+}
+
+// ===== end of P6 header seam
+
+// ===== P6 first-time seam (plan 8f Task 3 owns this block)
+
+/**
+ * SH1: shoot first time, lay off or control. Checks its own switch: contactPlan runs when either P6 contact rule is 1,
+ * so this returns CONTROL while firstTime.rule is 0. rule 0: CONTROL (the old behaviour).
+ * Eligible (ruling 3): within firstTime.maxGoalM of the goal he attacks, the ball at foot height, not a keeper, and the
+ * flight's restart (its pass attrs) open play, or a corner or free kick under setPieces. Then one draw on the contact
+ * stream (firstTimeChoice), with his pressure at contact (pressureFrom) and the ball as it arrives (w.ball).
+ */
+export const firstTimePlan = (w: Work, f: Flight, receiver: PlayerState): ContactPlan => {
+  const p = w.p
+  if (p.firstTime.rule === 0) return CONTROL
+  const side = receiver.side
+  const restart = (f.pending.attrs.restart ?? null) as RestartKind | null
+  if (!firstTimeEligible(goalDistM(receiver, w.period), w.ball.pos.z, restart, receiver.role === "GK", p)) return CONTROL
+  const opps = w.active(other(side))
+  const opp = nearestOpponent(receiver.pos, opps)
+  const input: DecisionInput = {
+    period: w.period,
+    owner: receiver,
+    teammates: w.active(side),
+    opponents: opps,
+    style: teamOf(w.cfg, side).style,
+    scoreDiff: w.score[side] - w.score[other(side)],
+    minute: w.minute(),
+    restart: null,
+    scriptBias: scriptBias(w, side),
+    tick: w.tick
+  }
+  return firstTimeChoice(input, w.ball, pressureFrom(opp ? dist(opp.pos, receiver.pos) : 50), p, w.rng.contact)
+}
+
+// ===== end of P6 first-time seam
+
 const resolveFlightNow = (w: Work, f: Flight): void => {
   // A deflection's "main event" is the ball going out; it has no outcome or end frame of its own.
   w.emit(f.pending, f.kind === "deflection" ? {} : { frame_id_end: f.resolveTick, outcome: f.outcome })
+  // P6 (plan 8f): a receiver may shoot first time, head at goal or lay off instead of controlling (no reception then).
+  const contact = f.kind === "pass" && f.outcome === "successful" && f.winnerId ? contactPlan(w, f) : null
   // The receiver's first touch is decided now, at contact, from the ball as it arrives and the pressure on them.
   let touch: FirstTouch | null = null
   for (const e of f.extra) {
+    if (e.type === "reception" && contact && contact.plan.kind !== "control") continue
     if (e.type !== "reception" || !f.winnerId) {
       w.emit(e)
       continue
@@ -1628,6 +1751,10 @@ const resolveFlightNow = (w: Work, f: Flight): void => {
     if (toucher) w.lastTouch = { playerId: toucher, side: w.player(toucher).side }
     w.ball = f.looseBall
     w.possession = toucher ? { kind: "loose", noTouchId: toucher, noTouchUntil: w.tick + Math.round(0.4 / w.dt) } : { kind: "loose" }
+    return
+  }
+  if (contact && contact.plan.kind !== "control") {
+    executeContact(w, f, contact.receiver, contact.plan)
     return
   }
   if (f.winnerId && touch !== null && touch !== "controlled") {
@@ -1895,6 +2022,11 @@ export interface MoveTarget {
   readonly target: Vec2
   readonly speedCap: number
   readonly timeLeft?: number
+  /**
+   * An off-ball positioning target (shape, marking, support and spacing, rotation): with
+   * movement.accelRule 1 the player moves to it at movement.accelShare of his acceleration, braking and turning (calmMotion).
+   */
+  readonly positional?: boolean
 }
 
 // ================================================================ P4 transition seam (plan 8d Task 6 owns this block)
@@ -2357,7 +2489,7 @@ const moveTarget = (
   const vmax = vmaxFor(pl, pl.energy, w.p)
   const shape = () => {
     const target = shapeTarget(w, pl, ballFlat, possSide === pl.side)
-    return { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+    return { target, speedCap: shapeSpeedCap(w, pl, target, vmax), positional: true }
   }
   const ph = w.phase
   if (ph.kind === "restart") {
@@ -2425,14 +2557,14 @@ const moveTarget = (
     }
   }
   const mark = possSide !== null && possSide !== pl.side ? marks?.get(pl.id) : undefined
-  if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax) }
+  if (mark) return { target: mark, speedCap: markSpeedCap(w, pl, mark, vmax), positional: true }
   // A6 (P5): runs in behind and overlaps (role-run seam), then rotations (rotation seam).
   if (pos.kind === "owned" && possSide === pl.side) {
     const owner = w.player(pos.playerId)
     const rm = runMove(w, pl, owner)
     if (rm) return rm
     const ro = rotateMove(w, pl, owner, shape)
-    if (ro) return ro
+    if (ro) return { ...ro, positional: true }
   }
   const sp = w.p.support
   // Rule 1 (P3 Task 10d): supporters come short only while the carrier is pressed, onto a ring distM out; everyone else
@@ -2440,12 +2572,12 @@ const moveTarget = (
   // the supporters and the forward-line cap are judged once per tick before anyone moves (supportTick).
   if (sup && possSide === pl.side) {
     if (sup.supporters.has(pl.id))
-      return { target: supportSpot(sup.owner.pos, shape().target, pl.side, w.period, sup.opps, sp.distM, true), speedCap: vmax * sp.speedShare }
+      return { target: supportSpot(sup.owner.pos, shape().target, pl.side, w.period, sup.opps, sp.distM, true), speedCap: vmax * sp.speedShare, positional: true }
     const s = shape()
     const spaceM = spacingFor(sup.owner.pos, pl.side, w.period, sp)
     if (spaceM <= 0 || sup.owner.role === "GK") return s
     const target = spacedTarget(sup.owner.pos, s.target, pl.side, w.period, spaceM, sup.capU)
-    return target === s.target ? s : { target, speedCap: shapeSpeedCap(w, pl, target, vmax) }
+    return target === s.target ? s : { target, speedCap: shapeSpeedCap(w, pl, target, vmax), positional: true }
   }
   if (pos.kind === "owned" && possSide === pl.side && sp.count > 0) {
     const owner = w.player(pos.playerId)
@@ -2455,7 +2587,7 @@ const moveTarget = (
       .sort((a, b) => dist(a.pos, owner.pos) - dist(b.pos, owner.pos))
       .slice(0, sp.count)
     if (supporters.some((x) => x.id === pl.id))
-      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), sp.distM), speedCap: vmax * sp.speedShare }
+      return { target: supportSpot(owner.pos, shape().target, pl.side, w.period, w.active(other(pl.side)), sp.distM), speedCap: vmax * sp.speedShare, positional: true }
   }
   return shape()
 }
@@ -2520,13 +2652,17 @@ const moveAll = (w: Work): void => {
   for (const id of w.players.map((x) => x.id)) {
     const pl = w.player(id)
     if (pl.sentOff) continue
-    const { target, speedCap, timeLeft } = transitionMove(w, pl, moveTarget(w, pl, ballFlat, possSide, marks, sup), possSide)
+    const base = moveTarget(w, pl, ballFlat, possSide, marks, sup)
+    const { target, speedCap, timeLeft } = transitionMove(w, pl, base, possSide)
+    // Calm repositioning: a positioning target that the transition seam passes on (itself, or its target at a ramped cap)
+    // stays positional; the seam's own targets (the pause, counter-press, recovery runs) keep the full limits.
+    const positional = base.positional === true && target === base.target
     const cur = w.player(id)
     const vmax = Math.min(speedCap, vmaxFor(cur, cur.energy, w.p))
     const mates = w.active(cur.side).filter((x) => x.id !== cur.id).map((x) => x.pos)
     const sep = separation(cur.pos, mates)
     // Chasing a ball that will arrive at a known tick uses on-time steering (matches resolveFlight's reach model).
-    const m = motionFor(cur, w.p)
+    const m = positional === true ? calmMotion(motionFor(cur, w.p), w.p.movement) : motionFor(cur, w.p)
     const v = Math.max(0.5, vmax)
     const next =
       timeLeft !== undefined
@@ -2544,6 +2680,14 @@ const moveAll = (w: Work): void => {
 /** Speed cap moving into shape: relaxed (A0) arrives in relaxArriveS at up to relaxCap of top speed; else shapeSpeedShare. */
 const shapeSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>
   w.p.movement.relaxed > 0 ? relaxedSpeed(dist(pl.pos, target), vmax, w.p.movement.relaxCap, w.p.movement.relaxArriveS) : vmax * w.p.movement.shapeSpeedShare
+
+/**
+ * Off-ball positioning moves (realism v2, P6 off-ball fix): with accelRule 1 the player uses accelShare of his acceleration,
+ * braking and turning limits; rule 0 (the old behaviour): his full limits, fitted to sprints, for every reposition.
+ * @internal
+ */
+export const calmMotion = (m: Motion, mv: Params["movement"]): Motion =>
+  mv.accelRule === 1 ? { a0: m.a0 * mv.accelShare, s0: m.s0, brake: m.brake * mv.accelShare, lateral: m.lateral * mv.accelShare } : m
 
 /** Speed cap moving to a marking spot: relaxed only with relaxMarks (the spec keeps marking speeds). */
 const markSpeedCap = (w: Work, pl: PlayerState, target: Vec2, vmax: number): number =>

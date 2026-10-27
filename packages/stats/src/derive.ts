@@ -1,7 +1,7 @@
 import { dirOf } from "@touchline/sim-core"
 import type { DomainEvent } from "@touchline/schema"
 import type { TrackFrame } from "./input.js"
-import { passFeatures, predict, shotFeatures, type StatsModels } from "./models.js"
+import { directFreeKickXg, keeperIndex, passFeatures, predict, predictXg, shotFeatures, type StatsModels } from "./models.js"
 
 /** Opponents of `side` in a frame (none without a frame). */
 const opponents = (f: TrackFrame | undefined, side: "home" | "away") => (f ? (side === "home" ? f.away : f.home) : [])
@@ -23,9 +23,32 @@ export const passValues = (e: DomainEvent, f: TrackFrame | undefined, side: "hom
   }
 }
 
-/** Expected goals of a shot (penalties at the fixed rate), from its location and the frame at the strike. */
-export const shotXg = (e: DomainEvent, f: TrackFrame | undefined, side: "home" | "away", models: StatsModels): number | null => {
+/**
+ * The opponents' outfield players in a frame: `keepers` (the known goalkeeper ids) left out, or, when no roles are known
+ * (an empty set), the one nearest the goal they defend.
+ */
+const outfieldOpponents = (f: TrackFrame | undefined, side: "home" | "away", attack: 1 | -1, keepers: ReadonlySet<string>) => {
+  const opp = opponents(f, side)
+  if (keepers.size > 0) return opp.filter((o) => !keepers.has(o.id))
+  const k = keeperIndex(attack, opp)
+  return opp.filter((_, i) => i !== k)
+}
+
+/**
+ * Expected goals of a shot: the simulator's own xG (P6 pre-merge fix 3), so it equals the shot's recorded attrs.xg up to
+ * rounding. Penalties at the fixed rate; a central direct free kick by sim-core directFkXg; otherwise sim-core xgFrom on
+ * the distance, goal-mouth angle, header and outfield defenders in the shot line in `f`, which should be the frame the
+ * shooter decided on (StatsEngine passes the frame before the shot's tick for a shot after control, the shot's own
+ * frame for a first-time shot or header, which is struck at contact after the players' moves).
+ */
+export const shotXg = (e: DomainEvent, f: TrackFrame | undefined, side: "home" | "away", models: StatsModels, keepers: ReadonlySet<string> = new Set()): number | null => {
   if (e.attrs.technique === "penalty") return models.xg.penalty
   if (e.x === null || e.y === null) return null
-  return predict(models.xg, shotFeatures({ x: e.x, y: e.y }, dirOf(side, e.period), e.attrs.body_part === "head", opponents(f, side)))
+  const at = { x: e.x, y: e.y }
+  if (e.attrs.technique === "free_kick") {
+    const fk = directFreeKickXg(models.xg, at, side, e.period)
+    if (fk !== null) return fk
+  }
+  const attack = dirOf(side, e.period)
+  return predictXg(models.xg, shotFeatures(at, attack, e.attrs.body_part === "head", outfieldOpponents(f, side, attack, keepers)))
 }

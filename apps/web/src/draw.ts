@@ -3,6 +3,7 @@
  * y across. Pure: everything goes through the 2D context it is given, so tests can record the calls.
  */
 import type { PitchFrame } from "@touchline/rpc"
+import { inkOn } from "./colours.js"
 
 export const LENGTH = 105
 export const WIDTH = 68
@@ -24,7 +25,7 @@ type Ctx = Pick<CanvasRenderingContext2D, "fillRect" | "strokeRect" | "beginPath
   fillStyle: CanvasRenderingContext2D["fillStyle"]
   strokeStyle: CanvasRenderingContext2D["strokeStyle"]
   lineWidth: number
-}
+} & Partial<Pick<CanvasRenderingContext2D, "fillText" | "font" | "textAlign" | "textBaseline">>
 
 const PITCH = "#1f6b3a"
 const LINE = "#e8f5ec"
@@ -64,18 +65,34 @@ export const drawMarkings = (ctx: Ctx, size: Size, stripes = 0) => {
   }
 }
 
-/** The pitch with the frame's players in their kit colours and the ball (bigger when it is in the air). */
-export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: Kits) => {
+/**
+ * The pitch with the frame's players in their kit colours and the ball (bigger when it is in the air). Given shirt
+ * numbers (player id to number), the dots are a little bigger, outlined, and carry the number in black or white,
+ * whichever reads on the kit.
+ */
+export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: Kits, numbers?: ReadonlyMap<string, number>) => {
   drawMarkings(ctx, size)
   if (!frame) return
-  const r = (0.9 / LENGTH) * size.w
+  const labelled = numbers !== undefined && numbers.size > 0 && typeof ctx.fillText === "function"
+  const r = ((labelled ? 1.3 : 0.9) / LENGTH) * size.w
   for (const [side, colour] of [["home", kits.home], ["away", kits.away]] as const) {
-    ctx.fillStyle = colour
+    const ink = inkOn(colour)
     for (const p of frame[side]) {
       const [x, y] = toPx(size, p.x, p.y)
+      ctx.fillStyle = colour
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
       ctx.fill()
+      const n = labelled ? numbers.get(p.id) : undefined
+      if (n === undefined) continue
+      ctx.strokeStyle = ink === "#ffffff" ? "rgba(255,255,255,0.55)" : "rgba(11,17,32,0.55)"
+      ctx.lineWidth = Math.max(1, r / 7)
+      ctx.stroke()
+      ctx.fillStyle = ink
+      ctx.font = `700 ${Math.round(r * 1.05)}px Inter, system-ui, sans-serif`
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText!(String(n), x, y + r * 0.06)
     }
   }
   const [bx, by] = toPx(size, frame.ball.x, frame.ball.y)
@@ -83,4 +100,47 @@ export const drawFrame = (ctx: Ctx, size: Size, frame: PitchFrame | null, kits: 
   ctx.beginPath()
   ctx.arc(bx, by, r * (0.5 + Math.min(1, frame.ball.z / 3) * 0.5), 0, Math.PI * 2)
   ctx.fill()
+  // A dark rim, so the ball reads against a white kit too.
+  ctx.strokeStyle = "#0b1120"
+  ctx.lineWidth = Math.max(1, r / 5)
+  ctx.stroke()
+}
+
+/** The followed player and the name shown by them. */
+export interface Focus {
+  readonly id: string
+  readonly label: string
+}
+
+type FocusCtx = Pick<CanvasRenderingContext2D, "beginPath" | "arc" | "stroke" | "fillText" | "strokeText" | "measureText"> & {
+  fillStyle: CanvasRenderingContext2D["fillStyle"]
+  strokeStyle: CanvasRenderingContext2D["strokeStyle"]
+  lineWidth: number
+  font: string
+  textAlign: CanvasTextAlign
+}
+
+export const FOCUS = "#f2c14e"
+
+/** A ring round the followed player and their name above them, whenever they are on the pitch in the frame. */
+export const drawFocus = (ctx: FocusCtx, size: Size, frame: PitchFrame | null, focus: Focus | null): void => {
+  const p = focus && frame ? [...frame.home, ...frame.away].find((x) => x.id === focus.id) : undefined
+  if (!p || !focus) return
+  const [x, y] = toPx(size, p.x, p.y)
+  const r = (1.8 / LENGTH) * size.w
+  ctx.strokeStyle = FOCUS
+  ctx.lineWidth = Math.max(2, size.w / 350)
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.stroke()
+  const px = Math.round(size.w / 70)
+  ctx.font = `700 ${px}px system-ui, sans-serif`
+  ctx.textAlign = "center"
+  // Above the player, or below near the top touchline, so the name stays on the canvas.
+  const ty = y - r - px * 0.4 < px ? y + r + px : y - r - px * 0.4
+  ctx.lineWidth = Math.max(2, px / 4)
+  ctx.strokeStyle = "rgba(13,20,18,.85)"
+  ctx.strokeText(focus.label, x, ty)
+  ctx.fillStyle = FOCUS
+  ctx.fillText(focus.label, x, ty)
 }

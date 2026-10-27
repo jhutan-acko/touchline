@@ -21,7 +21,12 @@ const p4Off = (p: Params): Params => ({
   press: { ...p.press, rule: 0 }, marking: { ...p.marking, rule: 0 }, firstTick: { ...p.firstTick, scopeRule: 0 },
   release: { ...p.release, capS: 0, rejudge: 0 }
 })
-const OLD: Params = p4Off(p5Off({ ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 }, support: { ...DEFAULT_PARAMS.support, rule: 0 } }))
+/** Every P6 rule pinned 0 (P6 Task 8 switched them on): the engine this file's counts were written on (F4). */
+const p6Off = (p: Params): Params => ({
+  ...p, firstTime: { ...p.firstTime, rule: 0 }, header: { ...p.header, rule: 0 }, saveGeo: { ...p.saveGeo, rule: 0 },
+  execFatigue: { ...p.execFatigue, rule: 0 }, shotModel: { ...p.shotModel, rule: 0 }
+})
+const OLD: Params = p6Off(p4Off(p5Off({ ...DEFAULT_PARAMS, choice: { ...DEFAULT_PARAMS.choice, rule: 0 }, support: { ...DEFAULT_PARAMS.support, rule: 0 } })))
 const withPass = (p: Params, pass: Partial<Params["pass"]>): Params => ({ ...p, pass: { ...p.pass, ...pass } })
 
 /** The home centre-back on the ball at (-20, 0), two midfielders 15 m ahead, one with a defender closing in on him. */

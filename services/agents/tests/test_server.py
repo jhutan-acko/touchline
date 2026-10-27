@@ -44,7 +44,7 @@ async def test_serves_its_agent_card(server):
         card = (await http.get(f"{server}.well-known/agent-card.json")).json()
     assert card["name"] == "touchline-agents" and card["capabilities"]["streaming"]
     assert card["supportedInterfaces"][0] == {"url": server, "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}
-    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage"}
+    assert {s["id"] for s in card["skills"]} == {"moments", "recap", "manage", "ask"}
 
 
 async def test_signals_stream_back_as_cues_and_traces(server, stats_url, stats):
@@ -54,7 +54,12 @@ async def test_signals_stream_back_as_cues_and_traces(server, stats_url, stats):
     assert state == TaskState.TASK_STATE_COMPLETED
     cues = [Cue.model_validate(c) for c in arts["cue"]]
     [trace] = [MomentTrace.model_validate(t) for t in arts["trace"]]
-    assert [c.segment.lang for c in cues] == ["en", "es"] and all(c.verified for c in cues)
+    text = [c for c in cues if c.display.slot != "pitch_marker"]
+    assert [c.segment.lang for c in text] == ["en", "es"] and all(c.verified for c in cues)
+    for i, c in enumerate(cues):  # a pitch marker directly follows its text cue
+        if c.display.slot == "pitch_marker":
+            prev = cues[i - 1]
+            assert prev.display.slot != "pitch_marker" and (prev.moment_id, prev.segment, prev.verified) == (c.moment_id, c.segment, c.verified)
     assert trace.cue_ids == [c.cue_id for c in cues]
 
 
@@ -111,3 +116,54 @@ async def test_a_manage_request_needs_no_match_session_and_answers_with_a_manage
     assert state == TaskState.TASK_STATE_COMPLETED
     [reply] = [ManagerReply.model_validate(a) for a in arts["manager"]]
     assert reply.task == "propose" and not reply.fallback and len(reply.proposal.options) >= 2
+
+
+async def test_ask_intent_artifact(server):
+    from touchline_agents.contracts import AskIntent
+
+    from .test_question import summary
+
+    req = {"kind": "ask_intent", "question": "What if Okafor passed to Diallo?", "lang": "en", "summary": summary().model_dump(mode="json")}
+    state, arts, _ = await send(server, [new_data_part(req, "application/json")])
+    assert state == TaskState.TASK_STATE_COMPLETED
+    assert len(arts["ask_intent"]) == 1
+    intent = AskIntent.model_validate(arts["ask_intent"][0])
+    assert intent.kind == "what_if" and intent.intervention.receiver_id == "p-h-09"
+
+
+async def test_ask_answer_streams_stages_then_reply(server, stats_url, stats):
+    from touchline_agents.contracts import AskReply, AskStage
+
+    info = await stats.roster()
+    home = info["home"]["players"]
+    passer, receiver = home[5]["id"], home[9]["id"]
+    at = 3000
+    req = {
+        "kind": "ask_answer", "match_id": MATCH_ID, "mcp_url": stats_url, "at_frame": at, "question": "What if he had passed?",
+        "segment": {"mode": "casual", "lang": "en", "club": None},
+        "intent": {"kind": "what_if", "subject_id": passer, "fork_event_id": None,
+                   "intervention": {"kind": "pass_to", "player_id": passer, "receiver_id": receiver}, "reason": None},
+        "summary": {"match_id": MATCH_ID, "frame": at, "clock": "05:00", "ball_holder": passer, "side_in_possession": "home",
+                    "players": [], "pass_options": [], "pressers": [], "recent": [], "missed_option": None},
+        "what_if": {"intervention": {"kind": "pass_to", "player_id": passer, "receiver_id": receiver}, "fork_frame": at - 40,
+                    "verdict": "better_option_found", "seeds": 20, "shots": {"played": 2, "alt": 5}, "goals": {"played": 0, "alt": 1},
+                    "gain": {"mean": 0.042, "se": 0.011}},
+    }
+    names: list[str] = []
+    async with httpx.AsyncClient(timeout=120) as http:
+        card = await A2ACardResolver(http, server).get_agent_card()
+        client = ClientFactory(ClientConfig(httpx_client=http, streaming=True)).create(card)
+        msg = Message(role=Role.ROLE_USER, parts=[new_data_part(req, "application/json")], message_id=str(uuid.uuid4()))
+        state, arts = None, {}
+        async for item in client.send_message(SendMessageRequest(message=msg)):
+            kind = item.WhichOneof("payload")
+            if kind == "status_update":
+                state = item.status_update.status.state
+            elif kind == "artifact_update":
+                a = item.artifact_update.artifact
+                names.append(a.name)
+                arts.setdefault(a.name, []).extend(get_data_parts(a.parts))
+    assert state == TaskState.TASK_STATE_COMPLETED
+    assert names == ["ask_stage"] * 3 + ["ask_reply"]
+    assert [AskStage.model_validate(s).stage for s in arts["ask_stage"]] == ["analyst", "factcheck", "personalise"]
+    assert AskReply.model_validate(arts["ask_reply"][0]).verified

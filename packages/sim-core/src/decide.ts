@@ -129,11 +129,49 @@ export const xpassOf = (p: Params, distance: number, lane: number, pressure: num
   return sigmoid(c.b0 + c.bDist * distance + c.bLane * lane + c.bPressure * pressure + c.bHigh * (height === "ground" ? 0 : 1))
 }
 
-export const xgOf = (p: Params, side: Side, period: Period, pos: Vec2, header: boolean, defendersInCone: number): number => {
-  const c = p.shot.xg
-  const d = dist(pos, goalOf(side, period))
-  return sigmoid(c.b0 + c.bDist * d + c.bAngle * goalAngle(side, period, pos) + (header ? c.bHeader : 0) + c.bDefenders * defendersInCone)
+/**
+ * The xG model on its four features: distance to the goal centre (m), the goal-mouth angle (rad), header, and the
+ * defenders in the shot line (shotLineCount). Shared with the stats engine (packages/stats derive.ts), so the xG the
+ * sim records on a shot and the one the stats engine, the analyst agent, the manager and the advisor read are one model.
+ */
+export const xgFrom = (c: Params["shot"]["xg"], distM: number, angleRad: number, header: boolean, defenders: number): number =>
+  sigmoid(c.b0 + c.bDist * distM + c.bAngle * angleRad + (header ? c.bHeader : 0) + c.bDefenders * defenders)
+
+export const xgOf = (p: Params, side: Side, period: Period, pos: Vec2, header: boolean, defendersInCone: number): number =>
+  xgFrom(xgCoefs(p), dist(pos, goalOf(side, period)), goalAngle(side, period, pos), header, defendersInCone)
+
+/**
+ * The defenders in the shot line: positions (the caller leaves keepers out) within 1.5 m of the segment from `pos` to
+ * `goal`, strictly between its ends. Uncapped. xgOf's defendersInCone in decide, the contact seams and the stats engine.
+ */
+export const shotLineCount = (pos: Vec2, goal: Vec2, opponents: ReadonlyArray<Vec2>): number => {
+  const vx = goal.x - pos.x
+  const vy = goal.y - pos.y
+  const l2 = vx * vx + vy * vy
+  let n = 0
+  for (const o of opponents) {
+    const t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((o.x - pos.x) * vx + (o.y - pos.y) * vy) / l2))
+    const d = Math.hypot(pos.x + t * vx - o.x, pos.y + t * vy - o.y)
+    if (d < 1.5 && t > 0 && t < 1) n++
+  }
+  return n
 }
+
+// ================================================================ P6 shot-model seam (plan 8f Task 7 owns this block)
+
+/** The xG model's coefficients (P6 xG refit: shotModel.xg under shotModel.rule 1). rule 0: the old behaviour, shot.xg. */
+export const xgCoefs = (p: Params): Params["shot"]["xg"] => (p.shotModel.rule === 1 ? p.shotModel.xg : p.shot.xg)
+
+/**
+ * The shot's term in decide's action logits (P6 shot logit: bXg (xg - pivot) + bRisk riskTolerance in open play under
+ * shotModel.rule 1; a restart keeps the old term). rule 0: the old behaviour, 3 (xg - 0.1) + 0.3 riskTolerance.
+ */
+export const shotTerm = (xg: number, style: TeamStyle, restart: RestartKind | null, p: Params): number => {
+  const m = p.shotModel
+  return m.rule === 1 && restart === null ? m.bXg * (xg - m.pivot) + m.bRisk * style.riskTolerance : 3 * (xg - 0.1) + 0.3 * style.riskTolerance
+}
+
+// ================================================================ end of P6 shot-model seam
 
 export const nearestOpponent = (pos: Vec2, opponents: ReadonlyArray<PlayerState>): PlayerState | null => {
   let best: PlayerState | null = null
@@ -559,9 +597,20 @@ export const restartShot = (input: DecisionInput, p: Params, goalDist: number, _
   const fk = p.directFk
   if (fk.rule === 0 || input.restart !== "free_kick") return null
   const { owner, period } = input
-  if (setPieceKind("free_kick", owner.pos, owner.side, period) !== "fk_central" || goalDist > fk.maxDistanceM) return null
-  const open = xgOf(p, owner.side, period, owner.pos, false, 0)
-  return { available: true, shift: fk.shotShift, xg: sigmoid(Math.log(open / (1 - open)) + fk.xgLogit) }
+  const xg = directFkXg(p, owner.side, period, owner.pos, goalDist)
+  return xg === null ? null : { available: true, shift: fk.shotShift, xg }
+}
+
+/**
+ * The xG of a direct free kick from `pos` (S9, ruling 14): the open-play xG with no defender in the line, offset by
+ * directFk.xgLogit, for a central attacking-third free kick within directFk.maxDistanceM; null otherwise (and at rule 0).
+ * Shared with the stats engine.
+ */
+export const directFkXg = (p: Params, side: Side, period: Period, pos: Vec2, goalDist = dist(pos, goalOf(side, period))): number | null => {
+  const fk = p.directFk
+  if (fk.rule === 0 || setPieceKind("free_kick", pos, side, period) !== "fk_central" || goalDist > fk.maxDistanceM) return null
+  const open = xgOf(p, side, period, pos, false, 0)
+  return sigmoid(Math.log(open / (1 - open)) + fk.xgLogit)
 }
 
 // ================================================================ end of P5 direct-free-kick seam
@@ -601,11 +650,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
   const zone = actionZone(side, period, owner.pos)
   const candidates = buildCandidatesIn(ctx)
   const goalDist = dist(owner.pos, goalOf(side, period))
-  const cone = input.opponents.filter((o) => {
-    const g = goalOf(side, period)
-    const { d, t } = segmentDistance(owner.pos, g, o.pos)
-    return d < 1.5 && t > 0 && t < 1 && o.role !== "GK"
-  }).length
+  const cone = shotLineCount(owner.pos, goalOf(side, period), input.opponents.filter((o) => o.role !== "GK").map((o) => o.pos))
   const xg = goalDist <= p.shot.maxDistanceM ? xgOf(p, side, period, owner.pos, false, cone) : 0
   const ax = attackX(side, owner.pos.x, period)
   const rs = restartShot(input, p, goalDist, ax)
@@ -648,7 +693,7 @@ export const decide = (input: DecisionInput, p: Params, rng: Rng): Decision => {
     if (a === "carry") l -= pw * 0.6 * pressure
     if (a === "take_on") l += pw * 0.3 * pressure
     if (a === "short_pass") l -= pw * 0.2 * pressure
-    if (a === "shot") l += 3 * (xg - 0.1) + 0.3 * style.riskTolerance
+    if (a === "shot") l += shotTerm(xg, style, input.restart, p)
     if (lateTrailing && (a === "shot" || a === "cross" || a === "long_pass")) l += 0.4
     if (lateLeading && (a === "hold" || a === "back_pass")) l += 0.4
     if (a === "shot" && rs) l += rs.shift

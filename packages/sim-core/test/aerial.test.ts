@@ -10,9 +10,11 @@ import { kickoffPlayersFor, makeConfig } from "../src/testing.js"
 // Explicit switched-off and switched-on engines (ruling F4): never rely on DEFAULT_PARAMS being off. fouls.rule is held
 // at 0 so the foul zone is 1 here whatever Task 4 ships.
 // The other P4 behaviours are pinned off too (Task 10: with them on, seed 7 at dt 0.04 gave 10 duels against 1.5 x 7).
+// marking.weight is pinned at 0.5, the default these counts were measured on (P6 pre-merge fixes moved the default to 1:
+// seed 7 at dt 0.04 then gave 12 duels against 1.5 x 10).
 const others: Params = {
   ...P,
-  tackle: { ...P.tackle, rule: 0 }, transition: { ...P.transition, rule: 0 }, press: { ...P.press, rule: 0 }, marking: { ...P.marking, rule: 0 },
+  tackle: { ...P.tackle, rule: 0 }, transition: { ...P.transition, rule: 0 }, press: { ...P.press, rule: 0 }, marking: { ...P.marking, rule: 0, weight: 0.5 },
   firstTick: { ...P.firstTick, scopeRule: 0 }, release: { ...P.release, capS: 0, rejudge: 0 }
 }
 const off: Params = { ...others, aerial: { ...P.aerial, rule: 0 }, fouls: { ...P.fouls, rule: 0 } }

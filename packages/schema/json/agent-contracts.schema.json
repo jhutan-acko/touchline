@@ -36,6 +36,15 @@
     },
     "manager_reply": {
       "$ref": "#/$defs/ManagerReply"
+    },
+    "ask_intent": {
+      "$ref": "#/$defs/AskIntent"
+    },
+    "ask_stage": {
+      "$ref": "#/$defs/AskStage"
+    },
+    "ask_reply": {
+      "$ref": "#/$defs/AskReply"
     }
   },
   "required": [
@@ -49,7 +58,10 @@
     "recap",
     "trace",
     "request",
-    "manager_reply"
+    "manager_reply",
+    "ask_intent",
+    "ask_stage",
+    "ask_reply"
   ],
   "additionalProperties": true,
   "$defs": {
@@ -318,7 +330,8 @@
             "score",
             "minute",
             "event",
-            "better_option"
+            "better_option",
+            "what_if"
           ]
         },
         "sentence": {
@@ -1563,6 +1576,506 @@
       ],
       "additionalProperties": true
     },
+    "FrameSummary": {
+      "type": "object",
+      "properties": {
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clock": {
+          "type": "string"
+        },
+        "ball_holder": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "side_in_possession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "home",
+                "away"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string"
+              },
+              "side": {
+                "type": "string",
+                "enum": [
+                  "home",
+                  "away"
+                ]
+              },
+              "role": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "side",
+              "role",
+              "x",
+              "y"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "pass_options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "receiver_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "xpass": {
+                "type": "number"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "receiver_id",
+              "xpass",
+              "value"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "pressers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "recent": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "event_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "frame": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string"
+              },
+              "player_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "receiver_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "event_id",
+              "frame",
+              "type",
+              "player_id",
+              "receiver_id"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "missed_option": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "event_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "passer_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "played_to": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "better_to": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "event_id",
+                "passer_id",
+                "played_to",
+                "better_to"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "match_id",
+        "frame",
+        "clock",
+        "ball_holder",
+        "side_in_possession",
+        "players",
+        "pass_options",
+        "pressers",
+        "recent",
+        "missed_option"
+      ],
+      "additionalProperties": true
+    },
+    "AskIntentRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ask_intent"
+          ]
+        },
+        "question": {
+          "type": "string"
+        },
+        "lang": {
+          "type": "string",
+          "enum": [
+            "en",
+            "es",
+            "hi"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/FrameSummary"
+        }
+      },
+      "required": [
+        "kind",
+        "question",
+        "lang",
+        "summary"
+      ],
+      "additionalProperties": true
+    },
+    "AskInterventionSpec": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "pass_to"
+              ]
+            },
+            "player_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "receiver_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "player_id",
+            "receiver_id"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "move_player"
+              ]
+            },
+            "player_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "to": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "kind",
+            "player_id",
+            "to"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "AskIntent": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "explain",
+            "what_if",
+            "unsupported"
+          ]
+        },
+        "subject_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fork_event_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "intervention": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AskInterventionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "subject_id",
+        "fork_event_id",
+        "intervention",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "AskArms": {
+      "type": "object",
+      "properties": {
+        "played": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "alt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "played",
+        "alt"
+      ],
+      "additionalProperties": true
+    },
+    "AskWhatIf": {
+      "type": "object",
+      "properties": {
+        "intervention": {
+          "$ref": "#/$defs/AskInterventionSpec"
+        },
+        "fork_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "played_pass_was_best",
+            "better_option_found",
+            "not_verified"
+          ]
+        },
+        "seeds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shots": {
+          "$ref": "#/$defs/AskArms"
+        },
+        "goals": {
+          "$ref": "#/$defs/AskArms"
+        },
+        "gain": {
+          "type": "object",
+          "properties": {
+            "mean": {
+              "type": "number"
+            },
+            "se": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "mean",
+            "se"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "intervention",
+        "fork_frame",
+        "verdict",
+        "seeds",
+        "shots",
+        "goals",
+        "gain"
+      ],
+      "additionalProperties": true
+    },
+    "AskAnswerRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ask_answer"
+          ]
+        },
+        "match_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp_url": {
+          "type": "string"
+        },
+        "at_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "question": {
+          "type": "string"
+        },
+        "segment": {
+          "$ref": "#/$defs/Segment"
+        },
+        "intent": {
+          "$ref": "#/$defs/AskIntent"
+        },
+        "summary": {
+          "$ref": "#/$defs/FrameSummary"
+        },
+        "what_if": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AskWhatIf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "match_id",
+        "mcp_url",
+        "at_frame",
+        "question",
+        "segment",
+        "intent",
+        "summary",
+        "what_if"
+      ],
+      "additionalProperties": true
+    },
     "AgentRequest": {
       "anyOf": [
         {
@@ -1573,6 +2086,12 @@
         },
         {
           "$ref": "#/$defs/ManageRequest"
+        },
+        {
+          "$ref": "#/$defs/AskIntentRequest"
+        },
+        {
+          "$ref": "#/$defs/AskAnswerRequest"
         }
       ]
     },
@@ -1707,6 +2226,93 @@
         "tokens_in",
         "tokens_out",
         "cost_usd",
+        "model"
+      ],
+      "additionalProperties": true
+    },
+    "AskStage": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": [
+            "question",
+            "analyst",
+            "whatif",
+            "factcheck",
+            "personalise"
+          ]
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "status"
+      ],
+      "additionalProperties": true
+    },
+    "EvidenceChip": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "stats",
+            "what_if",
+            "event"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "value",
+        "source"
+      ],
+      "additionalProperties": true
+    },
+    "AskReply": {
+      "type": "object",
+      "properties": {
+        "headline": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "chips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceChip"
+          },
+          "maxItems": 4
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "headline",
+        "body",
+        "chips",
+        "verified",
         "model"
       ],
       "additionalProperties": true

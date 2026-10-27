@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import { loadRun } from "@touchline/mcp-stats"
 import { EvidenceNotFound, MatchNotFound, type Evidence, type EvidenceClaim, type PassVerdict, type RecapView, type Series, type WhatIfClip } from "@touchline/rpc"
 import { decodeMomentTrace, decodeRecap, type Claim, type MomentTrace, type Recap, type Segment } from "@touchline/schema"
+import { paramsFromJson } from "@touchline/sim-core"
 import { METRICS, modelsFromJson, StatsError, xtGridFromJson, type Roster, type StatsQuery } from "@touchline/stats"
 import { betterEventId, TEXT, wordsOf } from "./betterpass.js"
 import { pickCues } from "./cues.js"
@@ -32,7 +33,7 @@ const jsonl = <A>(path: string, decode: (u: unknown) => A): A[] =>
 
 const label = (c: Claim): string => {
   if (c.kind === "metric" && c.metric_id) return METRICS.find((m) => m.id === c.metric_id)?.name ?? c.metric_id
-  return { score: "Score", minute: "Minute", event: "Event", better_option: "Better option", metric: "Metric" }[c.kind]
+  return { score: "Score", minute: "Minute", event: "Event", better_option: "Better option", what_if: "What if", metric: "Metric" }[c.kind]
 }
 
 /** What re-simulation has said about passes so far; the what-if module answers it. */
@@ -57,7 +58,7 @@ export const makeEvidence = (library: ReadonlyMap<string, LibraryMatch>, whatIf:
     Effect.promise(() => {
       let q = queries.get(m.info.match_id)
       if (!q) {
-        q = Effect.runPromise(loadRun(m.dir, modelsFromJson(params("stats-models.json")), { roster, xt: xtGridFromJson(params("xt-grid.json")) }))
+        q = Effect.runPromise(loadRun(m.dir, modelsFromJson(params("stats-models.json"), paramsFromJson(params("touchline-params.json"))), { roster, xt: xtGridFromJson(params("xt-grid.json")) }))
         queries.set(m.info.match_id, q)
       }
       return q

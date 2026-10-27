@@ -12,16 +12,17 @@ export const root = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 const json = (p: string) => JSON.parse(readFileSync(join(root, p), "utf8"))
 export const league = json("data/league/league.json") as League
 export const params = paramsFromJson(json("data/params/touchline-params.json"))
-export const models = modelsFromJson(json("data/params/stats-models.json"))
+export const models = modelsFromJson(json("data/params/stats-models.json"), params)
 export const xt = xtGridFromJson(json("data/params/xt-grid.json"))
 export const club = (id: string) => league.clubs.find((c) => c.id === id)!
 
 /**
  * The seed of the match whose minute-60 moment the situation, moments, what-if, agent and e2e tests read: the first from
  * 11 on with exactly one minute-60 and one minute-75 key moment. 13 since P4 Task 10 (on seed 11 the minute-60 moment is
- * now absorbed by an earlier decision; scan of 11-24: 13-24 qualify).
+ * now absorbed by an earlier decision; scan of 11-24: 13-24 qualify). 11 since the P6 off-ball fix (movement.accelRule 1:
+ * seed 13 has no minute-60 moment; 11 and 12 have one of each).
  */
-export const MOMENTS_SEED = 13
+export const MOMENTS_SEED = 11
 
 /** A league match (calibrated params) whose listed sides have a manager. */
 export const leagueConfig = (seed: number, managed: MatchConfig["managed"] = ["home", "away"], home = "ironmoor", away = "kestrel-bay"): MatchConfig => ({

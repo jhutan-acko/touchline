@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect, Stream } from "effect"
+import { paramsFromJson } from "@touchline/sim-core"
 import { modelsFromJson, readRun, signalStream, StatsEngine, xtGridFromJson, type ReplayError, type Roster } from "@touchline/stats"
 import type { MatchPlan } from "./gateway.js"
 
@@ -14,7 +15,7 @@ export const replaySignals = (dir: string): Effect.Effect<Omit<MatchPlan, "mcpUr
     const leaguePath = join(root, "data/league/league.json")
     const roster = existsSync(leaguePath) ? (JSON.parse(readFileSync(leaguePath, "utf8")) as Roster) : undefined
     const run = yield* readRun(dir, roster)
-    const engine = new StatsEngine(run.info, modelsFromJson(params("stats-models.json")), xtGridFromJson(params("xt-grid.json")))
+    const engine = new StatsEngine(run.info, modelsFromJson(params("stats-models.json"), paramsFromJson(params("touchline-params.json"))), xtGridFromJson(params("xt-grid.json")))
     const signals = yield* Stream.runCollect(signalStream(engine, run.inputs))
     const ends = engine.events.filter((e) => e.type === "period_end").map((e) => e.frame_id)
     const last = engine.eventTicks[engine.eventTicks.length - 1] ?? 0

@@ -144,7 +144,15 @@ export type Companion = (s: Session) => Effect.Effect<void>
 export type Recorder = (s: Session, sub: PubSub.Subscription<BusBeat>) => Effect.Effect<void>
 
 /** The sessions of one API process. Their fibers live in `scope`. */
-export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options: { readonly companion?: Companion; readonly studio?: Recorder } = {}) =>
+export const makeSessions = (
+  library: ReadonlyMap<string, LibraryMatch>,
+  options: {
+    readonly companion?: Companion
+    readonly studio?: Recorder
+    /** Runs once when a session is gone (stopped, or closed and past its grace): releases what it held (its Ask server). */
+    readonly onClose?: (s: Session) => Effect.Effect<void>
+  } = {}
+) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const sessions = new Map<string, Session>()
@@ -229,6 +237,7 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
               fibers.delete(id)
               yield* Ref.set(closed, true)
               yield* PubSub.shutdown(bus)
+              if (options.onClose) yield* options.onClose(s).pipe(Effect.catchCause((c) => Effect.logError(`session ${id}: on close: ${Cause.pretty(c)}`)))
             })
           )
         )
@@ -248,6 +257,8 @@ export const makeSessions = (library: ReadonlyMap<string, LibraryMatch>, options
           return [{ kind: "cue", cue: boardCue(s.match.info.match_id, b.board, segment) }]
         case "cues":
           return pickCues(b.cues, segment).map((cue) => ({ kind: "cue" as const, cue }))
+        case "event":
+          return [{ kind: "event", event: b.event }]
         case "signals":
         case "queue":
         case "air":

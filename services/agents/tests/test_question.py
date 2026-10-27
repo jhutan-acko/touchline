@@ -1,0 +1,134 @@
+from touchline_agents.config import load_settings
+from touchline_agents.contracts import AskIntent, AskIntentRequest, FrameSummary
+from touchline_agents.llm import StubChatClient
+from touchline_agents.question import QuestionAgent, rule_intent, validate_intent
+
+PLAYERS = [
+    {"id": "p-h-08", "name": "Marek Okafor", "side": "home", "role": "CM", "x": 12.5, "y": -3.0},
+    {"id": "p-h-09", "name": "Teo Diallo", "side": "home", "role": "ST", "x": 30.0, "y": 4.5},
+    {"id": "p-h-05", "name": "Ivan Kemp", "side": "home", "role": "CB", "x": -5.0, "y": 0.0},
+    {"id": "p-a-04", "name": "Luis Brandt", "side": "away", "role": "CB", "x": 28.0, "y": 2.0},
+]
+
+
+def summary(**over) -> FrameSummary:
+    base = {
+        "match_id": "m1", "frame": 4000, "clock": "02:40", "ball_holder": "p-h-08", "side_in_possession": "home",
+        "players": PLAYERS, "pass_options": [], "pressers": [],
+        "recent": [{"event_id": "e-1", "frame": 3900, "type": "pass", "player_id": "p-h-08", "receiver_id": "p-h-05"}],
+        "missed_option": None,
+    }
+    return FrameSummary.model_validate({**base, **over})
+
+
+def req(q: str, lang="en", **over) -> AskIntentRequest:
+    return AskIntentRequest(kind="ask_intent", question=q, lang=lang, summary=summary(**over))
+
+
+def test_rule_intent_what_if_pass_en():
+    i = rule_intent(req("What if Okafor passed to Diallo?"))
+    assert i.kind == "what_if" and i.intervention.kind == "pass_to"
+    assert (i.intervention.player_id, i.intervention.receiver_id) == ("p-h-08", "p-h-09")
+    assert i.fork_event_id == "e-1"
+
+
+def test_rule_intent_hindi():
+    i = rule_intent(req("अगर Okafor ने Diallo को पास दिया होता?", "hi"))
+    assert i.kind == "what_if" and (i.intervention.player_id, i.intervention.receiver_id) == ("p-h-08", "p-h-09")
+
+
+def test_unknown_player_is_unsupported():
+    i = rule_intent(req("What if Smith passed to Diallo?"))
+    assert i.kind == "unsupported" and i.reason
+
+
+def test_receiver_on_other_side_is_unsupported():
+    i = rule_intent(req("What if Okafor passed to Brandt?"))
+    assert i.kind == "unsupported" and i.reason
+    bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-08", "fork_event_id": None, "reason": None,
+                                    "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-08"}})
+    assert validate_intent(bad, summary(), "en").kind == "unsupported"
+
+
+def test_shot_what_if_is_unsupported_with_reason_in_lang():
+    i = rule_intent(req("¿Y si hubiera tirado?", "es"))
+    assert i.kind == "unsupported" and "pase" in i.reason
+
+
+def test_unknown_fork_event_is_unsupported():
+    bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-08", "fork_event_id": "e-999", "reason": None,
+                                    "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-09"}})
+    assert validate_intent(bad, summary(), "en").kind == "unsupported"
+
+
+def test_why_didnt_uses_the_missed_option():
+    mo = {"event_id": "e-1", "passer_id": "p-h-08", "played_to": "p-h-05", "better_to": "p-h-09"}
+    i = rule_intent(req("Why didn't Okafor pass to Diallo?", missed_option=mo))
+    assert i.kind == "what_if" and i.fork_event_id == "e-1" and i.intervention.receiver_id == "p-h-09"
+
+
+def test_explain_defaults_to_ball_holder_and_dead_ball_is_unsupported():
+    assert rule_intent(req("Why is he under pressure?")).subject_id == "p-h-08"
+    assert rule_intent(req("Why is he under pressure?", ball_holder=None)).kind == "unsupported"
+
+
+async def test_parse_falls_back_on_garbage():
+    s = load_settings({}, env_file=None)
+    r = req("What if Okafor passed to Diallo?")
+    assert await QuestionAgent(StubChatClient("garbage"), s).parse(r) == rule_intent(r)
+    assert await QuestionAgent(StubChatClient("ok"), s).parse(r) == rule_intent(r)
+
+
+def test_possessive_names_are_not_unknown_players():
+    # no missed option in this frame, so "why didn't" is an explanation of the passer, not unsupported
+    i = rule_intent(req("Why didn't Okafor's pass go to Diallo?"))
+    assert i.kind == "explain" and i.subject_id == "p-h-08"
+    mo = {"event_id": "e-1", "passer_id": "p-h-08", "played_to": "p-h-05", "better_to": "p-h-09"}
+    i = rule_intent(req("Why didn't Okafor's pass go to Diallo?", missed_option=mo))
+    assert i.kind == "what_if" and i.intervention.receiver_id == "p-h-09"
+    i = rule_intent(req("What if Okafor's pass went to Diallo?"))
+    assert i.kind == "what_if" and (i.intervention.player_id, i.intervention.receiver_id) == ("p-h-08", "p-h-09")
+
+
+def test_invalid_id_reason_does_not_show_the_id():
+    bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-x-99", "fork_event_id": None, "reason": None,
+                                    "intervention": {"kind": "pass_to", "player_id": "p-x-99", "receiver_id": "p-h-09"}})
+    i = validate_intent(bad, summary(), "en")
+    assert i.kind == "unsupported" and i.reason and "p-x-99" not in i.reason
+
+
+def test_passer_must_be_on_the_side_in_possession():
+    bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-a-04", "fork_event_id": None, "reason": None,
+                                    "intervention": {"kind": "pass_to", "player_id": "p-a-04", "receiver_id": "p-h-09"}})
+    assert validate_intent(bad, summary(), "en").kind == "unsupported"
+    away = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-08", "fork_event_id": None, "reason": None,
+                                     "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-09"}})
+    assert validate_intent(away, summary(side_in_possession="away"), "en").kind == "unsupported"
+    assert validate_intent(away, summary(side_in_possession=None), "en").kind == "what_if"
+
+
+def test_what_if_forks_at_the_players_newest_pass():
+    # recent is newest first: Diallo's pass at 3980 is newer than his pass at 3800.
+    recent = [
+        {"event_id": "e-3", "frame": 3980, "type": "pass", "player_id": "p-h-09", "receiver_id": "p-h-08"},
+        {"event_id": "e-2", "frame": 3900, "type": "pass", "player_id": "p-h-05", "receiver_id": "p-h-09"},
+        {"event_id": "e-1", "frame": 3800, "type": "pass", "player_id": "p-h-09", "receiver_id": "p-h-05"},
+    ]
+    i = rule_intent(req("What if Diallo passed to Kemp?", recent=recent))
+    assert i.kind == "what_if" and i.fork_event_id == "e-3"
+
+
+def test_what_if_from_this_frame_needs_the_passer_on_the_ball():
+    # Diallo has not passed lately and has not got the ball: there is nothing to re-play from.
+    i = rule_intent(req("What if Diallo passed to Kemp?"))
+    assert i.kind == "unsupported" and i.reason == "Teo Diallo isn't on the ball here, and hasn't passed just before."
+    for lang, word in (("es", "balón"), ("hi", "गेंद")):
+        bad = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-09", "fork_event_id": None, "reason": None,
+                                        "intervention": {"kind": "pass_to", "player_id": "p-h-09", "receiver_id": "p-h-05"}})
+        out = validate_intent(bad, summary(), lang)
+        assert out.kind == "unsupported" and word in out.reason and "Teo Diallo" in out.reason
+    # A dead ball: nobody is on it.
+    holder = AskIntent.model_validate({"kind": "what_if", "subject_id": "p-h-08", "fork_event_id": None, "reason": None,
+                                       "intervention": {"kind": "pass_to", "player_id": "p-h-08", "receiver_id": "p-h-09"}})
+    assert validate_intent(holder, summary(ball_holder=None), "en").kind == "unsupported"
+    assert validate_intent(holder, summary(), "en").kind == "what_if"

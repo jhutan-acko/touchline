@@ -330,7 +330,16 @@ export interface Params {
    * heads for the spot at the speed that arrives in relaxArriveS, never above relaxCap of top speed, so a player near his
    * spot walks; relaxMarks 1 does the same for marking.
    */
-  readonly movement: { readonly shapeSpeedShare: number; readonly relaxed: number; readonly relaxCap: number; readonly relaxArriveS: number; readonly relaxMarks: number }
+  readonly movement: {
+    readonly shapeSpeedShare: number; readonly relaxed: number; readonly relaxCap: number; readonly relaxArriveS: number; readonly relaxMarks: number
+    /**
+     * Calm repositioning (realism v2, P6 off-ball fix): accelRule 1 moves an off-ball player to a positioning target (shape,
+     * marking, support and spacing, rotation; also after the transition pause) at accelShare of his fitted acceleration, braking and
+     * turning, which are sprint limits; chases, presses, runs, recoveries and the carrier keep the full limits. rule 0: the
+     * old behaviour (full limits for every move: off-ball players reversed at 15-20x the real rate).
+     */
+    readonly accelRule: number; readonly accelShare: number
+  }
   /** Team shape spread: width (fully in possession, partly without), depth between lines, and without the ball an extra depth squeeze. */
   readonly shape: { readonly width: number; readonly depth: number; readonly defDepth: number }
   /**
@@ -489,6 +498,50 @@ export interface Params {
     readonly rule: number; readonly rateScale: number; readonly backToGoalLift: number; readonly backToGoalS: number; readonly backToGoalBallMps: number
     readonly ownThirdLift: number; readonly ownThirdU: number; readonly roleWeight: Readonly<Record<Exclude<Role, "GK">, number>>
     readonly secondM: number; readonly secondRadiusM: number; readonly secondShare: number; readonly shadowM: number
+  }
+  // ---- realism v2 P6 (plan 8f)
+  /**
+   * SH1 first-time finishes (realism v2 P6): at a clean reception within maxGoalM of goal (contact no higher than
+   * kinematics.controlHeightM; corner and free-kick deliveries when setPieces is 1), the receiver shoots first time
+   * (U = b0 + bXg xg + bArrival cos(arrival), cos -1 a cutback), lays off (layOffLogit, a teammate within layOffMaxM) or
+   * controls (0). A first-time shot's aim widens by arrivalAimK (1 + cos) / 2 + speedAimK max(0, ball speed - speedRefMps) / 10.
+   * rule 0: the old behaviour (every reception is controlled).
+   */
+  readonly firstTime: {
+    readonly rule: number; readonly setPieces: number; readonly maxGoalM: number; readonly b0: number; readonly bXg: number; readonly bArrival: number
+    readonly layOffLogit: number; readonly layOffMaxM: number; readonly arrivalAimK: number; readonly speedAimK: number; readonly speedRefMps: number
+  }
+  /**
+   * SH2 headers (realism v2 P6): an attacker who wins a ball at contact height zMin..zMax in the box he attacks heads at
+   * goal (U = b0 + bXg xg(header) + bHeading (heading - 0.6)) or controls (0); the header uses heading for finishing, aim
+   * x aimK, ball speed x speedShare, from the contact height. rule 0: the old behaviour (no headed shots).
+   */
+  readonly header: {
+    readonly rule: number; readonly zMin: number; readonly zMax: number; readonly b0: number; readonly bXg: number; readonly bHeading: number
+    readonly aimK: number; readonly speedShare: number
+  }
+  /**
+   * SH3 keeper-position saves (realism v2 P6): the save logit adds bOffLine (off line - offLineRefM) + bOffBisector x the
+   * keeper's distance off the shot's line + bFlightS min(flightCapS, flight time - reactionS), in place of the distance term.
+   * rule 0: the old behaviour (shot.save only).
+   */
+  readonly saveGeo: {
+    readonly rule: number; readonly offLineRefM: number; readonly bOffLine: number; readonly bOffBisector: number; readonly reactionS: number
+    readonly bFlightS: number; readonly flightCapS: number
+  }
+  /**
+   * SH4 execution fatigue (realism v2 P6): a kick's error scales by 1 + k max(0, fatigue - ref)^power.
+   * rule 0: the old behaviour (1 + fatigue.executionK x fatigue).
+   */
+  readonly execFatigue: { readonly rule: number; readonly k: number; readonly ref: number; readonly power: number }
+  /**
+   * Shot logit and xG refit (realism v2 P6): open play's shot term is bXg (xg - pivot) + bRisk riskTolerance (a restart
+   * keeps the old term), and xgOf reads xg (refit to DFL's model xG). rule 0: the old behaviour (shot.xg, 3 (xg - 0.1) + 0.3 risk).
+   */
+  readonly shotModel: {
+    readonly rule: number
+    readonly xg: { readonly b0: number; readonly bDist: number; readonly bAngle: number; readonly bHeader: number; readonly bDefenders: number }
+    readonly bXg: number; readonly pivot: number; readonly bRisk: number
   }
   /**
    * S1, S4 attacking set pieces (realism v2 P5, plan 8e rulings 6, 7): role spots at corners and attacking-third free
@@ -771,7 +824,10 @@ export const DEFAULT_PARAMS: Params = {
   // 7.1-8.9 m there against 10.5-13.0 m in the defensive third, fit-report section 3), hence spaceAttM < spaceM.
   support: { count: 2, distM: 12, speedShare: 0.8, rule: 1, pressM: 5, calmCount: 0, spaceM: 16, spaceAttM: 11, pressExitM: 5, gateHoldS: 1 },
   marking: {
-    weight: 0.5, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
+    // weight 1: P5's calibrated value. The pre-merge fix (2026-10-21) narrowed the marking_weight knob to 0.75-1 (the P6
+    // tuner had moved it to 0.25: nearest defender at the shot 3.47 m against 2.04 real), and the knob's identity value
+    // must sit inside its range, so the default moved from 0.5 to 1.
+    weight: 1, radiusM: 15, goalSideM: 1.5, widthSlackM: 4,
     // P4 A5 zonal marking (spec item A5). Shipped off in P4 (free space 9.6 m against 6.0 real, gate loss 47.79); switched on
     // in P5 Task 14 with the P5 zonal cap (maxGapM).
     rule: 1, laneShare: 0.4, cbStepM: 10, dropMps: 1,
@@ -780,7 +836,7 @@ export const DEFAULT_PARAMS: Params = {
     // P5 landing-spot marking and reaction (plan 8e ruling 18; rule 0: the old behaviour).
     landingRule: 1, landingGoalSideM: 1, landingReactM: 10
   },
-  movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1 },
+  movement: { shapeSpeedShare: 0.7, relaxed: 1, relaxCap: 0.6, relaxArriveS: 2, relaxMarks: 1, accelRule: 0, accelShare: 0.35 },
   shape: { width: 1, depth: 1, defDepth: 1 },
   // Real fits (IDSSE, 7 matches; fit-report.md, offball-report.md, transitions-report.md, gk-report.md, 2026-10-13).
   // in / out rows: the spec's table (a, b) and fit-report section 4 (lateral); gk rows: the build-up shape (gk-report).
@@ -912,6 +968,22 @@ export const DEFAULT_PARAMS: Params = {
     cmDrop: { ratePerS: 0.3, winS: 5, durS: [1.5, 3] },
     jogMps: 3.5
   },
+  // ---- realism v2 P6 (plan 8f): every rule switched on in Task 8 (rule 0 keeps the old behaviour).
+  // P6 SH1 first-time finishes (spec item SH1; rule 0: the old behaviour). bArrival is a prior, not fitted (ruling 4).
+  // setPieces 0 (pre-merge fix 1, 2026-10-21; user Q1 (a) had it 1): no first-time finish and no header from a corner or
+  // free-kick delivery (contactPlan gates both on it). With 1, corner shots within 10 s were 53.1 per 100 (P5 36.7).
+  firstTime: { rule: 1, setPieces: 0, maxGoalM: 25, b0: 0, bXg: 6, bArrival: -0.5, layOffLogit: -1.5, layOffMaxM: 12, arrivalAimK: 0.3, speedAimK: 0.2, speedRefMps: 12 },
+  // P6 SH2 headers (spec item SH2; rule 0: the old behaviour). zMin and zMax are kinematics.controlHeightM and headerHeightM.
+  // b0 0.5: the top of Task 4 Step 3's grid (-1.5, -0.5, 0.5), nearest the real share on the refit xG scale (phase B).
+  header: { rule: 1, zMin: 1, zMax: 2.4, b0: 0.5, bXg: 6, bHeading: 2, aimK: 1.3, speedShare: 0.55 },
+  // P6 SH3 keeper-position saves (spec item SH3; rule 0: the old behaviour). Priors (ruling 10); offLineRefM is the real median at shots.
+  // bFlightS and bOffBisector from Task 5 Step 3 (grid 1.5/2.5/3.5 x -0.3/-0.6/-1.0): the pair that moves the save rate least.
+  saveGeo: { rule: 1, offLineRefM: 2.2, bOffLine: -0.15, bOffBisector: -0.3, reactionS: 0.2, bFlightS: 3.5, flightCapS: 1 },
+  // P6 SH4 execution fatigue (spec item SH4; rule 0: the old behaviour). k 0.25, ref 0, power 1 equal rule 0 numerically.
+  execFatigue: { rule: 1, k: 0.25, ref: 0, power: 1 },
+  // P6 shot logit and xG refit (spec "P6: shot model"; rule 0: the old behaviour). xg: Task 2's fractional-logit fit to DFL model xG
+  // (159 IDSSE shots, fitted mean 0.0916 = DFL). bXg 3, pivot 0.1 from Task 7 Step 3 (grid 2/3/4 x 0.05/0.1): open-play shots and loose setups nearest real.
+  shotModel: { rule: 1, xg: { b0: -3.004, bDist: -0.0392, bAngle: 4.059, bHeader: -1.617, bDefenders: -0.342 }, bXg: 3, pivot: 0.1, bRisk: 0.3 },
   // Hand-set prior with more goals late (refit from Wyscout goal minutes when that data is available); red-card factors from the spec.
   gameState: { minuteProfile: [0.85, 0.95, 1.05, 0.95, 1.05, 1.15], redCardOwn: 0.67, redCardOpponent: 1.2 },
   // Script nudges re-set in P4 Task 10 (scripts only, never the bounds): pressSurge 4 -> 20, since press.rateScale
@@ -921,9 +993,15 @@ export const DEFAULT_PARAMS: Params = {
   // recalibrated keeper lets in 44 % of shots on target (howlers 0.62 against 1.5 x 0.44; 0.74 at 2).
   // P5 Task 14: momentumLogit 1 -> 1.25 (script only, bound unchanged): with P5 on and recalibrated the momentum swing
   // gave 120 home shots against 1.2 x 101 on the scenario seeds at 1.
+  // P6 pre-merge fixes (2026-10-22): pressSurge 20 -> 30 (script only, bound unchanged): after the recalibration (press_rate
+  // 0.875) the stats pressure-shift signal fired in 4 of 6 seeds at 20 (2, 3, 4, 6), 5 at 30 (1-5), 4 at 40. heroicsSave
+  // 1.5 -> 1.75 (bound unchanged): goals let in from shots on target over 24 seeds, base 0.376, heroics 0.2258 at 1.5 (bound
+  // below 0.6 x base = 0.2257), 0.170 at 1.75, 0.135 at 2; howlers 0.761 (bound above 0.564). goalRatePerMin 0.016 -> 0.02
+  // (bound unchanged): late_comeback reached its target unforced in 8 of 10 seeds (1 and 8 forced), 10 at 0.02 (9 with
+  // goalShotLogit 2.5, 8 with goalScoring 2.5); the other scripted scenarios are unchanged (10, 10, 10, keeper_heroics 9).
   script: {
-    goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.016, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
-    momentumLogit: 1.25, momentumPress: 1.3, pressSurge: 20, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.5, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
+    goalShotLogit: 2, goalScoring: 2.0, goalRatePerMin: 0.02, goalScoringMax: 6, goalAimMin: 0.6, pressTarget: 55,
+    momentumLogit: 1.25, momentumPress: 1.3, pressSurge: 30, pressTackle: 2, redFoul: 2, redCard: 125, heroicsSave: 1.75, howlerSave: 2, howlerFumble: 0.3, errorMishit: 8, forcedShotLogit: 5
   },
   // About four changes per team on average (Bundesliga teams make roughly 4-4.5 of their 5).
   substitutions: { windowMinutes: [64, 75, 84], windowSdMin: 5, perWindow: [2, 2, 1], windowChance: [1, 0.8, 0.5], halfTimeChance: 0.2, roleWeights: { CB: 0.15, FB: 0.4, DM: 0.7, CM: 0.7, AM: 0.9, W: 1, ST: 0.9 } },
@@ -983,11 +1061,13 @@ const mergeInto = (base: unknown, over: unknown, path: string): unknown => {
 /** Model coefficients and logits, which may take any sign. */
 const SIGNED = [/^actions\.logits\./, /^pass\.xpass\./, /^shot\.xg\./, /^shot\.save\./, /^takeOn\./, /^firstTouch\.b/, /^groundDuel\.b/, /^defending\.tackleBase$/, /^positioning\.roles\./, /^choice\.(base|press|kindShift)\./, /^choice\.(leadLane|ivCentre)$/, /^cross\.zones\.(s|minOriginU)$/, /^distribution\.puntLogit$/, /^tackle\.(base|behindLogit|speedLogit)$/, /^transition\.recoverUpfieldM$/,
   // P5 (plan 8e): role tables, zonal spots and frame offsets (team-frame u may be negative), shot and long-kick shifts.
-  /^setAttack\.(corner|fk)\./, /^setAttack\.fkWideShiftU$/, /^setDefend\.(corner|zonal)/, /^setShapes\.(goalKick|kickoff)\./, /^keeperRestarts\.(fkU|longShift)$/, /^directFk\.(shotShift|xgLogit)$/]
+  /^setAttack\.(corner|fk)\./, /^setAttack\.fkWideShiftU$/, /^setDefend\.(corner|zonal)/, /^setShapes\.(goalKick|kickoff)\./, /^keeperRestarts\.(fkU|longShift)$/, /^directFk\.(shotShift|xgLogit)$/,
+  // P6 (plan 8f)
+  /^firstTime\.(b0|bArrival|layOffLogit)$/, /^header\.b0$/, /^saveGeo\.b/, /^shotModel\.xg\./]
 /** Probabilities and shares, which must lie in 0..1. */
 const PROBABILITIES = new Set([
   "support.speedShare", "marking.weight",
-  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare", "movement.relaxCap", "fatigue.loadFloor",
+  "kinematics.reachMargin", "physics.ball.restitution", "execution.mishitBase", "movement.shapeSpeedShare", "movement.relaxCap", "movement.accelShare", "fatigue.loadFloor",
   "shot.onTargetRate", "shot.blockPerDefender", "shot.blockPressure", "shot.blockBehind",
   "defending.foulPerTackle", "defending.yellowPerFoul", "defending.redPerFoul", "defending.tackleLooseShare", "defending.interceptLooseShare",
   "defending.crossBlock", "defending.crossBlockBehind", "defending.headClearShare", "defending.headBehind", "defending.clearToTouch", "defending.clearSliceBehind",
@@ -997,7 +1077,9 @@ const PROBABILITIES = new Set([
   "firstTick.bootBlock", "release.tailShare",
   "transition.joinP", "transition.pauseShare", "transition.recoverSpeedShare", "press.secondShare", "fouls.attackerShare", "fouls.takeOnShare", "aerial.foulShare", "marking.laneShare",
   // P5 (plan 8e)
-  "setDefend.outletShare", "setDefend.wallWideShare", "keeperRestarts.fkShare", "roleMoves.run.wideShare", "setAttack.runSpeedShare", "transition.pauseDip", "setShapes.throwMarkWeight"
+  "setDefend.outletShare", "setDefend.wallWideShare", "keeperRestarts.fkShare", "roleMoves.run.wideShare", "setAttack.runSpeedShare", "transition.pauseDip", "setShapes.throwMarkWeight",
+  // P6 (plan 8f)
+  "header.speedShare"
 ])
 
 /** Check every number: probabilities in 0..1, coefficients any sign, everything else not negative. */
@@ -1017,7 +1099,7 @@ const checkSupport = (s: Params["support"]): void => {
   if (s.spaceAttM > s.spaceM) throw new ParamsError(`params field support.spaceAttM must not exceed support.spaceM (got ${s.spaceAttM} > ${s.spaceM})`)
 }
 
-/** The P3, P4 and P5 rule switches are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
+/** The P3, P4, P5 and P6 rule switches (and firstTime.setPieces) are 0 (the old behaviour) or 1 (the new one): 0.5 is neither. */
 const checkRuleSwitches = (v: Params): void => {
   const switches: ReadonlyArray<readonly [string, number]> = [
     ["firstTick.rule", v.firstTick.rule],
@@ -1046,7 +1128,12 @@ const checkRuleSwitches = (v: Params): void => {
     ["roleMoves.rotateRule", v.roleMoves.rotateRule],
     ["marking.landingRule", v.marking.landingRule],
     ["transition.pauseRule", v.transition.pauseRule],
-    ["release.freeRule", v.release.freeRule]
+    ["release.freeRule", v.release.freeRule],
+    // P6 (plan 8f)
+    ["firstTime.rule", v.firstTime.rule], ["firstTime.setPieces", v.firstTime.setPieces], ["header.rule", v.header.rule], ["saveGeo.rule", v.saveGeo.rule],
+    ["execFatigue.rule", v.execFatigue.rule], ["shotModel.rule", v.shotModel.rule],
+    // P6 off-ball fix
+    ["movement.accelRule", v.movement.accelRule]
   ]
   for (const [path, x] of switches) if (x !== 0 && x !== 1) throw new ParamsError(`params field ${path} must be 0 or 1 (got ${x})`)
 }
@@ -1057,6 +1144,14 @@ const checkTransition = (t: Params["transition"]): void => {
     throw new ParamsError(`params field transition.joinM must have as many bands as transition.joinP (got ${t.joinM.length} and ${t.joinP.length})`)
   for (let i = 1; i < t.joinM.length; i++)
     if (!(t.joinM[i]! > t.joinM[i - 1]!)) throw new ParamsError(`params field transition.joinM must be strictly increasing (got ${t.joinM.join(", ")})`)
+}
+
+/** P6: the header band in order, the execution-fatigue threshold in 0..1 and a positive exponent. */
+const checkP6 = (v: Params): void => {
+  if (!(v.header.zMin < v.header.zMax)) throw new ParamsError(`params field header.zMin must be below header.zMax (got ${v.header.zMin} >= ${v.header.zMax})`)
+  if (!(v.execFatigue.ref >= 0 && v.execFatigue.ref < 1)) throw new ParamsError(`params field execFatigue.ref must be at least 0 and below 1 (got ${v.execFatigue.ref})`)
+  if (!(v.execFatigue.power > 0)) throw new ParamsError(`params field execFatigue.power must be positive (got ${v.execFatigue.power})`)
+  if (!(v.movement.accelShare > 0)) throw new ParamsError(`params field movement.accelShare must be positive (got ${v.movement.accelShare})`)
 }
 
 /** P5 (plan 8e) [lo, hi] ranges: lo must not exceed hi (a reversed range would draw outside the stated bounds). */
@@ -1104,6 +1199,7 @@ export const paramsFromJson = (json: unknown): Params => {
   checkSupport(merged.support)
   checkRuleSwitches(merged)
   checkTransition(merged.transition)
+  checkP6(merged)
   checkPairs(merged)
   checkP5Counts(merged)
   return merged

@@ -15,3 +15,12 @@ __pycache__/
 
 # Build output
 dist/
+
+# OS / editor / tool noise
+.DS_Store
+*.log
+coverage/
+.vite/
+.ruff_cache/
+.mypy_cache/
+.claude/

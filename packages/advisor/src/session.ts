@@ -23,6 +23,11 @@ export class Session {
   private readonly checkpoints = new Map<number, MatchState>()
   /** States fetched ahead in one pass (prefetch), kept until the session goes. */
   private readonly pinned = new Map<number, MatchState>()
+  /**
+   * Prefetched states kept at most, the least recently used dropped beyond it. Unbounded by default (a library scan
+   * pins every pass it explains); a long-lived session bounds it.
+   */
+  maxPinned = Number.POSITIVE_INFINITY
 
   constructor(
     readonly cfg: MatchConfig,
@@ -34,7 +39,9 @@ export class Session {
 
   /** The state after the step of `tick` (tick -1: before kick-off). */
   stateAt(tick: number): MatchState {
-    const hit = this.pinned.get(tick) ?? this.cache.get(tick) ?? this.checkpoints.get(tick)
+    const pin = this.pinned.get(tick)
+    if (pin) return this.touch(tick, pin)
+    const hit = this.cache.get(tick) ?? this.checkpoints.get(tick)
     if (hit) return hit
     if (!Number.isInteger(tick) || tick < -1) throw new AdvisorError(`no state at tick ${tick}`)
     let s: MatchState
@@ -62,8 +69,28 @@ export class Session {
    * and keep them all: for scanning many events. About 25 kB per state.
    */
   prefetch(ticks: Iterable<number>): void {
-    const want = [...new Set(ticks)].filter((t) => !this.pinned.has(t))
+    const all = [...new Set(ticks)]
+    for (const t of all) {
+      const pin = this.pinned.get(t)
+      if (pin) this.touch(t, pin)
+    }
+    const want = all.filter((t) => !this.pinned.has(t))
     if (want.length) for (const [t, s] of statesAt(this.cfg, want, this.logged)) this.pinned.set(t, s)
+    while (this.pinned.size > this.maxPinned) this.pinned.delete(this.pinned.keys().next().value!)
+  }
+
+  /** Mark a pinned state as just used (the last to be dropped). */
+  private touch(tick: number, s: MatchState): MatchState {
+    if (Number.isFinite(this.maxPinned)) {
+      this.pinned.delete(tick)
+      this.pinned.set(tick, s)
+    }
+    return s
+  }
+
+  /** Prefetched states kept now. */
+  get pinnedStates(): number {
+    return this.pinned.size
   }
 
   /** States kept for reuse (asked for and checkpoints). */

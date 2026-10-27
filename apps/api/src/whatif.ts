@@ -10,10 +10,11 @@ import { join } from "node:path"
 import { Worker } from "node:worker_threads"
 import { Effect, Schema } from "effect"
 import { explainPass, passClip, Session, type PassClip } from "@touchline/advisor"
-import { MatchNotFound, WhatIfClip, WhatIfNotAvailable, type PassVerdict, type PitchFrame } from "@touchline/rpc"
-import { decodeDomainEvent, type DomainEvent, type MomentTrace } from "@touchline/schema"
+import { MatchNotFound, WhatIfClip, WhatIfNotAvailable, type AskClip, type PassVerdict, type PitchFrame } from "@touchline/rpc"
+import { decodeDomainEvent, type DomainEvent, type FrameSummary, type MomentTrace } from "@touchline/schema"
 import { attackX, DEFAULT_PARAMS, matchClock, paramsFromJson, type Frame, type TeamSetup } from "@touchline/sim-core"
 import { xtGridFromJson, type XtGrid } from "@touchline/stats"
+import type { AskClipRequest } from "./askclip.js"
 import type { LibraryMatch } from "./library.js"
 import { root } from "./playback.js"
 
@@ -28,7 +29,8 @@ export const WHATIF_TIMEOUT_MS = 10_000
 /** Rounded to the millimetre (and never -0, which JSON would not keep). */
 const r3 = (v: number) => Math.round(v * 1000) / 1000 || 0
 
-const toPitchFrame = (f: Frame, dt: number): PitchFrame => ({
+/** A sim-core frame in the API's shape. */
+export const toPitchFrame = (f: Frame, dt: number): PitchFrame => ({
   frame: f.tick,
   period: f.period,
   clock: matchClock(f.period, f.frame_id, dt),
@@ -38,7 +40,7 @@ const toPitchFrame = (f: Frame, dt: number): PitchFrame => ({
 })
 
 /** A run folder's match rebuilt for re-simulation, with the expected-threat grid. */
-const rebuild = (dir: string) => {
+export const rebuild = (dir: string) => {
   const json = (p: string) => JSON.parse(readFileSync(join(root, p), "utf8"))
   const league = json("data/league/league.json") as { clubs: ReadonlyArray<TeamSetup> }
   const session = Session.fromRun(dir, league, [paramsFromJson(json("data/params/touchline-params.json")), DEFAULT_PARAMS])
@@ -146,10 +148,21 @@ export const runWorker = <A>(url: URL, data: unknown, timeoutMs: number, execArg
 const WORKER = new URL("./whatif-worker.ts", import.meta.url)
 const inWorker = <A>(job: WorkerJob, timeoutMs: number, signal?: AbortSignal): Promise<A> => runWorker<A>(WORKER, job, timeoutMs, ["--import", "tsx"], signal)
 
-export type WorkerJob = { readonly kind: "clip"; readonly dir: string; readonly eventId: string } | { readonly kind: "scan"; readonly dir: string; readonly eventIds: ReadonlyArray<string> }
+export type WorkerJob =
+  | { readonly kind: "clip"; readonly dir: string; readonly eventId: string }
+  | { readonly kind: "scan"; readonly dir: string; readonly eventIds: ReadonlyArray<string> }
+  /** Pause-and-ask: the frame summary at a frame (askframe.ts), and the what-if at any frame (askclip.ts). */
+  | { readonly kind: "summary"; readonly dir: string; readonly frame: number }
+  | { readonly kind: "ask_clip"; readonly dir: string; readonly req: AskClipRequest }
 
 /** computeClip in a worker thread, so sessions keep playing while it runs. */
 export const computeInWorker = (dir: string, eventId: string, timeoutMs: number): Promise<WhatIfClip> => inWorker({ kind: "clip", dir, eventId }, timeoutMs)
+
+/** frameSummary of a run folder's match at `frame`, in a worker thread (the match is rebuilt there). */
+export const summaryInWorker = (dir: string, frame: number, timeoutMs: number): Promise<FrameSummary> => inWorker({ kind: "summary", dir, frame }, timeoutMs)
+
+/** computeAskClip in a worker thread. */
+export const askClipInWorker = (dir: string, req: AskClipRequest, timeoutMs: number): Promise<AskClip> => inWorker({ kind: "ask_clip", dir, req }, timeoutMs)
 
 /** Threads the scan uses by default: all cores but two. */
 export const SCAN_WORKERS = Math.max(1, availableParallelism() - 2)

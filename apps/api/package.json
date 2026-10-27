@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p .",
     "serve": "tsx src/main.ts",
     "dev": "tsx src/main.ts",
-    "library": "tsx src/library-cli.ts"
+    "library": "tsx src/library-cli.ts",
+    "ask-cache": "tsx src/ask-cache-cli.ts"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.1",

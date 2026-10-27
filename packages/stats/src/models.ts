@@ -1,25 +1,35 @@
 /**
  * Pass-difficulty (xPass) and expected-goals (xG) models: a line-for-line port of the feature definitions in
- * python/analytics/touchline_analytics/stats_models.py, with coefficients fitted there on IDSSE
- * (data/params/stats-models.json). A parity test runs both on one synthetic match.
+ * python/analytics/touchline_analytics/stats_models.py. A parity test runs both on one synthetic match.
+ * - xPass: coefficients fitted there on IDSSE (data/params/stats-models.json).
+ * - xG (P6 pre-merge fix 3): the simulator's own model, so every consumer shows one xG. The coefficients are the sim
+ *   parameters' (xgCoefs: shotModel.xg, the fractional-logit refit to DFL model xG, under shotModel.rule 1), read from
+ *   the parameter file the matches run with; the features and the formula are sim-core's (xgFrom, shotLineCount,
+ *   directFkXg). stats-models.json keeps only the xG feature names and the penalty rate.
  */
-import { PITCH, type Vec2 } from "@touchline/sim-core"
+import { directFkXg, PITCH, shotLineCount, xgCoefs, xgFrom, type Params, type Vec2 } from "@touchline/sim-core"
 
 export const LANE_WIDTH_M = 2
 export const PRESS_RADIUS_M = 5
 const MAX_COUNT = 3
 export const XPASS_FEATURES = ["length_10m", "forward_10m", "lane_defenders", "pressure"] as const
-export const XG_FEATURES = ["distance_10m", "angle_rad", "header", "cone_defenders"] as const
+export const XG_FEATURES = ["distance_m", "angle_rad", "header", "line_defenders"] as const
 
 export interface LogisticModel {
   readonly intercept: number
   readonly coefficients: ReadonlyArray<number>
 }
 
+/** The sim's xG: its parameters (xgCoefs, directFk) and the fixed penalty rate. */
+export interface XgModel {
+  readonly penalty: number
+  readonly params: Params
+}
+
 export interface StatsModels {
   readonly version: string
   readonly xpass: LogisticModel
-  readonly xg: LogisticModel & { readonly penalty: number }
+  readonly xg: XgModel
 }
 
 export class ModelsError extends Error {}
@@ -36,13 +46,17 @@ const logistic = (raw: unknown, names: ReadonlyArray<string>, label: string): Lo
   return { intercept: m.intercept, coefficients }
 }
 
-/** Read data/params/stats-models.json; throws ModelsError naming the first bad field. */
-export const modelsFromJson = (raw: unknown): StatsModels => {
-  const j = raw as { version?: unknown; xpass?: unknown; xg?: { penalty?: unknown } }
+/**
+ * Read data/params/stats-models.json, with the simulator parameters whose xG the engine uses (normally the committed
+ * data/params/touchline-params.json); throws ModelsError naming the first bad field.
+ */
+export const modelsFromJson = (raw: unknown, params: Params): StatsModels => {
+  const j = raw as { version?: unknown; xpass?: unknown; xg?: { penalty?: unknown; features?: unknown } }
   if (typeof j?.version !== "string") throw new ModelsError("version must be a string")
   const penalty = j.xg?.penalty
   if (typeof penalty !== "number" || !(penalty > 0 && penalty < 1)) throw new ModelsError("xg.penalty must be a number between 0 and 1")
-  return { version: j.version, xpass: logistic(j.xpass, XPASS_FEATURES, "xpass"), xg: { ...logistic(j.xg, XG_FEATURES, "xg"), penalty } }
+  if (JSON.stringify(j.xg?.features) !== JSON.stringify(XG_FEATURES)) throw new ModelsError(`xg.features must be ${JSON.stringify(XG_FEATURES)}`)
+  return { version: j.version, xpass: logistic(j.xpass, XPASS_FEATURES, "xpass"), xg: { penalty, params } }
 }
 
 const segmentDistance = (a: Vec2, b: Vec2, q: Vec2): { d: number; t: number } => {
@@ -88,38 +102,39 @@ export const goalAngle = (at: Vec2, attack: 1 | -1): number => {
   return d > Math.PI ? 2 * Math.PI - d : d
 }
 
-const side = (p1: Vec2, p2: Vec2, p3: Vec2) => (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y)
-const inTriangle = (p: Vec2, a: Vec2, b: Vec2, c: Vec2): boolean => {
-  const d1 = side(p, a, b)
-  const d2 = side(p, b, c)
-  const d3 = side(p, c, a)
-  return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))
-}
-
-/** Opponents inside the triangle from the shooter to both posts, the goalkeeper (the opponent nearest the goal centre) excepted, at most 3. */
-export const coneDefenders = (at: Vec2, attack: 1 | -1, opponents: ReadonlyArray<Vec2>): number => {
-  if (opponents.length === 0) return 0
+/**
+ * The opponent taken for the keeper when roles are unknown: the one nearest the centre of the goal `attack` faces.
+ * -1 with no opponents.
+ */
+export const keeperIndex = (attack: 1 | -1, opponents: ReadonlyArray<Vec2>): number => {
   const gx = attack * PITCH.halfL
-  let keeper = 0
+  let keeper = -1
   opponents.forEach((o, i) => {
-    if (Math.hypot(o.x - gx, o.y) < Math.hypot(opponents[keeper]!.x - gx, opponents[keeper]!.y)) keeper = i
+    if (keeper < 0 || Math.hypot(o.x - gx, o.y) < Math.hypot(opponents[keeper]!.x - gx, opponents[keeper]!.y)) keeper = i
   })
-  const p1 = { x: gx, y: PITCH.goalHalfWidth }
-  const p2 = { x: gx, y: -PITCH.goalHalfWidth }
-  let n = 0
-  opponents.forEach((o, i) => {
-    if (i !== keeper && inTriangle(o, at, p1, p2)) n++
-  })
-  return Math.min(n, MAX_COUNT)
+  return keeper
 }
 
-/** distance to the goal centre / 10 m, goal-mouth angle, header (0/1), defenders in the shot cone. */
-export const shotFeatures = (at: Vec2, attack: 1 | -1, header: boolean, opponents: ReadonlyArray<Vec2>): number[] => [
-  Math.hypot(attack * PITCH.halfL - at.x, at.y) / 10,
+/** Outfield opponents in the shot line (sim-core shotLineCount): within 1.5 m of the line to the goal centre, uncapped. */
+export const lineDefenders = (at: Vec2, attack: 1 | -1, outfield: ReadonlyArray<Vec2>): number => shotLineCount(at, { x: attack * PITCH.halfL, y: 0 }, outfield)
+
+/**
+ * The sim's xG features: distance to the goal centre (m), goal-mouth angle, header (0/1), outfield opponents in the shot
+ * line (`outfield`: the keepers already left out).
+ */
+export const shotFeatures = (at: Vec2, attack: 1 | -1, header: boolean, outfield: ReadonlyArray<Vec2>): number[] => [
+  Math.hypot(attack * PITCH.halfL - at.x, at.y),
   goalAngle(at, attack),
   header ? 1 : 0,
-  coneDefenders(at, attack, opponents)
+  lineDefenders(at, attack, outfield)
 ]
+
+/** The sim's xG (sim-core xgFrom on xgCoefs) at shotFeatures. */
+export const predictXg = (m: XgModel, x: ReadonlyArray<number>): number => xgFrom(xgCoefs(m.params), x[0]!, x[1]!, x[2] === 1, x[3]!)
+
+/** The sim's direct free-kick xG at `at` (sim-core directFkXg), or null when it is not a central direct free kick. */
+export const directFreeKickXg = (m: XgModel, at: Vec2, side: "home" | "away", period: "first_half" | "second_half"): number | null =>
+  directFkXg(m.params, side, period, at)
 
 const sigmoid = (z: number) => (z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z)))
 

@@ -74,20 +74,21 @@ describe("the situation sent to the manager agent", () => {
   })
   it("adds up: a team's xG is its players' xG, and its shots are its players' shots", () => {
     // Players substituted off or sent off took their shots with them, so this needs a match where no home player who left
-    // before the minute-60 pause had shot. Seed 12: the first from 11 on with none (P3 Task 10; on seed 11 a home player
-    // who had shot is now sent off before minute 60). Asserted, so a change of engine cannot make this pass vacuously.
-    const c = leagueConfig(12)
+    // before the minute-60 pause had shot. Seed 11: the first from 11 on with none (P6 Task 8; P3 Task 10 to P5 it was 12,
+    // when a home player on seed 11 who had shot was sent off before minute 60). Asserted, so a change of engine cannot
+    // make this pass vacuously.
+    const c = leagueConfig(11)
     const r = playMoments(c, (m) => m.reasons.includes("minute_60"))
     const m60 = r.moments.find((m) => m.reasons.includes("minute_60"))!
-    const s12 = situationAt(m60.state, "home", m60.reasons, r.watch)
-    const on = new Set(s12.players.on_pitch.map((p) => p.id))
+    const s11 = situationAt(m60.state, "home", m60.reasons, r.watch)
+    const on = new Set(s11.players.on_pitch.map((p) => p.id))
     expect(r.events.filter((e) => e.type === "shot" && e.team_id === c.home.id && !on.has(e.player_id!))).toEqual([])
-    const xg = s12.players.on_pitch.reduce((a, p) => a + p.xg, 0)
-    expect(Math.abs(xg - s12.team.stats.xg)).toBeLessThan(0.05)
-    expect(s12.players.on_pitch.reduce((a, p) => a + p.shots, 0)).toBe(s12.team.stats.shots)
+    const xg = s11.players.on_pitch.reduce((a, p) => a + p.xg, 0)
+    expect(Math.abs(xg - s11.team.stats.xg)).toBeLessThan(0.05)
+    expect(s11.players.on_pitch.reduce((a, p) => a + p.shots, 0)).toBe(s11.team.stats.shots)
   })
   it("matches the reviewed example (UPDATE_GOLDEN=1 rewrites it after a deliberate change)", () => {
-    const file = join(import.meta.dirname, "golden/situation-m-13-minute_60.json")
+    const file = join(import.meta.dirname, "golden/situation-m-11-minute_60.json")
     const text = JSON.stringify(sit, null, 1) + "\n"
     if (process.env.UPDATE_GOLDEN === "1") writeFileSync(file, text)
     expect(text).toBe(readFileSync(file, "utf8"))

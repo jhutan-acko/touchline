@@ -4,7 +4,7 @@
  */
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
-import { ClaimKind, Cue, Decision, MetricId, Moment, Recap, Segment } from "@touchline/schema"
+import { AskArms, AskInterventionSpec, AskIntent, AskReply, AskStage, ClaimKind, Cue, Decision, Lang, MetricId, Moment, Recap, Segment } from "@touchline/schema"
 
 const Id = Schema.String.check(Schema.isMinLength(1))
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
@@ -71,11 +71,42 @@ export const Playback = Schema.Struct({
 })
 export type Playback = typeof Playback.Type
 
-/** What a watcher receives, in match order: frames, cues for its segment (stats cues and agent cues) and playback state. */
+/**
+ * An on-ball event as play reaches it (live stat tags, follow my player): sent on the Watch stream once playback has
+ * reached `frame` (never earlier; no spoilers). `frame` is the frame the event is complete on (a pass on its arrival, a
+ * shot on its resolution), so its outcome is known by then. Positions are in PitchFrame coordinates.
+ */
+export const BallEvent = Schema.Struct({
+  id: Id,
+  frame: Count,
+  clock: Schema.String,
+  type: Schema.Literals(["pass", "shot", "carry", "tackle", "interception", "clearance", "save"]),
+  team: Schema.Literals(["home", "away"]),
+  player_id: Id,
+  /** A pass's intended or actual receiver, when known. */
+  receiver_id: Schema.NullOr(Schema.String),
+  outcome: Schema.NullOr(Schema.Literals(["success", "fail", "goal", "saved", "blocked", "off_target"])),
+  x: Schema.Finite,
+  y: Schema.Finite,
+  x_end: Schema.NullOr(Schema.Finite),
+  y_end: Schema.NullOr(Schema.Finite),
+  /** A pass's or carry's length (m). */
+  length_m: Schema.NullOr(Schema.Finite),
+  /** A pass's modelled completion probability (packages/stats xPass); its difficulty is 1 − xpass. */
+  xpass: Schema.NullOr(Schema.Finite),
+  /** A shot's or pass's ball speed at release (km/h). */
+  speed_kmh: Schema.NullOr(Schema.Finite),
+  /** A shot's expected goals. */
+  xg: Schema.NullOr(Schema.Finite)
+})
+export type BallEvent = typeof BallEvent.Type
+
+/** What a watcher receives, in match order: frames, cues for its segment (stats cues and agent cues), on-ball events and playback state. */
 export const Tick = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("frame"), frame: PitchFrame }),
   Schema.Struct({ kind: Schema.Literal("cue"), cue: Cue }),
-  Schema.Struct({ kind: Schema.Literal("playback"), playback: Playback })
+  Schema.Struct({ kind: Schema.Literal("playback"), playback: Playback }),
+  Schema.Struct({ kind: Schema.Literal("event"), event: BallEvent })
 ])
 export type Tick = typeof Tick.Type
 
@@ -243,6 +274,37 @@ export type OpsReport = typeof OpsReport.Type
 
 export class NotQueued extends Schema.TaggedError<NotQueued>()("NotQueued", { moment_id: Schema.String }) {}
 
+/** A suggested question for the paused frame; `intent` is already classified, so asking it skips the intent step. */
+export const QuestionChip = Schema.Struct({ chip_id: Id, text: Schema.String, intent: AskIntent })
+export const AskClip = Schema.Struct({
+  clip_id: Id,
+  fork_frame: Count,
+  paused_frame: Count,
+  fps: Schema.Int,
+  intervention: AskInterventionSpec,
+  verdict: PassVerdict,
+  /** Frames fork - CLIP_BEFORE_S ... paused_frame (never later). */
+  real: Schema.Array(PitchFrame),
+  /** Frames fork - CLIP_BEFORE_S ... fork + horizon of the typical seed; null when the intervention could not be applied. */
+  variant: Schema.NullOr(Schema.Array(PitchFrame)),
+  seeds: Count,
+  horizon_s: Schema.Finite,
+  typical_seed: Schema.NullOr(Count),
+  shots: Schema.NullOr(AskArms),
+  goals: Schema.NullOr(AskArms),
+  gain: Schema.NullOr(Schema.Struct({ mean: Schema.Finite, se: Schema.Finite }))
+})
+export type AskClip = typeof AskClip.Type
+export const AskAnswer = Schema.Struct({ ...AskReply.fields, ask_id: Id, frame: Count, clip_id: Schema.NullOr(Id), verdict: Schema.NullOr(PassVerdict), cached: Schema.Boolean })
+export type AskAnswer = typeof AskAnswer.Type
+export const AskUpdate = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("stage"), stage: AskStage }),
+  Schema.Struct({ kind: Schema.Literal("answer"), answer: AskAnswer }),
+  Schema.Struct({ kind: Schema.Literal("failed"), reason: Schema.Literals(["offline", "timeout", "bad_frame"]), message: Schema.String })
+])
+export type AskUpdate = typeof AskUpdate.Type
+export class AskNotAvailable extends Schema.TaggedError<AskNotAvailable>()("AskNotAvailable", { reason: Schema.String }) {}
+
 export const MIN_SPEED = 0.25
 export const MAX_SPEED = 64
 const Speed = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(MIN_SPEED), Schema.isLessThanOrEqualTo(MAX_SPEED))
@@ -286,7 +348,13 @@ export class TouchlineRpcs extends RpcGroup.make(
   /** The session's ops numbers (spec §5.6 ops view), as of its frame. */
   Rpc.make("GetOps", { payload: { session_id: Schema.String }, success: OpsReport, error: SessionNotFound }),
   /** A managed match's manager decisions the session has reached (empty for a match without managers). */
-  Rpc.make("GetDecisions", { payload: { session_id: Schema.String }, success: Schema.Array(Decision), error: SessionNotFound })
+  Rpc.make("GetDecisions", { payload: { session_id: Schema.String }, success: Schema.Array(Decision), error: SessionNotFound }),
+  /** Questions worth asking at the paused frame, in the viewer's language. */
+  Rpc.make("SuggestQuestions", { payload: { session_id: Schema.String, frame: Count, lang: Lang }, success: Schema.Array(QuestionChip), error: Schema.Union([SessionNotFound, AskNotAvailable]) }),
+  /** Ask about the paused frame: stage updates, then the answer (never past the session's frame). */
+  Rpc.make("Ask", { payload: { session_id: Schema.String, frame: Count, question: Schema.String, chip_id: Schema.NullOr(Schema.String), segment: Segment }, success: AskUpdate, error: SessionNotFound, stream: true }),
+  /** The clip behind an answer: the real play and the what-if variant. */
+  Rpc.make("GetAskClip", { payload: { session_id: Schema.String, clip_id: Schema.String }, success: AskClip, error: Schema.Union([SessionNotFound, AskNotAvailable]) })
 ) {}
 
 /** A manager decision's cue and evidence key: `decision-<tick>-<side>` (the strip opens its card by it). */

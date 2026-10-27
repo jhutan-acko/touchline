@@ -2,6 +2,7 @@ import { useEffect, useReducer, useState } from "react"
 import type { Tick } from "@touchline/rpc"
 import type { Segment } from "@touchline/schema"
 import type { TouchlineClient } from "./client.js"
+import { FOLLOW_EMPTY, followReduce, isEventTick, type FollowState } from "./follow.js"
 import { EMPTY, reduce, type PaneState } from "./pane.js"
 
 /** How a pane's watch stands: fine, lost and being retried, or over because the session is gone. */
@@ -12,10 +13,18 @@ export const RETRIES = 5
 
 /**
  * A pane's state for one segment of a session, updated by every tick; a broken watch is retried with backoff.
- * `source` picks the stream: the fan view (`watch`) or the broadcast graphics output (`graphics`).
+ * `fps` is the match's frame rate (cue ttls are counted in frames). `source` picks the stream: the fan view (`watch`) or
+ * the broadcast graphics output (`graphics`).
  */
-export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection } => {
-  const [state, dispatch] = useReducer((s: PaneState, t: Tick) => reduce(s, t, Date.now()), EMPTY)
+export const usePane = (client: TouchlineClient, sessionId: string, segment: Segment, fps: number, source: "watch" | "graphics" = "watch"): PaneState & { readonly connection: Connection; readonly follow: FollowState } => {
+  // On-ball event ticks are kept once, in follow.ts (the players' numbers and the stat tags read them there).
+  const [state, dispatch] = useReducer(
+    (s: { pane: PaneState; follow: FollowState }, t: Tick) => ({
+      pane: isEventTick(t) ? s.pane : (reduce(s.pane, t, fps) ?? s.pane),
+      follow: followReduce(s.follow, t, fps)
+    }),
+    { pane: EMPTY, follow: FOLLOW_EMPTY }
+  )
   const [connection, setConnection] = useState<Connection>("ok")
   const key = `${segment.mode}.${segment.lang}.${segment.club ?? ""}`
   useEffect(() => {
@@ -47,5 +56,5 @@ export const usePane = (client: TouchlineClient, sessionId: string, segment: Seg
       stop()
     }
   }, [client, sessionId, key, source])
-  return { ...state, connection }
+  return { ...state.pane, follow: state.follow, connection }
 }

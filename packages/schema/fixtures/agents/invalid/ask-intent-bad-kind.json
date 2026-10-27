@@ -1,0 +1,15 @@
+{
+  "contract": "ask_intent",
+  "why": "kind must be explain, what_if or unsupported",
+  "value": {
+    "kind": "speculate",
+    "subject_id": "p-h-05",
+    "fork_event_id": "e-3101",
+    "intervention": {
+      "kind": "pass_to",
+      "player_id": "p-h-05",
+      "receiver_id": "p-h-09"
+    },
+    "reason": null
+  }
+}

@@ -16,6 +16,7 @@ describe("split screen", () => {
     const client = fakeClient()
     render(<App client={client} />)
     await userEvent.click(await screen.findByRole("button", { name: "Watch" }))
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" }))
     await userEvent.click(screen.getByRole("button", { name: "Split screen" }))
     const casual = { mode: "casual", lang: "en", club: null } as const
     const analyst = { mode: "analyst", lang: "es", club: null } as const
@@ -31,6 +32,7 @@ describe("split screen", () => {
     expect(within(a).queryAllByText("Remate de 0,07 xG")).toEqual([])
     await userEvent.selectOptions(within(b).getByLabelText("B Idioma"), "hi")
     expect(client.watchers.map((w) => w.segment)).toEqual([casual, { ...analyst, lang: "hi" }])
+    await userEvent.click(screen.getByRole("button", { name: "Broadcast tools" }))
     await userEvent.click(screen.getByRole("button", { name: "Single view" }))
     expect(client.watchers.map((w) => w.segment)).toEqual([casual])
   })

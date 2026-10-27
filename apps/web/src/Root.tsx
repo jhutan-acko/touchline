@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import type { MatchSummary } from "@touchline/rpc"
 import { App } from "./App.js"
 import type { TouchlineClient } from "./client.js"
+import { withTeamColours } from "./colours.js"
 import { Graphics } from "./Graphics.js"
 import { Ops } from "./Ops.js"
 import { parseRoute, type Route } from "./route.js"
@@ -11,7 +12,10 @@ import { Studio } from "./Studio.js"
 const GraphicsPage = ({ client, route }: { client: TouchlineClient; route: Extract<Route, { page: "graphics" }> }) => {
   const [match, setMatch] = useState<MatchSummary | null>(null)
   useEffect(() => {
-    client.listMatches().then((ms) => setMatch(ms.find((m) => m.match_id === route.match) ?? null), () => setMatch(null))
+    client.listMatches().then((ms) => {
+      const m = ms.find((x) => x.match_id === route.match)
+      setMatch(m ? withTeamColours(m) : null)
+    }, () => setMatch(null))
   }, [client, route.match])
   return match && <Graphics client={client} session={route.session} segment={route.segment} match={match} />
 }

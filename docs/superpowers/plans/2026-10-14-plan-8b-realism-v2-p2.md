@@ -23,7 +23,7 @@
 P2 builds on the finished P1 code. If `realism-v2-p1` has been merged into `main`, branch from `main`; otherwise branch from `realism-v2-p1`'s last commit. Check `git -C ../touchline-worktrees/realism-v2-p1 status --short` is empty first: nobody may still be committing P1 fixes.
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline
+cd <repo>
 git worktree add ../touchline-worktrees/realism-v2-p2 -b realism-v2-p2 main   # or: ... realism-v2-p1
 cd ../touchline-worktrees/realism-v2-p2 && pnpm install
 ```
@@ -73,7 +73,7 @@ Each task creates or modifies only the files listed for it. Two tasks share `pac
 For each task in the wave, from the integration worktree:
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline-worktrees/realism-v2-p2
+cd <worktrees>/realism-v2-p2
 git worktree add ../p2-task<N> -b p2-task<N> realism-v2-p2
 cd ../p2-task<N> && pnpm install
 ```
@@ -81,7 +81,7 @@ cd ../p2-task<N> && pnpm install
 One implementer works in each `p2-task<N>` worktree and commits there. When every task of the wave is committed, merge them into the integration branch one at a time:
 
 ```bash
-cd /Users/jhutan.debnath/Documents/GitHub/microsoft-hackathon/touchline-worktrees/realism-v2-p2
+cd <worktrees>/realism-v2-p2
 git merge --no-ff p2-task<N> -m "merge: P2 task <N> (<short name>)"
 ```
 

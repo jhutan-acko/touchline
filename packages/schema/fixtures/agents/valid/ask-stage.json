@@ -1,0 +1,7 @@
+{
+  "contract": "ask_stage",
+  "value": {
+    "stage": "whatif",
+    "status": "Replaying the pass 200 times"
+  }
+}

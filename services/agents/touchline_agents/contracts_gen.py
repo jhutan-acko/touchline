@@ -53,7 +53,7 @@ class Claim(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    kind: Literal["metric", "score", "minute", "event", "better_option"]
+    kind: Literal["metric", "score", "minute", "event", "better_option", "what_if"]
     sentence: conint(ge=0)
     quote: str
     metric_id: Literal["pass.dist", "pass.acc", "pass.xp", "ball.speed", "shot.speed", "plyr.vmax", "plyr.dist", "shot.xg", "team.mom", "team.press", "ppda", "tilt", "game.chaos", "team.poss", "act.xt", "pitch.ctrl"] | None
@@ -405,6 +405,155 @@ class ManageRequest(BaseModel):
     whatif: WhatIfSummary | None
 
 
+class Player(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: constr(min_length=1)
+    name: str
+    side: Literal["home", "away"]
+    role: str
+    x: float
+    y: float
+
+
+class PassOption(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    receiver_id: constr(min_length=1)
+    xpass: float
+    value: float
+
+
+class RecentItem(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    event_id: constr(min_length=1)
+    frame: conint(ge=0)
+    type: str
+    player_id: constr(min_length=1) | None
+    receiver_id: constr(min_length=1) | None
+
+
+class MissedOption(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    event_id: constr(min_length=1)
+    passer_id: constr(min_length=1)
+    played_to: constr(min_length=1)
+    better_to: constr(min_length=1)
+
+
+class FrameSummary(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    match_id: constr(min_length=1)
+    frame: conint(ge=0)
+    clock: str
+    ball_holder: constr(min_length=1) | None
+    side_in_possession: Literal["home", "away"] | None
+    players: list[Player]
+    pass_options: list[PassOption]
+    pressers: list[constr(min_length=1)]
+    recent: list[RecentItem]
+    missed_option: MissedOption | None
+
+
+class AskIntentRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["ask_intent"]
+    question: str
+    lang: Literal["en", "es", "hi"]
+    summary: FrameSummary
+
+
+class AskInterventionSpec1(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["pass_to"]
+    player_id: constr(min_length=1)
+    receiver_id: constr(min_length=1)
+
+
+class To(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    x: float
+    y: float
+
+
+class AskInterventionSpec2(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["move_player"]
+    player_id: constr(min_length=1)
+    to: To
+
+
+class AskIntent(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["explain", "what_if", "unsupported"]
+    subject_id: constr(min_length=1) | None
+    fork_event_id: constr(min_length=1) | None
+    intervention: AskInterventionSpec1 | AskInterventionSpec2 | None
+    reason: str | None
+
+
+class AskArms(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    played: conint(ge=0)
+    alt: conint(ge=0)
+
+
+class Gain(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    mean: float
+    se: float
+
+
+class AskWhatIf(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    intervention: AskInterventionSpec1 | AskInterventionSpec2
+    fork_frame: conint(ge=0)
+    verdict: Literal["played_pass_was_best", "better_option_found", "not_verified"]
+    seeds: conint(ge=0)
+    shots: AskArms
+    goals: AskArms
+    gain: Gain
+
+
+class AskAnswerRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["ask_answer"]
+    match_id: constr(min_length=1)
+    mcp_url: str
+    at_frame: conint(ge=0)
+    question: str
+    segment: Segment
+    intent: AskIntent
+    summary: FrameSummary
+    what_if: AskWhatIf | None
+
+
 class ManagerOption(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -445,6 +594,34 @@ class ManagerReply(BaseModel):
     model: str
 
 
+class AskStage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    stage: Literal["question", "analyst", "whatif", "factcheck", "personalise"]
+    status: str
+
+
+class EvidenceChip(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    label: str
+    value: str
+    source: Literal["stats", "what_if", "event"]
+
+
+class AskReply(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    headline: str
+    body: str
+    chips: list[EvidenceChip] = Field(..., max_length=4)
+    verified: bool
+    model: str | None
+
+
 class AgentContracts(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -458,5 +635,8 @@ class AgentContracts(BaseModel):
     cue: Cue
     recap: Recap
     trace: MomentTrace
-    request: SignalsRequest | RecapRequest | ManageRequest
+    request: SignalsRequest | RecapRequest | ManageRequest | AskIntentRequest | AskAnswerRequest
     manager_reply: ManagerReply
+    ask_intent: AskIntent
+    ask_stage: AskStage
+    ask_reply: AskReply

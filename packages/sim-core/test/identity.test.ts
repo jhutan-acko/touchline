@@ -28,10 +28,17 @@ const perturb = (v: unknown, key = ""): unknown => {
 }
 
 /** Params with the block at the given rule, perturbed or not. Built through paramsFromJson, so they are valid by the real validation. */
+/**
+ * The base: the defaults with every P6 rule at 0 (P6 Task 8 switched them on). With P6 on, seed 3's 9000 ticks hold no
+ * keeper distribution that the perturbed distribution block changes, so the precondition below could not be met; the P3
+ * blocks are read the same way either way.
+ */
+const BASE = { ...P, firstTime: { ...P.firstTime, rule: 0 }, header: { ...P.header, rule: 0 }, saveGeo: { ...P.saveGeo, rule: 0 }, execFatigue: { ...P.execFatigue, rule: 0 }, shotModel: { ...P.shotModel, rule: 0 } }
+
 const withBlock = (block: Block, rule: 0 | 1, perturbed: boolean): Params => {
   const cur = P[block] as object
   const b = { ...(perturbed ? (perturb(cur) as object) : cur), rule }
-  return paramsFromJson({ ...P, [block]: b })
+  return paramsFromJson({ ...BASE, [block]: b })
 }
 
 /** Everything the engine produced: each tick's events and frame, and the final state without its config (which holds the params). */

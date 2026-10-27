@@ -20,7 +20,7 @@ def test_cell_centres_round_trip():
 
 
 def test_scoring_chance_is_highest_in_front_of_goal():
-    xg = {"features": ["distance_10m", "angle_rad", "header", "cone_defenders"], "intercept": -1.0, "coefficients": {"distance_10m": -1.0, "angle_rad": 1.2, "header": -1.4, "cone_defenders": -0.2}}
+    xg = {"features": ["distance_m", "angle_rad", "header", "line_defenders"], "intercept": -1.0, "coefficients": {"distance_m": -0.1, "angle_rad": 1.2, "header": -1.4, "line_defenders": -0.2}}
     g = goal_probs(xg)
     front = cell(48.0, 0.5, 1)
     assert g[front] == max(g)

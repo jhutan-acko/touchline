@@ -24,4 +24,4 @@ const league = JSON.parse(readFileSync(join(root, "data/league/league.json"), "u
 const library = scanLibrary(here(o.library), league)
 console.error(`touchline-api: ${library.size} matches in ${here(o.library)}`)
 const companion = liveAgents({ agentsUrl: o.agents, budgetMs: Number(o["budget-ms"]) })
-Layer.launch(serverLayer({ library, port: Number(o.port), host: o.host, companion })).pipe(NodeRuntime.runMain)
+Layer.launch(serverLayer({ library, port: Number(o.port), host: o.host, companion, agentsUrl: o.agents })).pipe(NodeRuntime.runMain)

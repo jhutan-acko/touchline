@@ -65,6 +65,9 @@ export const Studio = ({ client, session, segment }: { client: TouchlineClient; 
       () => upsert(item)
     )
   }
+  // The session's own pause, for everyone watching it (a fan's Pause only freezes their own picture).
+  const togglePlayback = () =>
+    client.control(session, playback?.state === "paused" ? "play" : "pause").then(setPlayback, () => {}) // a lost session shows above
   const items = [...queue.values()].sort((a, b) => b.frame - a.frame || b.moment_id.localeCompare(a.moment_id))
   const briefed = items.filter((i) => i.status === "approved" || i.status === "on_air")
   return (
@@ -73,6 +76,11 @@ export const Studio = ({ client, session, segment }: { client: TouchlineClient; 
         <h1 className="text-2xl font-bold">{t(lang, "studio")}</h1>
         <span className="rounded bg-slate-800 px-2 py-0.5 text-sm">{`${segment.mode}.${segment.lang}.${segment.club ?? "neutral"}`}</span>
         {playback && <span className="text-sm text-slate-400">{playback.state} · ×{playback.speed}</span>}
+        {playback?.state !== "ended" && (
+          <button type="button" className="ml-auto rounded bg-emerald-600 px-3 py-1 text-white" onClick={togglePlayback}>
+            {t(lang, playback?.state === "paused" ? "resumeSession" : "pauseSession")}
+          </button>
+        )}
       </header>
       {connection !== "ok" && <p role="status" className="rounded bg-amber-900/60 px-3 py-1 text-center text-sm lg:col-span-3">{t(lang, connection === "gone" ? "gone" : "lost")}</p>}
       <section className="flex flex-col gap-2">

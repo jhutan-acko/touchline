@@ -7,10 +7,21 @@ from pydantic import BaseModel, Field, TypeAdapter
 from .contracts_gen import (
     Analysis,
     Anchor,
+    AskAnswerRequest,
+    AskArms,
+    AskIntent,
+    AskIntentRequest,
+    AskInterventionSpec1,
+    AskInterventionSpec2,
+    AskReply,
+    AskStage,
+    AskWhatIf,
     Claim,
     Cue,
     Display,
     Draft,
+    EvidenceChip,
+    FrameSummary,
     ManagerReply,
     ManageRequest,
     Moment,
@@ -27,18 +38,22 @@ from .contracts_gen import (
 
 __all__ = [
     "MAX_SEGMENTS", "AgentRequest", "Analysis", "Anchor", "Claim", "Cue", "Display", "Draft", "ManageRequest", "ManagerReply",
-    "Moment", "MomentTrace",
+    "AskAnswerRequest", "AskArms", "AskIntent", "AskIntentRequest", "AskInterventionSpec", "AskReply", "AskStage", "AskWhatIf",
+    "EvidenceChip", "FrameSummary", "Moment", "MomentTrace",
     "Recap", "RecapRequest", "Segment", "SentenceCheck", "Signal", "SignalsRequest", "Text", "Verdict",
     "dump", "parse_request", "segment_key",
 ]
 
 MAX_SEGMENTS = 12
 
-AgentRequest = Annotated[SignalsRequest | RecapRequest | ManageRequest, Field(discriminator="kind")]
+AskInterventionSpec = AskInterventionSpec1 | AskInterventionSpec2
+AgentRequest = Annotated[
+    SignalsRequest | RecapRequest | ManageRequest | AskIntentRequest | AskAnswerRequest, Field(discriminator="kind")
+]
 _request = TypeAdapter(AgentRequest)
 
 
-def parse_request(data: object) -> SignalsRequest | RecapRequest | ManageRequest:
+def parse_request(data: object) -> SignalsRequest | RecapRequest | ManageRequest | AskIntentRequest | AskAnswerRequest:
     """Validate the data part of an A2A message (raises pydantic.ValidationError)."""
     return _request.validate_python(data)
 

@@ -31,7 +31,7 @@ describe("agent contracts", () => {
   })
   it("tells signals, recap and manage requests apart by kind", () => {
     const kinds = fixtures("valid").filter((f) => f.contract === "request").map((f) => decodeAgentRequest(f.value).kind)
-    expect(kinds.sort()).toEqual(["manage", "manage", "recap", "signals"])
+    expect(kinds.sort()).toEqual(["ask_answer", "ask_intent", "manage", "manage", "recap", "signals"])
   })
   it("keys segments by mode, language and club", () => {
     expect(segmentKey({ mode: "analyst", lang: "hi", club: null })).toBe("analyst.hi.neutral")
@@ -43,7 +43,7 @@ describe("agent contracts", () => {
 describe("JSON Schema export", () => {
   it("names every contract under $defs", () => {
     const defs = Object.keys(contractsJsonSchema().$defs as object)
-    for (const name of ["Signal", "Moment", "Claim", "Analysis", "Draft", "Verdict", "Cue", "Recap", "MomentTrace", "SignalsRequest", "RecapRequest", "Segment", "ManageRequest", "ManagerReply", "Situation", "ManagerOrder"]) expect(defs).toContain(name)
+    for (const name of ["Signal", "Moment", "Claim", "Analysis", "Draft", "Verdict", "Cue", "Recap", "MomentTrace", "SignalsRequest", "RecapRequest", "Segment", "ManageRequest", "ManagerReply", "Situation", "ManagerOrder", "AskIntent", "AskIntentRequest", "AskAnswerRequest", "AskReply", "AskStage", "FrameSummary"]) expect(defs).toContain(name)
   })
   it("matches the committed file (run `pnpm --filter @touchline/schema json` after changing a contract)", () => {
     expect(readFileSync(join(root, CONTRACTS_SCHEMA_PATH), "utf8")).toBe(contractsJsonText())
