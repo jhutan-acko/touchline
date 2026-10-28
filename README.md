@@ -1,5 +1,7 @@
 # Touchline
 
+**Demo video (1:53):** https://youtu.be/_2h2AMWYj6g · **For judges:** [JUDGING.md](JUDGING.md) maps the project to each criterion, with pointers to the code.
+
 Touchline is a football match simulation calibrated to real tracking data, with a team of AI agents that explain the match as it unfolds. A deterministic engine plays fictional clubs at 10 frames per second; Python [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) agents, served over A2A and reading all numbers through an MCP stats server, turn the stream into fact-checked, personalised cues in English, Spanish and Hindi.
 
 **Headline feature, "Pause and ask the match".** Freeze any frame of the match and ask a question in EN, ES or HI ("why didn't he pass to the winger?"). A visible team of agents (question agent, analyst, fact-checker, personaliser) parses the question, gathers evidence from the stats server, re-simulates the alternative over many seeds, checks every number it is about to state, and answers in the viewer's language. "Show me" plays the real moment next to the re-simulated one in 3D. When the re-simulation cannot tell the options apart, the answer says "too close to call" instead of overclaiming. Demo moments: `docs/demo/ask-moments.md`; design: `docs/superpowers/specs/2026-10-22-pause-and-ask-design.md`.
